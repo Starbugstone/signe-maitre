@@ -1,0 +1,344 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #161521;
+  color: #fff3ce;
+  font:
+    600 14px/1.35 system-ui,
+    sans-serif;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: #211e2c;
+  border: 1px solid #a99e86;
+  cursor: pointer;
+  touch-action: none;
+}
+button:hover,
+button:focus-visible {
+  color: #ffdf62;
+  border-color: #ffdf62;
+}
+#top {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+#brand,
+#stats,
+#ticker,
+#hint,
+dialog,
+#keys {
+  background: #191723f5;
+  box-shadow: 3px 3px 0 #060810;
+  border: 1px solid #96806b;
+}
+#brand {
+  border-left: 5px solid #f469a1;
+  padding: 8px 14px;
+}
+h1 {
+  font:
+    bold italic clamp(22px, 3.4vw, 40px)/1 Georgia,
+    serif;
+  margin: 0;
+  color: #ffce59;
+  text-shadow: 2px 2px #7e3142;
+}
+#district {
+  font: 700 11px/1.8 monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+#stats {
+  font: 700 13px/1.5 monospace;
+  padding: 7px 12px;
+  text-align: right;
+  color: #ffda7c;
+}
+#tools {
+  position: absolute;
+  right: 16px;
+  top: 86px;
+  display: flex;
+  gap: 4px;
+}
+#tools button {
+  padding: 5px 8px;
+  font: 700 12px monospace;
+}
+#ticker {
+  position: absolute;
+  left: 16px;
+  bottom: 72px;
+  max-width: min(460px, 78vw);
+  padding: 8px 12px;
+  border-left: 4px solid #f469a1;
+  pointer-events: none;
+}
+#ticker:empty {
+  display: none;
+}
+#hint {
+  position: absolute;
+  left: 16px;
+  bottom: 38px;
+  padding: 4px 10px;
+  color: #ffdf77;
+  font: 700 13px monospace;
+}
+#keys {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 6px 16px;
+  color: #d8d0bd;
+  font: 12px monospace;
+}
+#touch {
+  display: none;
+}
+dialog {
+  position: absolute;
+  max-width: min(480px, 92vw);
+  max-height: 80dvh;
+  color: #fff0d5;
+  border-top: 5px solid #ed6294;
+  padding: 24px;
+}
+dialog::backdrop {
+  background: #1214219e;
+}
+dialog h2 {
+  margin: 0 0 10px;
+  font: italic bold 32px Georgia;
+  color: #ffcf68;
+}
+dialog p {
+  line-height: 1.45;
+}
+dialog button {
+  padding: 8px 12px;
+  margin: 3px 5px 3px 0;
+}
+#mapLegend {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1px;
+}
+@media (pointer: coarse), (max-width: 650px) {
+  #top {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+  }
+  #tools {
+    top: 71px;
+    right: 8px;
+  }
+  #stats {
+    font-size: 11px;
+    padding: 5px;
+  }
+  #brand {
+    padding: 5px 9px;
+  }
+  #district {
+    font-size: 9px;
+  }
+  #keys {
+    display: none;
+  }
+  #touch {
+    display: flex;
+    position: absolute;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    right: 8px;
+    align-items: flex-end;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+  .pad,
+  .acts {
+    display: grid;
+    gap: 3px;
+    pointer-events: auto;
+  }
+  .pad {
+    grid-template-columns: repeat(3, 40px);
+  }
+  .acts {
+    grid-template-columns: repeat(2, 57px);
+  }
+  #touch button {
+    padding: 0;
+    height: 42px;
+    background: #211e2ce8;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .up {
+    grid-column: 2;
+  }
+  .left {
+    grid-column: 1;
+  }
+  #hint {
+    bottom: 106px;
+    left: 8px;
+    max-width: 94vw;
+  }
+  #ticker {
+    bottom: 138px;
+    left: 8px;
+    font-size: 12px;
+    max-width: 84vw;
+  }
+}
+
+#brand {
+  background: linear-gradient(100deg, #16101ef0, #221d29bf);
+  border-color: #b58059;
+  border-left: 3px solid #ef679a;
+  padding: 6px 12px;
+}
+h1 {
+  font-size: clamp(20px, 2.5vw, 34px);
+}
+#tools {
+  top: 54px;
+}
+#tools button {
+  background: #231b2ad9;
+}
+#ticker,
+#hint,
+#keys,
+#stats {
+  background: #15121ee3;
+}
+#hint {
+  font-size: 12px;
+}
+#keys {
+  font-size: 11px;
+  padding: 5px 12px;
+}
+#ticker {
+  max-width: min(440px, 80vw);
+}
+#language {
+  color: #ffd071;
+}
+canvas {
+  image-rendering: auto;
+}
+@media (max-width: 650px) {
+  #tools {
+    top: 54px;
+    gap: 2px;
+  }
+  #tools button {
+    font-size: 10px;
+    padding: 4px;
+  }
+  #hint {
+    font-size: 11px;
+  }
+  #brand {
+    padding: 4px 8px;
+  }
+}
+#routeCard {
+  position: absolute;
+  top: 94px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(345px, 52vw);
+  padding: 7px 10px;
+  background: #191422eb;
+  color: #ffefcf;
+  border: 1px solid #927754;
+  border-left: 3px solid #f6c153;
+  pointer-events: none;
+  box-shadow: 2px 2px #151220;
+}
+#routeCard[hidden] {
+  display: none;
+}
+#compass {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  height: 26px;
+  transform-origin: center;
+  color: #ffd363;
+  font: 26px/1 system-ui;
+}
+#routeCard div {
+  min-width: 0;
+}
+#routeType,
+#routeAction,
+#routePlace {
+  display: block;
+}
+#routeType {
+  font: 700 9px monospace;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #e1b68a;
+}
+#routePlace {
+  font-size: 15px;
+}
+#routeAction {
+  font-size: 11px;
+}
+#routeDistance {
+  align-self: flex-start;
+  white-space: nowrap;
+  font: 700 11px monospace;
+  color: #ffda73;
+}
+@media (max-width: 650px) {
+  #routeCard {
+    top: 86px;
+    left: 8px;
+    padding: 4px 7px;
+    gap: 6px;
+    max-width: 82vw;
+  }
+  #routePlace {
+    font-size: 13px;
+  }
+  #routeAction {
+    font-size: 10px;
+  }
+}

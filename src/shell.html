@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#161521" />
+    <title>Signé, Maître! · Port-Fer</title>
+    <!--STYLE-->
+  </head>
+  <body>
+    <canvas
+      id="game"
+      aria-label="Overhead street map of Port-Fer. Move with arrows, WASD or ZQSD. Use F for cars, E for jobs, Space for action."
+    ></canvas>
+    <div id="top">
+      <div id="brand">
+        <h1>Signé, Maître !</h1>
+        <div id="district"></div>
+      </div>
+      <div id="stats"></div>
+    </div>
+    <div id="tools">
+      <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
+      ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
+      ><button id="language">FR</button>
+    </div>
+    <aside id="routeCard" hidden>
+      <span id="compass" aria-hidden="true">➜</span>
+      <div><small id="routeType"></small><strong id="routePlace"></strong><span id="routeAction"></span></div>
+      <b id="routeDistance"></b>
+    </aside>
+    <div id="ticker" role="status"></div>
+    <div id="hint"></div>
+    <div id="keys">
+      ↑ ↓ ← → / WASD / ZQSD &nbsp; Move or drive　 F &nbsp; Enter / exit　 SPACE &nbsp; Slap / handbrake　 E
+      &nbsp; Job　 M &nbsp; Map
+    </div>
+    <div id="touch">
+      <div class="pad">
+        <button class="up" data-key="up" aria-label="Up">▲</button
+        ><button class="left" data-key="left" aria-label="Left">◀</button
+        ><button data-key="down" aria-label="Down">▼</button
+        ><button data-key="right" aria-label="Right">▶</button>
+      </div>
+      <div class="acts">
+        <button data-key="car">Car</button><button data-key="job">Job</button
+        ><button data-key="run">Run</button><button data-key="action">Slap / Brake</button>
+      </div>
+    </div>
+    <dialog id="panel" aria-labelledby="heading">
+      <h2 id="heading"></h2>
+      <p id="copy"></p>
+      <div id="choices"></div>
+    </dialog>
+    <!--GAME-->
+  </body>
+</html>
