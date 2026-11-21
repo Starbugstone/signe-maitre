@@ -36,20 +36,22 @@ def render(angle,damage):
   for ii in [(0,1,2),(0,2,3)]:tri(tex,[uv[i] for i in ii],[pts[i] for i in ii])
  def strip(i,j,tex,uv):
   u,z=profile[i];q,h=profile[j]
-  quad(tex,uv,[(u,-widths[i],z),(u,widths[i],z),(q,widths[j],h),(q,-widths[j],h)])
+  points=[(u,-widths[i],z),(u,widths[i],z),(q,widths[j],h),(q,-widths[j],h)]
+  # The elevated camera can still see the bonnet from behind the side-on angle.
+  # Cull each outward-wound panel after projection, including the damage deformation.
+  if cv2.contourArea(np.float32([proj(*p) for p in points]),oriented=True)<0:
+   quad(tex,uv,points)
  flank=1 if c>=0 else -1
  # Cutout side contains distinct door outlines, star, stripe and wheel arches.
  # Fan around an interior anchor to preserve the silhouette of the sloping bonnet.
  for i in range(len(profile)):
   j=(i+1)%len(profile);u,z=profile[i];q,h=profile[j]
   tri(side,[(136,117),side_uv[i],side_uv[j]],[(0,5.4*flank,6),(u,widths[i]*flank,z),(q,widths[j]*flank,h)])
- if s>=0:
-  # Front bumper, grille, enamel bonnet and windscreen, from low to high.
-  for i,j,t,b in [(9,8,245,218),(8,7,218,209),(7,6,209,188),(6,5,188,134),(5,4,134,127)]:
-   strip(i,j,front,[(191,t),(96,t),(96,b),(191,b)])
- else:
-  for i,j,b,t in [(0,1,246,210),(1,2,210,140),(2,3,140,125)]:
-   strip(i,j,rear,[(90,b),(198,b),(198,t),(90,t)])
+ # Keep the profile winding from the rear sill over the roof to the front sill.
+ for i,j,t,b in [(8,9,218,245),(7,8,209,218),(6,7,188,209),(5,6,134,188),(4,5,127,134)]:
+  strip(i,j,front,[(191,t),(96,t),(96,b),(191,b)])
+ for i,j,b,t in [(0,1,246,210),(1,2,210,140),(2,3,140,125)]:
+  strip(i,j,rear,[(90,b),(198,b),(198,t),(90,t)])
  strip(3,4,roof,[(39,33),(37,60),(201,60),(194,33)])
  for axle in [-8.6,9.6]:
   face=5.6*flank;centre=68 if axle<0 else 226

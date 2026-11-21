@@ -11,6 +11,7 @@ const keys = {
   d: "right",
   " ": "action",
   f: "car",
+  h: "horn",
   e: "job",
   r: "report",
   m: "map",

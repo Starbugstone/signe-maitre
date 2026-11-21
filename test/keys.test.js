@@ -6,13 +6,14 @@ test("game keys work in either case and both keyboard layouts", () => {
   assert.equal(control({ key: "r" }), "report");
   assert.equal(control({ key: "Z" }), "up");
   assert.equal(control({ key: "ArrowLeft" }), "left");
+  assert.equal(control({ key: "H" }), "horn");
   assert.equal(control({ key: " " }), "action");
   assert.equal(control({ key: "Shift", shiftKey: true }), "run");
   assert.equal(control({ key: "W", shiftKey: true }), "up");
 });
 test("browser shortcuts are left to the browser", () => {
   for (const modifier of ["ctrlKey", "metaKey", "altKey"])
-    for (const key of ["r", "f", "w", "d", "s", "ArrowLeft"])
+    for (const key of ["r", "f", "h", "w", "d", "s", "ArrowLeft"])
       assert.equal(control({ key, [modifier]: true }), undefined, modifier + "+" + key);
   assert.equal(control({ key: "Tab" }), undefined);
   assert.equal(control({}), undefined);

@@ -22,7 +22,7 @@
     <div id="tools">
       <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
       ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
-      ><button id="language">FR</button>
+      ><button id="language">FR</button><button id="vehicleSignal" data-key="horn" hidden>Horn</button>
     </div>
     <aside id="routeCard" hidden>
       <span id="compass" aria-hidden="true">➜</span>
@@ -37,14 +37,15 @@
     </div>
     <div id="touch">
       <div class="pad">
-        <button class="up" data-key="up" aria-label="Up">▲</button
-        ><button class="left" data-key="left" aria-label="Left">◀</button
-        ><button data-key="down" aria-label="Down">▼</button
-        ><button data-key="right" aria-label="Right">▶</button>
+        <button class="up" data-key="up" data-konami="ArrowUp" aria-label="Up">▲</button
+        ><button class="left" data-key="left" data-konami="ArrowLeft" aria-label="Left">◀</button
+        ><button data-key="down" data-konami="ArrowDown" aria-label="Down">▼</button
+        ><button data-key="right" data-konami="ArrowRight" aria-label="Right">▶</button>
       </div>
       <div class="acts">
-        <button data-key="car">Car</button><button data-key="job">Job</button
-        ><button data-key="run">Run</button><button data-key="action">Slap / Brake</button>
+        <button data-key="car">Car</button><button data-key="job">Job</button><button data-key="run">Run</button
+        ><button id="touchSignal" data-key="horn" hidden>Horn</button
+        ><button data-key="action">Slap / Brake</button><button data-konami="b">B</button><button data-konami="a">A</button>
       </div>
     </div>
     <dialog id="panel" aria-labelledby="heading">

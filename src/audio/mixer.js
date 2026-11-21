@@ -3,7 +3,9 @@ import { TAU } from "../world/town.js";
 import { panel } from "../platform/canvas.js";
 
 let gameMix, engineOsc, engineGain, engineFilter, skidLoop, skidGain, hitNoise;
+let signalVoice;
 const crashClips = new Map();
+const signalClips = new Map();
 function noiseGenerator(seed) {
   return () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -27,6 +29,72 @@ function makeTyreLoop() {
       0.81 * (smooth - low);
   }
   return buffer;
+}
+function makeHornLoop() {
+  const rate = game.audio.sampleRate;
+  const buffer = game.audio.createBuffer(1, rate, rate);
+  const samples = buffer.getChannelData(0);
+  const reed = (phase) =>
+    0.52 * Math.sin(phase) +
+    0.28 * Math.sin(2 * phase - 0.7) +
+    0.13 * Math.sin(3 * phase + 0.5) +
+    0.06 * Math.sin(5 * phase);
+  for (let i = 0; i < samples.length; i++) {
+    const t = (TAU * i) / rate;
+    const low = reed(382 * t + 0.026 * Math.sin(5 * t));
+    const high = reed(483 * t + 0.023 * Math.sin(7 * t));
+    samples[i] = (0.56 * low + 0.44 * high) * (0.96 + 0.04 * Math.sin(6 * t));
+  }
+  return buffer;
+}
+function makeSirenLoop() {
+  const rate = game.audio.sampleRate;
+  const buffer = game.audio.createBuffer(1, rate, rate);
+  const samples = buffer.getChannelData(0);
+  // Three short notes with a longer pause before the next call.
+  const notes = [690, 520, 690];
+  for (const [note, frequency] of notes.entries()) {
+    const start = Math.round(note * 0.28 * rate);
+    const length = Math.round(0.25 * rate);
+    for (let i = 0; i < length; i++) {
+      const t = i / rate;
+      const attack = Math.min(1, t / 0.021);
+      const release = Math.min(1, (length - 1 - i) / (0.034 * rate));
+      const phase = TAU * frequency * (t - 0.0011 * (1 - Math.exp(-t / 0.018)));
+      samples[start + i] =
+        attack * release * (0.69 * Math.sin(phase) + 0.2 * Math.sin(2 * phase) + 0.11 * Math.sin(3 * phase));
+    }
+  }
+  return buffer;
+}
+function vehicleSignalSound(mode) {
+  if (!gameMix) return;
+  if (!game.sound) mode = null;
+  if (mode === (signalVoice?.mode ?? null)) return;
+
+  const now = game.audio.currentTime;
+  if (signalVoice) {
+    signalVoice.gain.gain.setTargetAtTime(0, now, 0.018);
+    signalVoice.source.stop(now + 0.1);
+    signalVoice = null;
+  }
+  if (!mode) return;
+
+  if (!signalClips.has(mode)) signalClips.set(mode, mode === "horn" ? makeHornLoop() : makeSirenLoop());
+  const source = game.audio.createBufferSource();
+  const gain = game.audio.createGain();
+  source.buffer = signalClips.get(mode);
+  source.loop = true;
+  gain.gain.value = 0;
+  source.connect(gain);
+  gain.connect(gameMix);
+  source.onended = () => {
+    source.disconnect();
+    gain.disconnect();
+  };
+  gain.gain.setTargetAtTime(mode === "horn" ? 0.38 : 0.31, now, 0.011);
+  source.start(now);
+  signalVoice = { mode, source, gain };
 }
 function prepareAudio() {
   if (gameMix) return;
@@ -221,4 +289,4 @@ function beep(f = 240, d = 0.09, type = "square") {
   o.stop(game.audio.currentTime + d);
 }
 
-export { beep, crashSound, enableAudio, footfall, gameMix, motorSound };
+export { beep, crashSound, enableAudio, footfall, gameMix, motorSound, vehicleSignalSound };

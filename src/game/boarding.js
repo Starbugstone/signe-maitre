@@ -1,5 +1,5 @@
 import { ambulance, inService, interruptRescue } from "./rescue.js";
-import { cars, dist, game, p } from "../core/state.js";
+import { cars, dist, game, held, p } from "../core/state.js";
 import { blocked } from "../world/collision.js";
 import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
@@ -20,6 +20,8 @@ function exitCar() {
         p.x = x;
         p.y = y;
         p.a = game.ride.a;
+        if (game.ride.medical) game.ride.sirenOn = false;
+        held.delete("horn");
         game.ride = null;
         return;
       }

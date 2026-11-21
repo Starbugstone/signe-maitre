@@ -86,6 +86,10 @@ h1 {
   padding: 5px 8px;
   font: 700 12px monospace;
 }
+[data-key="horn"][aria-pressed="true"] {
+  color: #ffdf62;
+  border-color: #ffdf62;
+}
 #ticker {
   position: absolute;
   left: 16px;
@@ -172,6 +176,9 @@ dialog button {
   #keys {
     display: none;
   }
+  #vehicleSignal {
+    display: none;
+  }
   #touch {
     display: flex;
     position: absolute;
@@ -192,11 +199,11 @@ dialog button {
     grid-template-columns: repeat(3, 40px);
   }
   .acts {
-    grid-template-columns: repeat(2, 57px);
+    grid-template-columns: repeat(3, clamp(44px, 15vw, 57px));
   }
   #touch button {
     padding: 0;
-    height: 42px;
+    height: 44px;
     background: #211e2ce8;
     user-select: none;
     -webkit-user-select: none;

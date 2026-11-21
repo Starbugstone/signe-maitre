@@ -19,13 +19,14 @@ Then [open the game](http://localhost:8765/index.html). Use **FR** or **EN** in 
 | Arrows, WASD or ZQSD | Walk, or accelerate, reverse and steer |
 | Shift + direction | Run |
 | F | Enter or leave a nearby car |
+| H | Hold to honk in a car, or press to switch the ambulance siren on or off |
 | Space | Slap on foot or use the handbrake while driving |
 | E | Pick up a file, act at a destination, or call for a repair when a car breaks down |
 | R | Write an incident report beside a downed pedestrian |
 | M | Open the city map and view the route |
 | V | Deliver the CJ’s catchphrase |
 
-Touch controls appear on small screens. Hold **Run** together with a direction to run. Browser shortcuts such as Ctrl+R and Ctrl+F keep their usual meaning.
+Touch controls appear on small screens. Hold **Run** together with a direction to run. The **Horn** or **Siren** button appears when you take the wheel. Browser shortcuts such as Ctrl+R and Ctrl+F keep their usual meaning.
 
 ## Cases
 

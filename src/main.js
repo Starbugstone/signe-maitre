@@ -4,7 +4,7 @@ import { control, released, trackKonami } from "./platform/keys.js";
 import { artwork, clamp, game, held, p } from "./core/state.js";
 import { box, refreshLanguage, say, setLanguage, speak, t } from "./ui/dialogs.js";
 import { reportIncident } from "./game/rescue.js";
-import { beep, enableAudio, gameMix, motorSound } from "./audio/mixer.js";
+import { beep, enableAudio, gameMix, motorSound, vehicleSignalSound } from "./audio/mixer.js";
 import { board } from "./game/boarding.js";
 import { interact } from "./game/cases.js";
 import { slap } from "./game/slap.js";
@@ -16,6 +16,43 @@ import { draw } from "./ui/renderer.js";
 import { imageData } from "./art/assets.js";
 
 let konamiProgress = 0;
+const signalButtons = document.querySelectorAll("[data-key=horn]");
+const touchRun = $("[data-key=run]");
+
+function enterKonamiKey(e) {
+  if (panel.open || game.viewMap) return false;
+  konamiProgress = trackKonami(e, konamiProgress);
+  if (konamiProgress !== -1) return false;
+  konamiProgress = 0;
+  game.konamiHero = !game.konamiHero;
+  return true;
+}
+
+function updateVehicleSignal() {
+  const ride = game.ride;
+  const available = ride && ride.condition !== 0 && !game.viewMap && !panel.open;
+  touchRun.hidden = !!available;
+  for (const button of signalButtons) button.hidden = !available;
+  if (!available) {
+    vehicleSignalSound(null);
+    return;
+  }
+  const label = t(ride.medical ? "vehicleSiren" : "vehicleHorn");
+  const pressed = ride.medical ? String(!!ride.sirenOn) : null;
+  for (const button of signalButtons) {
+    if (button.textContent !== label) button.textContent = label;
+    if (button.getAttribute("aria-pressed") === pressed) continue;
+    if (pressed === null) button.removeAttribute("aria-pressed");
+    else button.setAttribute("aria-pressed", pressed);
+  }
+  let mode = null;
+  if (!document.hidden && document.hasFocus()) {
+    if (ride.medical && ride.sirenOn) mode = "siren";
+    if (!ride.medical && held.has("horn")) mode = "horn";
+  }
+  vehicleSignalSound(mode);
+}
+
 function toggleMap() {
   if (panel.open || interior) return;
   game.viewMap = !game.viewMap;
@@ -54,6 +91,13 @@ function press(k) {
     return;
   }
   if (game.viewMap || panel.open) return;
+  if (k === "horn") {
+    if (!game.ride || game.ride.condition === 0) return;
+    if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
+    else held.add(k);
+    updateVehicleSignal();
+    return;
+  }
   held.add(k);
   if (k === "car") board();
   if (k === "job") interact();
@@ -62,35 +106,56 @@ function press(k) {
 }
 addEventListener("keydown", (e) => {
   if (panel.open) return;
-  if (!game.viewMap) {
-    konamiProgress = trackKonami(e, konamiProgress);
-    if (konamiProgress === -1) {
-      konamiProgress = 0;
-      game.konamiHero = !game.konamiHero;
-      e.preventDefault();
-      return;
-    }
+  if ((e.key === " " || e.key === "Enter") && e.target.matches?.("button:focus-visible")) return;
+  if (enterKonamiKey(e)) {
+    e.preventDefault();
+    return;
   }
   const k = control(e);
-  if (!k || (e.target.tagName === "BUTTON" && e.key === " " && e.target.matches(":focus-visible"))) return;
+  if (!k) return;
   e.preventDefault();
   if (!e.repeat) press(k);
 });
-addEventListener("keyup", (e) => held.delete(released(e)));
-addEventListener("blur", () => {
+function release(k) {
+  held.delete(k);
+  if (k === "horn") updateVehicleSignal();
+}
+function clearInput() {
   held.clear();
   konamiProgress = 0;
+  vehicleSignalSound(null);
   motorSound();
+}
+addEventListener("keyup", (e) => release(released(e)));
+addEventListener("blur", clearInput);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearInput();
 });
+for (const button of signalButtons) {
+  button.onkeydown = (e) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.repeat) press("horn");
+  };
+  button.onkeyup = (e) => {
+    if (e.key === " " || e.key === "Enter") release("horn");
+  };
+  button.onblur = () => release("horn");
+}
+for (const b of document.querySelectorAll("[data-konami]:not([data-key])"))
+  b.onclick = () => enterKonamiKey({ key: b.dataset.konami });
 for (const b of document.querySelectorAll("[data-key]")) {
   b.onpointerdown = (e) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     b.setPointerCapture(e.pointerId);
+    enterKonamiKey({ key: b.dataset.konami ?? b.dataset.key });
     press(b.dataset.key);
   };
-  b.onlostpointercapture = () => held.delete(b.dataset.key);
-  b.onpointerup = () => held.delete(b.dataset.key);
-  b.onpointercancel = () => held.delete(b.dataset.key);
+  b.onlostpointercapture = () => release(b.dataset.key);
+  b.onpointerup = () => release(b.dataset.key);
+  b.onpointercancel = () => release(b.dataset.key);
 }
 refreshLanguage();
 say("start", 6, "clerk");
@@ -129,6 +194,7 @@ function loop(ms) {
     }
   }
   motorSound();
+  updateVehicleSignal();
   draw();
   requestAnimationFrame(loop);
 }
