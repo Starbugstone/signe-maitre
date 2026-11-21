@@ -4,6 +4,8 @@ A bilingual browser arcade game set in Port-Fer. Play a French commissaire de ju
 
 ## Play
 
+[Play Signé, Maître ! in your browser](https://starbugstone.github.io/signe-maitre/).
+
 Open [index.html](index.html) in a modern browser. The game, artwork, and sound synthesis are bundled in that file. You can also run a local server from this directory.
 
 ```sh
