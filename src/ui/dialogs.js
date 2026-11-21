@@ -55,7 +55,12 @@ function refreshLanguage() {
 let dialogState;
 function renderDialog() {
   const { title, copy, choices } = dialogState;
-  $("#heading").textContent = t(title);
+  const heading = $("#heading");
+  heading.textContent = t(title);
+  // Open long control instructions at their heading on short screens.
+  if (title === "help") heading.tabIndex = -1;
+  else heading.removeAttribute("tabindex");
+  heading.toggleAttribute("autofocus", title === "help");
   $("#copy").textContent = t(copy);
   const root = $("#choices");
   root.replaceChildren();
