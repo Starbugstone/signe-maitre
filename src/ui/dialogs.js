@@ -3,13 +3,26 @@ import { game, held } from "../core/state.js";
 import { $, canvas, panel } from "../platform/canvas.js";
 
 let lang = navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en";
+let usingGamepad = false;
+const bindings = {
+  car: ["F", "F", "Y"],
+  job: ["E", "E", "A"],
+  report: ["R", "R", "RS"],
+  map: ["M", "M", "View"],
+  action: ["Space", "Espace", "X"],
+};
 try {
   const saved = localStorage.getItem("port-fer-language");
   if (["en", "fr"].includes(saved)) lang = saved;
 } catch {}
 function t(key) {
   const pair = words[key];
-  return pair ? pair[lang === "fr" ? 1 : 0] : key;
+  if (!pair) return key;
+  const language = Number(lang === "fr");
+  const text = pair[language];
+  return text.includes("{")
+    ? text.replace(/\{(\w+)\}/g, (_, control) => bindings[control][usingGamepad ? 2 : language])
+    : text;
 }
 let message = null;
 function say(id, seconds = 4, prefix = "", suffix = "") {
@@ -29,17 +42,28 @@ function setLanguage() {
   } catch {}
   refreshLanguage();
 }
+function refreshInputHints() {
+  $("#reportBtn").textContent = t("reportKey");
+  $("#keys").textContent = t(usingGamepad ? "gamepadControls" : "controls");
+  $("#dialogControls").textContent = t("dialogControls");
+  renderMessage();
+}
+function setGamepadMode(enabled) {
+  if (usingGamepad === enabled) return;
+  usingGamepad = enabled;
+  panel.toggleAttribute("data-gamepad", enabled);
+  $("#dialogControls").hidden = !enabled;
+  refreshInputHints();
+}
 function refreshLanguage() {
   document.documentElement.lang = lang;
   $("#language").textContent = lang === "en" ? "FR" : "EN";
   $("#language").setAttribute("aria-label", t(lang === "en" ? "frLang" : "enLang"));
   for (const [selector, id] of [
-    ["#reportBtn", "reportKey"],
     ["#help", "help"],
     ["#quip", "quip"],
     ["#mapBtn", game.viewMap ? "closeMap" : "map"],
     ["#sound", game.sound ? "audioOn" : "audioOff"],
-    ["#keys", "controls"],
     ["[data-key=car]", "touchCar"],
     ["[data-key=job]", "touchJob"],
     ["[data-key=action]", game.ride ? "touchBrake" : "touchHit"],
@@ -49,7 +73,7 @@ function refreshLanguage() {
   for (const key of ["up", "down", "left", "right"])
     $("[data-key=" + key + "]").setAttribute("aria-label", t(key));
   canvas.setAttribute("aria-label", t("canvas"));
-  renderMessage();
+  refreshInputHints();
   if (panel.open && dialogState) renderDialog();
 }
 let dialogState;
@@ -61,7 +85,12 @@ function renderDialog() {
   if (title === "help") heading.tabIndex = -1;
   else heading.removeAttribute("tabindex");
   heading.toggleAttribute("autofocus", title === "help");
-  $("#copy").textContent = t(copy);
+  const description = $("#copy");
+  description.textContent = t(copy);
+  description.classList.toggle("keyboard-help", title === "help");
+  const controllerHelp = $("#controllerHelp");
+  controllerHelp.hidden = title !== "help";
+  if (title === "help") controllerHelp.textContent = t("controllerHelp");
   const root = $("#choices");
   root.replaceChildren();
   for (const [name, fn] of choices) {
@@ -75,7 +104,10 @@ function renderDialog() {
   }
   const language = document.createElement("button");
   language.textContent = lang === "en" ? "Français" : "English";
-  language.onclick = setLanguage;
+  language.onclick = () => {
+    setLanguage();
+    root.lastElementChild.focus();
+  };
   root.append(language);
 }
 function box(title, copy, choices) {
@@ -83,6 +115,7 @@ function box(title, copy, choices) {
   dialogState = { title, copy, choices };
   renderDialog();
   if (!panel.open) panel.showModal();
+  if (title === "help" && usingGamepad) $("#choices button").focus({ preventScroll: true });
 }
 function speak() {
   if (panel.open || game.viewMap || game.quipCooldown > 0) return;
@@ -90,4 +123,4 @@ function speak() {
   game.quipCooldown = 1.2;
 }
 
-export { box, lang, refreshLanguage, renderMessage, say, setLanguage, speak, t };
+export { box, lang, refreshLanguage, renderMessage, say, setGamepadMode, setLanguage, speak, t };

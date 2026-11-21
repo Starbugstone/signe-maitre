@@ -87,7 +87,7 @@ function drive(v, dt, throttle, steering, brake) {
     return;
   }
   const oldAngle = v.a;
-  const opposition = throttle && Math.sign(v.speed) !== throttle && Math.abs(v.speed) > 2;
+  const opposition = v.speed * throttle < 0 && Math.abs(v.speed) > 2;
   const acceleration = opposition ? 260 : throttle < 0 ? 85 : 122;
   v.speed = clamp(v.speed + throttle * acceleration * dt, -57, 120 + 61 * ((v.condition ?? 100) / 100));
   v.speed *= Math.exp(-dt * (brake ? 4.6 : throttle ? 0.16 : 1.45));

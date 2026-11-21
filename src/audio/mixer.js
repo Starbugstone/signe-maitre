@@ -1,4 +1,5 @@
 import { clamp, game, held } from "../core/state.js";
+import { throttleInput } from "../core/controls.js";
 import { TAU } from "../world/town.js";
 import { panel } from "../platform/canvas.js";
 
@@ -127,7 +128,8 @@ function motorSound() {
   if (!engineGain) return;
   const running = game.sound && game.ride && game.ride.condition !== 0 && !game.viewMap && !panel.open,
     now = game.audio.currentTime;
-  engineGain.gain.setTargetAtTime(running ? (held.has("up") ? 0.11 : 0.069) : 0, now, 0.07);
+  const throttle = Math.max(0, throttleInput());
+  engineGain.gain.setTargetAtTime(running ? 0.069 + 0.041 * throttle : 0, now, 0.07);
   const roll = running ? Math.hypot(game.ride.slideX, game.ride.slideY) : 0;
   let friction = 0;
   if (held.has("action") && roll > 7) {
@@ -143,8 +145,8 @@ function motorSound() {
   if (!running) return;
   const speed = Math.abs(game.ride.speed),
     gear = Math.min(3, Math.floor(speed / 49));
-  engineOsc.frequency.setTargetAtTime(35 + (speed - gear * 43) * 0.72 + (held.has("up") ? 9 : 0), now, 0.075);
-  engineFilter.frequency.setTargetAtTime(160 + speed * 0.91 + (held.has("up") ? 80 : 0), now, 0.1);
+  engineOsc.frequency.setTargetAtTime(35 + (speed - gear * 43) * 0.72 + 9 * throttle, now, 0.075);
+  engineFilter.frequency.setTargetAtTime(160 + speed * 0.91 + 80 * throttle, now, 0.1);
 }
 // The initial shell impact, the crumpling panels and the loose metal decay at
 // different rates. A hard crash extends the crumple and adds scattered debris.

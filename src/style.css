@@ -27,7 +27,8 @@ button {
   touch-action: none;
 }
 button:hover,
-button:focus-visible {
+button:focus-visible,
+dialog[data-gamepad] button:focus {
   color: #ffdf62;
   border-color: #ffdf62;
 }
@@ -141,9 +142,17 @@ dialog h2 {
 dialog p {
   line-height: 1.45;
 }
+dialog[data-gamepad] .keyboard-help {
+  display: none;
+}
 dialog button {
   padding: 8px 12px;
   margin: 3px 5px 3px 0;
+}
+#dialogControls {
+  margin-bottom: 0;
+  color: #ffdf77;
+  font: 12px/1.45 monospace;
 }
 #mapLegend {
   display: none;
