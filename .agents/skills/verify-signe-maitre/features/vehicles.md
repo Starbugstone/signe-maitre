@@ -5,9 +5,9 @@ The player can take the wheel of the Étude 2000 sedan, a parked or passing car,
 ## Sub-features
 
 - `car-board` uses **F** within 22 units to take the wheel. The hint becomes `F / Car · Get out`, and `#stats` adds km/h and vehicle condition.
-- `car-exit` uses **F** again to get out beside the car, or shows `No room at the door. Move the car.` when the doors are blocked.
+- `car-exit` uses **F** again to get out beside the car, preferring a door with room to walk away and never through a wall or the canal bank. It shows `No room at the door. Move the car.` when every door is blocked. Delivering the GT to auction pays only once the player is out.
 - `car-drive` uses **up** to accelerate, **down** to brake or reverse, **left/right** to steer and **Space** for the handbrake.
-- `car-damage` lowers condition based on closing speed in an impact. A head-on crash can reach `0%`.
+- `car-damage` lowers condition based on closing speed in an impact. A full-speed crash costs about half the car; two or three bad crashes reach `0%`.
 - `car-repair` uses **E** after a breakdown (`E · Call roadside assistance`), then **Order a repair**, to restore `100%`.
 - `car-horn` sounds the horn while **H** is held in a car. In an ambulance, **H** switches the siren on or off. On phones, the **Horn** or **Siren** button (`#touchSignal`) appears only while driving.
 - `car-touch` uses **Car**, the pad and **Slap / Brake** on phones. The action button label changes to **Brake** while driving.

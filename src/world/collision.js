@@ -116,7 +116,7 @@ export function vehicleBlocked(vehicle, x = vehicle.x, y = vehicle.y, a = vehicl
 }
 const blocked = (x, y, r) => blockedIn(town, x, y, r);
 // Distance to a vehicle's body measured in its local forward/sideways axes.
-function distanceToBody(v, x, y) {
+export function distanceToBody(v, x, y) {
   const dx = x - v.x,
     dy = y - v.y,
     c = Math.cos(v.a),
@@ -125,21 +125,107 @@ function distanceToBody(v, x, y) {
     side = Math.abs(dy * c - dx * s) - (v.halfWidth ?? sedanHalfWidth);
   return Math.hypot(Math.max(0, forward), Math.max(0, side)) + Math.min(0, Math.max(forward, side));
 }
+// How far a foot circle of radius r sinks into each nearby vehicle body.
+function carOverlaps(x, y, r) {
+  const overlaps = new Map();
+  for (const v of cars) {
+    if (Math.abs(v.x - x) > 22 || Math.abs(v.y - y) > 22) continue;
+    const depth = r - distanceToBody(v, x, y);
+    if (depth > 0) overlaps.set(v, depth);
+  }
+  return overlaps;
+}
+// A step into a vehicle is refused. A walker already wedged between cars may take any
+// step that does not push them deeper overall, as long as no single body is entered
+// more than halfway: sideways along a door or out of the gap.
 export function footBlocked(x, y, r, from) {
   if (blocked(x, y, r)) return true;
-  return cars.some((v) => {
-    if (Math.abs(v.x - x) > 22 || Math.abs(v.y - y) > 22) return false;
-    const gap = distanceToBody(v, x, y);
-    return gap < r && (!from || gap <= distanceToBody(v, from.x, from.y));
-  });
+  const overlaps = carOverlaps(x, y, r);
+  if (!overlaps.size) return false;
+  if (!from) return true;
+  const before = carOverlaps(from.x, from.y, r);
+  let total = 0,
+    previous = 0;
+  for (const depth of before.values()) previous += depth;
+  for (const [v, depth] of overlaps) {
+    total += depth;
+    if (depth > Math.max(before.get(v) || 0, r * 0.5) + 1e-6) return true;
+  }
+  return total > previous + 1e-6;
 }
+// Round posts and car corners deflect a walker instead of stopping them dead.
+const glance = [0.55, -0.55, 1, -1];
 function move(o, dx, dy, r) {
   let bump = false;
   if (!footBlocked(o.x + dx, o.y, r, o)) o.x += dx;
   else bump = true;
   if (!footBlocked(o.x, o.y + dy, r, o)) o.y += dy;
   else bump = true;
+  if (bump && (dx === 0) !== (dy === 0)) {
+    const step = Math.hypot(dx, dy);
+    for (const side of glance) {
+      const scale = 1 / Math.hypot(0.7, side),
+        sx = (dx ? dx * 0.7 : side * step) * scale,
+        sy = (dy ? dy * 0.7 : side * step) * scale;
+      if (!footBlocked(o.x + sx, o.y + sy, r, o)) {
+        o.x += sx;
+        o.y += sy;
+        break;
+      }
+    }
+  }
   return bump;
 }
-
+// Last resort when something has closed in around a walker: the nearest clear spot that
+// can be reached in a straight line without crossing a wall, a pier or the canal.
+export function lineClear(x, y, tx, ty) {
+  const steps = Math.ceil(Math.hypot(tx - x, ty - y));
+  for (let i = 1; i <= steps; i++) if (blocked(x + ((tx - x) * i) / steps, y + ((ty - y) * i) / steps, 1)) return false;
+  return true;
+}
+// A blow needs a clear line: no wall, post or vehicle body between the two people.
+export function strikeClear(x, y, tx, ty) {
+  if (!lineClear(x, y, tx, ty)) return false;
+  const steps = Math.ceil(Math.hypot(tx - x, ty - y));
+  for (const v of cars)
+    for (let i = 1; i < steps; i++) {
+      const sx = x + ((tx - x) * i) / steps,
+        sy = y + ((ty - y) * i) / steps;
+      if (Math.abs(v.x - sx) < 14 && Math.abs(v.y - sy) < 14 && distanceToBody(v, sx, sy) < 0) return false;
+    }
+  return true;
+}
+// Shut in: the clear ground the walker can reach on foot never gets more than `radius`
+// away, as in a pocket between two wrecks and the kerb. A bounded flood fill on a small grid.
+export function shutIn(o, r, radius = 14) {
+  const cell = 1.5,
+    seen = new Set(["0,0"]),
+    queue = [[0, 0]];
+  while (queue.length) {
+    const [i, j] = queue.shift();
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di,
+        nj = j + dj,
+        key = ni + "," + nj;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const x = o.x + ni * cell,
+        y = o.y + nj * cell;
+      if (footBlocked(x, y, r)) continue;
+      if (Math.hypot(ni, nj) * cell > radius) return false;
+      queue.push([ni, nj]);
+    }
+  }
+  return true;
+}
+export function freeSpot(x, y, r, beyond = 0) {
+  for (let ring = Math.max(2, Math.ceil(beyond / 2) * 2); ring <= 40 + beyond; ring += 2)
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2,
+        nx = x + Math.cos(a) * ring,
+        ny = y + Math.sin(a) * ring;
+      if (!footBlocked(nx, ny, r) && lineClear(x, y, nx, ny)) return { x: nx, y: ny };
+    }
+  return null;
+}
 export { blocked, move };

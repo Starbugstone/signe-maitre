@@ -18,7 +18,8 @@ function recordImpact(v, force, other) {
   }
   crashSound(force, other ? "body" : "wall");
   if (force < 17) return;
-  const loss = Math.max(1, Math.round(100 * Math.pow((force - 10) / 160, 1.65)));
+  // A full-speed crash costs about half the car; a scrape costs a few points.
+  const loss = Math.max(1, Math.round(100 * Math.pow((force - 12) / 200, 1.7)));
   for (const c of other ? [v, other] : [v]) {
     c.condition = clamp((c.condition ?? 100) - loss, 0, 100);
     if (!c.condition) {

@@ -101,7 +101,7 @@ async function probeEntry() {
   // Read-only observer. It returns copies, so a journey can look at the game but never set it.
   return `
 import "./src/main.js";
-import { game, p, done, people } from "./src/core/state.js";
+import { game, p, done, people, cars } from "./src/core/state.js";
 import { interior } from "./src/scenes/interiors.js";
 import { goal } from "./src/game/cases.js";
 import { directions } from "./src/world/navigation.js";
@@ -126,6 +126,7 @@ window.__pf = Object.freeze({
       downed: people.filter((n) => n.knockedOut && !n.onStretcher).map(xy),
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
+      traffic: cars.filter((c) => c.route).map(veh),
     };
   },
 });

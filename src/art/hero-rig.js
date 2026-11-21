@@ -516,6 +516,19 @@ const shoulders = [
   [93, 37],
   [66, 37],
 ];
+// Where the free sleeve folds for the run, and how far the forearm turns and foreshortens.
+const elbows = [
+  [61, 61],
+  [52, 62],
+  [99, 61],
+  [58, 60],
+];
+const folds = [
+  [-1.25, 1],
+  [0.25, 0.5],
+  [-0.2, 0.45],
+  [0.95, 1],
+];
 // Pixels the coat may borrow from the torso beside the cleared arm, and the side it borrows from.
 const mend = [
   {
@@ -590,4 +603,4 @@ const seals = [
   [93, 89, 2.1],
 ];
 
-export { hem, hips, legMasks, register, freeSide, rightArm, shoulders, mend, noHand, pelvis, wrists, seals };
+export { hem, hips, legMasks, register, freeSide, rightArm, shoulders, elbows, folds, mend, noHand, pelvis, wrists, seals };

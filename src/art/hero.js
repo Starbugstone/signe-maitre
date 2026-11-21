@@ -6,6 +6,8 @@ import {
   freeSide,
   rightArm,
   shoulders,
+  elbows,
+  folds,
   mend,
   noHand,
   pelvis,
@@ -15,16 +17,19 @@ import {
 import { artwork } from "../core/state.js";
 import { TAU } from "../world/town.js";
 import { dressKonami, tintKonamiSuit } from "./konami-costume.js";
+import { strides } from "./gait.js";
+
+const width = 152,
+  height = 132,
+  ground = 130;
 
 // Build the CJ from registered artwork. A facing has one carrying arm and folio;
 // strides replace the legs, and a strike replaces only the free shoulder and arm.
 function prepareHero(alternate = false) {
-  const width = 152,
-    height = 132;
   const sheets = {};
-  for (const key of ["walk", "run", "slapping"]) {
+  for (const key of ["walk", "run", "slapping", "body"]) {
     const surface = document.createElement("canvas");
-    surface.width = 4 * width;
+    surface.width = (key === "body" ? 3 : 4) * width;
     surface.height = 4 * height;
     sheets[key] = surface;
   }
@@ -187,19 +192,39 @@ function prepareHero(alternate = false) {
     for (const i of drop) v[i * 4 + 3] = 0;
     return canvasOf(arm);
   }
-  function gaitArm(c, arm, row, frame, running) {
-    let phase = [-1, 0.2, 1, -0.2][frame];
-    const profile = row === 0 || row === 3;
-    // The near hand stops short of the grip on the folio when it swings forward.
-    if (row === 0 && phase < 0) phase *= 0.62;
-    const [x, y] = shoulders[row];
-    c.save();
-    c.translate(x, y);
-    c.rotate(phase * (profile ? (running ? 0.49 : 0.32) : 0.068) * (row === 3 ? -1 : 1));
-    if (!profile) c.scale(1, 0.94 + phase * 0.06);
-    c.translate(-x, -y);
-    c.drawImage(arm, 0, 0);
-    c.restore();
+  // The running arm folds at the elbow: the forearm turns on a cloth joint inked like the sleeve.
+  function bentArm(arm, row) {
+    const [ex, ey] = elbows[row],
+      [turn, squash] = folds[row];
+    const tile = blank(),
+      c = tile.getContext("2d");
+    const v = arm.getContext("2d").getImageData(0, 0, width, height).data;
+    let cloth = "#8d2338",
+      best = -999;
+    for (let dy = -3; dy < 4; dy++)
+      for (let dx = -5; dx < 6; dx++) {
+        const i = ((ey + dy) * width + ex + dx) * 4,
+          red = v[i] - 2 * v[i + 1];
+        if (v[i + 3] > 200 && red > best) {
+          best = red;
+          cloth = "rgb(" + v[i] + "," + v[i + 1] + "," + v[i + 2] + ")";
+        }
+      }
+    c.fillStyle = "#2c0d1b";
+    c.beginPath();
+    c.arc(ex, ey, 5.6, 0, TAU);
+    c.fill();
+    c.fillStyle = cloth;
+    c.beginPath();
+    c.arc(ex, ey, 4.4, 0, TAU);
+    c.fill();
+    c.drawImage(arm, 0, 0, width, ey + 1, 0, 0, width, ey + 1);
+    c.translate(ex, ey);
+    c.rotate(turn);
+    c.scale(1, squash);
+    c.translate(-ex, -ey);
+    c.drawImage(arm, 0, ey - 1, width, height - ey + 1, 0, ey - 1, width, height - ey + 1);
+    return tile;
   }
   function legLayer(key, row, frame) {
     const legs = paste(cell(artwork[key], frame, row), null, inside(legMasks[key][row][frame]), true),
@@ -279,7 +304,7 @@ function prepareHero(alternate = false) {
   function cleanEdges(sheet) {
     const c = sheet.getContext("2d");
     for (let row = 0; row < 4; row++)
-      for (let frame = 0; frame < 4; frame++) {
+      for (let frame = 0; frame < sheet.width / width; frame++) {
         const tile = c.getImageData(frame * width, row * height, width, height);
         specks(tile.data, 55);
         c.putImageData(tile, frame * width, row * height);
@@ -370,48 +395,167 @@ function prepareHero(alternate = false) {
       finishPose(hit, frame, row);
       hit.restore();
       for (const key of ["walk", "run"]) {
+        // Strides are kept as legs only: the coat and the free arm move over them when drawn.
         const c = sheets[key].getContext("2d"),
           hip = hips[row];
         const sourceRow = row === 3 ? 0 : row,
           sourceHip = hips[sourceRow];
-        const [x, y] = sourceHip[key][frame],
+        // The painted front view steps twice with the same foot: its second step mirrors the first.
+        const twin = row === 1 && frame > 1,
+          sourceFrame = twin ? frame - 2 : frame;
+        const [x, y] = sourceHip[key][sourceFrame],
           [cx, cy] = hip.at;
-        const bob = frame % 2 === 0 ? 0 : key === "run" ? -3 : -1.5;
         const legs = blank(),
           l = legs.getContext("2d", { willReadFrequently: true });
         l.translate(cx, cy);
-        if (row === 3) l.scale(-1, 1);
-        l.scale(1, (130 - cy) / (130 - y));
+        if (row === 3 || twin) l.scale(-1, 1);
+        l.scale(1, (ground - cy) / (ground - y));
         l.translate(-x, -y);
-        l.drawImage(legLayer(key, sourceRow, frame), 0, 0);
+        l.drawImage(legLayer(key, sourceRow, sourceFrame), 0, 0);
         l.setTransform(1, 0, 0, 1, 0, 0);
         seat(l, row);
-        const lean = (c2) => {
-          c2.translate(0, bob);
-          c2.translate(cx, cy);
-          if (row === 0 || row === 3) c2.rotate((row === 0 ? 1 : -1) * (key === "run" ? 0.095 : 0.018));
-          c2.translate(-cx, -cy);
-        };
-        c.save();
-        c.translate(width * frame, height * row);
-        // The far arm of the screen-left profile swings behind the legs and the coat.
-        if (row === 3) {
-          c.save();
-          lean(c);
-          gaitArm(c, arm, row, frame, key === "run");
-          c.restore();
-        }
-        c.drawImage(legs, 0, 0);
-        lean(c);
-        c.drawImage(coat, 0, 0);
-        if (row !== 3) gaitArm(c, arm, row, frame, key === "run");
-        finishPose(c, frame, row);
-        c.restore();
+        if (alternate) tintKonamiSuit(l, 0, 0, width, height);
+        c.drawImage(legs, frame * width, row * height);
       }
     }
+    const body = sheets.body.getContext("2d");
+    body.save();
+    body.translate(0, height * row);
+    body.drawImage(coat, 0, 0);
+    body.drawImage(arm, width, 0);
+    body.drawImage(bentArm(arm, row), 2 * width, 0);
+    body.restore();
+    if (alternate) tintKonamiSuit(body, 0, height * row, 3 * width, height);
+    // The wax seal keeps its red on the Konami suit too, as in the standing pose.
+    body.save();
+    body.translate(0, height * row);
+    seal(body, row);
+    body.restore();
   }
   for (const sheet of Object.values(sheets)) cleanEdges(sheet);
   return sheets;
 }
 
-export { prepareHero };
+// World size and placement of one cell around the feet.
+const cellWidth = 19.6,
+  cellHeight = 17,
+  left = -9.8,
+  top = -16.8;
+const unit = cellWidth / width;
+const mix = (a, b, t) => a + (b - a) * t;
+
+// Draw the CJ at the origin. `pose` comes from the gait tracker:
+// { row, strike } while slapping, { row, moving, turn, run, settle } otherwise.
+function drawHero(g, hero, pose) {
+  const { row } = pose;
+  g.save();
+  g.translate(left, top);
+  g.scale(cellWidth / width, cellHeight / height);
+  if (pose.strike !== undefined) g.drawImage(hero.slapping, pose.strike * width, row * height, width, height, 0, 0, width, height);
+  else if (pose.moving) drawStride(g, hero, pose);
+  else if (pose.steppingIn) drawStride(g, hero, { ...pose, poise: pose.settle });
+  else {
+    // Coming to rest, the body rocks back upright over planted feet.
+    const settle = pose.settle || 0,
+      [cx] = hips[row].at;
+    if (settle > 0.001) {
+      const profile = row === 0 || row === 3;
+      g.translate(cx, ground);
+      if (profile) g.rotate((row === 0 ? 1 : -1) * mix(0.03, 0.13, pose.run || 0) * settle);
+      const give = mix(0.012, 0.034, pose.run || 0) * settle;
+      g.scale(1 + give, 1 - give);
+      g.translate(-cx, -ground);
+    }
+    g.drawImage(hero.slapping, 3 * width, row * height, width, height, 0, 0, width, height);
+  }
+  g.restore();
+}
+
+// `poise` fades the lean, the bounce and the arm swing as he comes to a halt.
+function drawStride(g, hero, { row, turn, run = 0, poise = 1 }) {
+  const running = run > 0.5,
+    key = running ? "run" : "walk",
+    profile = row === 0 || row === 3,
+    facing = row === 3 ? -1 : 1,
+    [cx, cy] = hips[row].at,
+    [sx, sy] = shoulders[row];
+  turn -= Math.floor(turn);
+  // Painted strides sit at the middle of their beat: 0 and 2 reach, 1 and 3 pass under the body.
+  const beat = turn * 4 + 0.5,
+    frame = Math.floor(beat) % 4,
+    drift = beat - Math.floor(beat) - 0.5,
+    reach = Math.cos(2 * TAU * turn),
+    // The free arm answers the opposite leg: back as the near leg lands in front, and so on round.
+    swing = (row === 2 ? -1 : 1) * Math.cos(TAU * turn),
+    span = strides[key] / unit;
+  // Walking, the hips rise over the planted leg. Running, the body leaves the ground on each reach.
+  const lift = running ? -4.2 * (0.5 + 0.5 * reach) * poise : 0,
+    sink = (running ? -1.6 * reach : 1.3 * Math.cos(2 * TAU * (turn - 0.03))) * poise,
+    stretch = (ground - cy - sink) / (ground - cy);
+  g.translate(0, lift);
+  const legs = () => {
+    g.save();
+    g.translate(0, ground);
+    g.scale(1, stretch);
+    g.translate(0, -ground);
+    const slope = span / (ground - cy);
+    if (!profile) g.drawImage(hero[key], frame * width, row * height, width, height, 0, 0, width, height);
+    else if (frame % 2) {
+      // The planted foot stays on its cobble while the body passes over it.
+      const shear = -facing * drift * 0.5 * slope * (running ? 0.7 : 0.9);
+      g.transform(1, 0, shear, 1, -shear * cy, 0);
+      g.drawImage(hero[key], frame * width, row * height, width, height, 0, 0, width, height);
+    } else {
+      // Either side of full reach the feet are closer together: the leading foot is still
+      // coming down before it, and the trailing foot is already leaving the ground after it.
+      const close = Math.abs(drift) * 0.5 * slope * (running ? 0.6 : 0.9);
+      for (const side of [-facing, facing]) {
+        const from = side < 0 ? 0 : cx,
+          wide = side < 0 ? cx : width - cx,
+          shear = -side * close,
+          leading = side === facing,
+          raised = (leading ? drift < 0 : drift > 0) ? 1 - (Math.abs(drift) * 9) / (ground - cy) : 1;
+        g.save();
+        g.transform(1, 0, shear, raised, -shear * cy, cy * (1 - raised));
+        g.drawImage(hero[key], frame * width + from, row * height, wide, height, from, 0, wide, height);
+        g.restore();
+      }
+    }
+    g.restore();
+  };
+  const arm = () => {
+    g.save();
+    g.translate(sx, sy);
+    let phase = swing * poise;
+    // The near hand stops short of the grip on the folio when it swings forward.
+    if (row === 0 && phase < 0) phase *= 0.62;
+    if (profile) g.rotate(running ? phase * 0.5 + facing * 0.3 : phase * 0.34);
+    else {
+      g.rotate(phase * (running ? 0.1 : 0.068));
+      g.scale(1, running ? 0.97 - phase * 0.08 : 0.94 + phase * 0.06);
+    }
+    g.translate(-sx, -sy);
+    g.drawImage(hero.body, (running ? 2 : 1) * width, row * height, width, height, 0, 0, width, height);
+    g.restore();
+  };
+  const lean = () => {
+    g.translate(profile ? 0 : 0.9 * Math.sin(TAU * turn), sink);
+    g.translate(cx, cy);
+    if (profile) g.rotate(facing * (mix(0.03, 0.13, run) + (running ? 0.02 : 0.012) * reach) * poise);
+    else g.rotate(mix(0.014, 0.03, run) * Math.sin(TAU * turn) * poise);
+    g.translate(-cx, -cy);
+  };
+  // The far arm of the screen-left profile swings behind the legs and the coat.
+  if (row === 3) {
+    g.save();
+    lean();
+    arm();
+    g.restore();
+  }
+  legs();
+  lean();
+  g.drawImage(hero.body, 0, row * height, width, height, 0, 0, width, height);
+  if (row !== 3) arm();
+}
+
+export { drawHero, prepareHero };

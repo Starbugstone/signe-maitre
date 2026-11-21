@@ -90,8 +90,7 @@ function interact() {
   }
   const near = jobs.find((j) => dist(j, p) < 36);
   if (game.active === "repo" && game.ride === target && near === auction) {
-    exitCar();
-    complete(190, "soldCar");
+    if (exitCar()) complete(190, "soldCar");
     return;
   }
   if (game.active === "flat" && game.stage === "deliver" && near === auction) {

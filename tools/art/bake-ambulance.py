@@ -22,7 +22,7 @@ def render(angle,damage):
   if damage:
    nose=max(0,u-6);u-=damage*nose*.48;v+=damage*nose*.29
    z-=damage*(max(0,z-4)*.55+max(0,v)*.08)
-  return [96+5.65*(u*c-v*s),122+5.65*((u*s+v*c)*.78-z)]
+  return [96+5.65*(u*c-v*s),126+5.65*((u*s+v*c)*.78-z)]
  def tri(tex,uv,xyz):
   uv=np.float32(uv);points=np.float32([proj(*p) for p in xyz])
   if abs(cv2.contourArea(points))<.04:return

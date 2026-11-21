@@ -26,7 +26,7 @@ Every `pf run` starts its own headless Chromium and opens the game in a new brow
 Two builds can be driven.
 
 - **`--build shipped`** is the default. It drives `index.html` exactly as committed and refuses to start if `index.html` no longer matches a fresh build of `src/`. Journeys can only read what a player sees.
-- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance and downed pedestrians. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
+- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians and moving traffic. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
 
 Use `--url <address>` to drive a deployed copy, such as `https://starbugstone.github.io/signe-maitre/`. In that mode, only journeys marked `needs: "hud"` can run. Others are reported as skipped.
 
@@ -64,7 +64,7 @@ The driver `d` provides these calls.
 | `d.step(name, fn)` | Runs one user action and records the HUD before and after, a screenshot and, with the probe, a state snapshot. |
 | `d.expect(ok, message, data)` | Records a check, or fails the journey with the data. |
 
-The shipped journeys are `boot`, `map-view`, `office-interior`, `noise-case` and `home-visit`. Here is the full regression set on both devices and in both languages:
+The shipped journeys are `boot`, `map-view`, `office-interior`, `noise-case`, `home-visit`, `street-life` and `street-scenery`. Here is the full regression set on both devices and in both languages:
 
 ```sh
 pf run boot map-view office-interior noise-case home-visit --build probe --keep-going

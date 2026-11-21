@@ -204,6 +204,8 @@ const words = {
   ],
   impact: ["SMACK!", "CLAC !"],
   ouch: ["OW!", "AÏE !"],
+  honk: ["HONK!", "TUUT !"],
+  eek: ["Hey!", "Eh !"],
   clang: ["CLANG!", "BONG !"],
   health: ["HP", "PV"],
   heat: ["Heat", "Alerte"],

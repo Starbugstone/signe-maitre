@@ -38,4 +38,6 @@ Each feature file begins with an H1 and one paragraph. It then has exactly four 
 | [Cases: noise, home visit and repossession](./cases.md) | `noise-case`, `home-visit` | Noise and home visit are scripted for the probe build. Repossession is not scripted. |
 | [Cars: boarding, driving, damage and repair](./vehicles.md) | none | Not scripted because `driveTo` does not exist |
 | [Street incidents and ambulance dispatch](./street-incident.md) | none | Not scripted |
+| [Hero walk and run animation](./hero-gait.md) | `tools/art/journeys/hero-gait.mjs`, `hero-strides.mjs` | Scripted for the probe build; judged on video |
+| [Street life: traffic, pedestrians and getting unstuck](./street-life.md) | `street-life` | Scripted for the probe build. The pinch is covered by `test/collision.test.js`. |
 | [Street scenery and railway pillars](./street-scenery.md) | `street-scenery` | Walks the garage pavement and the market alley. `npm run test:scenery` also compares actor and foreground pixels. |

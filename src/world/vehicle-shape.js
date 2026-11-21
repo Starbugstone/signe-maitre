@@ -4,10 +4,10 @@ export const sedanHalfLength = 10.95,
 export function carContact(a, b) {
   const dx = a.x - b.x,
     dy = a.y - b.y;
-  const al = a.halfLength ?? 9.3,
-    bl = b.halfLength ?? 9.3,
-    aw = a.halfWidth ?? 4.45,
-    bw = b.halfWidth ?? 4.45;
+  const al = a.halfLength ?? sedanHalfLength,
+    bl = b.halfLength ?? sedanHalfLength,
+    aw = a.halfWidth ?? sedanHalfWidth,
+    bw = b.halfWidth ?? sedanHalfWidth;
   const reach = Math.hypot(al, aw) + Math.hypot(bl, bw);
   if (Math.abs(dx) > reach || Math.abs(dy) > reach) return null;
   const ax = Math.cos(a.a),

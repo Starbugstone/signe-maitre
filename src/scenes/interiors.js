@@ -5,7 +5,7 @@ import { g, hud, $, rect } from "../platform/canvas.js";
 import { dude } from "../art/pedestrians.js";
 import { t } from "../ui/dialogs.js";
 import { arrivalMarker } from "../ui/waypoint.js";
-import { footfall } from "../audio/mixer.js";
+import { stepSound } from "../game/simulation.js";
 
 export let interior = null;
 export function enterInterior(id) {
@@ -47,7 +47,7 @@ export function updateInterior(dt) {
     last = p.walkDistance || 0;
   p.moving = travelled > 0.005;
   p.walkDistance = last + travelled;
-  if (Math.floor(last / 6.8) !== Math.floor(p.walkDistance / 6.8)) footfall(Math.floor(p.walkDistance / 6.8));
+  stepSound(travelled);
 }
 export function drawInterior(anchor) {
   const { room } = interior,

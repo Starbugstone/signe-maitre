@@ -12,6 +12,10 @@ function shadow(x, y, w, h) {
 }
 const paintRows = { cream: 0, blue: 1, gold: 2, olive: 3, rose: 4, silver: 5 };
 const motorCache = new WeakMap();
+const noseCompression = 0.53;
+function bodyCrush(condition) {
+  return clamp((60 - (condition ?? 100)) / 60, 0, 1);
+}
 // The same bonnet, glazing and bumpers from the painted sedan are wrapped around its body.
 function renderMotor(v) {
   const previous = motorCache.get(v);
@@ -30,12 +34,12 @@ function renderMotor(v) {
     si = Math.sin(v.a),
     sourceY = paintRows[v.tint] * 64;
   const wrecked = v.condition === 0,
-    crush = clamp((60 - (v.condition ?? 100)) / 60, 0, 1);
+    crush = bodyCrush(v.condition);
   function project(u, w, z) {
     // Shorten the nose, twist its wings and collapse the cabin as the shell gives way.
     if (crush) {
       const nose = Math.max(0, u - 4);
-      u -= nose * crush * 0.53;
+      u -= nose * crush * noseCompression;
       w += nose * crush * 0.21;
       z -= Math.max(0, z - 3) * crush * 0.53 + crush * (0.35 + Math.max(0, w) * 0.13);
     }
@@ -390,7 +394,8 @@ function drawCar(v) {
   g.rotate(v.a);
   g.fillStyle = "#17132183";
   g.beginPath();
-  g.ellipse(0, 0, 11.4, 4.9, 0, 0, TAU);
+  const shortening = (sedanHalfLength - 4) * bodyCrush(v.condition) * noseCompression;
+  g.ellipse(-shortening / 2, 0, 11.4 - shortening / 2, 4.9, 0, 0, TAU);
   g.fill();
   g.restore();
   g.drawImage(renderMotor(v), v.x - 16, v.y - 110 / 7, 32, 192 / 7);

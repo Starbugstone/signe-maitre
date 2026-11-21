@@ -98,7 +98,7 @@ function drawAmbulance(v) {
       cell,
       cell,
       -96 / scale,
-      -122 / scale,
+      -126 / scale,
       192 / scale,
       192 / scale,
     );

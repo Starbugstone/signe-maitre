@@ -1,19 +1,32 @@
 import { ambulance, inService, interruptRescue } from "./rescue.js";
 import { cars, dist, game, held, p } from "../core/state.js";
-import { footBlocked } from "../world/collision.js";
+import { blocked, footBlocked } from "../world/collision.js";
 import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
 import { panel } from "../platform/canvas.js";
 import { beep } from "../audio/mixer.js";
 
+// An exit spot must leave room for the next step, not just for standing still.
+function roomToWalk(x, y) {
+  return [0, 1, 2, 3].filter((i) => !footBlocked(x + Math.cos((i * Math.PI) / 2) * 4, y + Math.sin((i * Math.PI) / 2) * 4, 2.6)).length >= 2;
+}
+// The door side must not open through a wall, a pier or the canal bank.
+function clearLine(car, x, y) {
+  const steps = Math.ceil(Math.hypot(x - car.x, y - car.y) / 2);
+  for (let i = 1; i < steps; i++) if (blocked(car.x + ((x - car.x) * i) / steps, car.y + ((y - car.y) * i) / steps, 1.5)) return false;
+  return true;
+}
+// Returns true once the player is standing beside the car.
 function exitCar() {
-  if (!game.ride) return;
+  if (!game.ride) return false;
+  // Prefer a door with room to walk away; a tight spot beats being trapped inside.
+  for (const roomy of [true, false])
   for (const r of [19, 27, 37])
     for (let i = 0; i < 8; i++) {
       const a = game.ride.a + Math.PI / 2 + (i * Math.PI) / 4,
         x = game.ride.x + Math.cos(a) * r,
         y = game.ride.y + Math.sin(a) * r;
-      if (!footBlocked(x, y, 2.6)) {
+      if (!footBlocked(x, y, 2.6) && clearLine(game.ride, x, y) && (!roomy || roomToWalk(x, y))) {
         game.ride.speed = 0;
         game.ride.slideX = 0;
         game.ride.slideY = 0;
@@ -23,10 +36,11 @@ function exitCar() {
         if (game.ride.medical) game.ride.sirenOn = false;
         held.delete("horn");
         game.ride = null;
-        return;
+        return true;
       }
     }
   say("moveCar");
+  return false;
 }
 function nearestCar() {
   const unattended = cars.find((v) => v.medical && v.keysUntil > game.time && dist(p, v) < 22);

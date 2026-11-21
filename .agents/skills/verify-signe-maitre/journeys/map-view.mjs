@@ -4,7 +4,8 @@ export const meta = { feature: "map-view", needs: "hud" };
 export default async function (d) {
   await d.step("map-open", async () => {
     await d.press("map");
-    const { hud } = await d.waitFor("map view", ({ hud }) => hud.map === d.t("closeMap"));
+    // The button label flips on the press; the card hides on the next drawn frame.
+    const { hud } = await d.waitFor("map view", ({ hud }) => hud.map === d.t("closeMap") && hud.route === null);
     const rows = d.page.locator("#fileList li");
     for (const [index, id] of ["repo", "noise", "flat"].entries()) {
       const row = rows.nth(index);

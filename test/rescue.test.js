@@ -89,7 +89,7 @@ test("moving ambulance and oncoming sedan both take closing-speed damage without
   const sedan = { x: 724, y: 306, a: Math.PI, speed: 40, slideX: -40, slideY: 0, condition: 100 };
   cars.splice(0, cars.length, van, sedan);
   for (let i = 0; i < 3; i++) drive(van, 1 / 60, 0, 0, false);
-  assert.ok(van.condition < 60 && van.condition === sedan.condition);
+  assert.ok(van.condition < 70 && van.condition > 30 && van.condition === sedan.condition);
   assert.ok((carContact(van, sedan)?.depth ?? 0) < 0.1);
 });
 test("a car crossing an arriving ambulance creates an impact before the van is stolen", () => {

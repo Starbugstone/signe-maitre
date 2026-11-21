@@ -2,7 +2,7 @@ import { dist, fx, game, p, people } from "../core/state.js";
 import { panel } from "../platform/canvas.js";
 import { crashSound } from "../audio/mixer.js";
 import { isFighter } from "../world/population.js";
-import { move } from "../world/collision.js";
+import { move, strikeClear } from "../world/collision.js";
 import { inService, crewInReach, interruptRescue, knockDown } from "./rescue.js";
 import { say } from "../ui/dialogs.js";
 
@@ -18,9 +18,9 @@ function slap() {
   game.hitCooldown = 0.46;
   game.flash = slapDuration;
   combo.slapLanded = false;
-  const reachable = people.filter((n) => !n.down && dist(n, p) < 18);
+  const reachable = people.filter((n) => !n.down && dist(n, p) < 18 && strikeClear(p.x, p.y, n.x, n.y));
   const crew = crewInReach();
-  if (crew) reachable.push(crew);
+  if (crew && strikeClear(p.x, p.y, crew.x, crew.y)) reachable.push(crew);
   combo.slapVictim =
     game.time < comboUntil && reachable.includes(combo.lastSlapped)
       ? combo.lastSlapped
@@ -33,12 +33,14 @@ function landSlap() {
   combo.slapVictim = null;
   if (n?.crewOf) {
     const crew = crewInReach();
-    if (!crew || crew.crewOf !== n.crewOf || !inService(n.crewOf)) return;
+    if (!crew || crew.crewOf !== n.crewOf || !inService(n.crewOf) || !strikeClear(p.x, p.y, crew.x, crew.y)) return;
     n.crewOf.keysUntil = game.time + 7;
     n = interruptRescue(n.crewOf);
   }
-  if (!n || n.down || dist(p, n) > 21) return;
+  if (!n || n.down || dist(p, n) > 21 || !strikeClear(p.x, p.y, n.x, n.y)) return;
   combo.lastSlapped = n;
+  // Bystanders scatter from a slap that lands, not from a swing at thin air.
+  game.scuffle = { x: n.x, y: n.y, until: game.time + 0.3, victim: n };
   comboUntil = game.time + 0.85;
   crashSound(105, "slap");
   n.hits = (n.hits || 0) + 1;

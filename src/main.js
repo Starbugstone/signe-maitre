@@ -290,12 +290,12 @@ function loop(ms) {
       let follow = 1 - Math.exp(-dt * 6);
       game.camX +=
         (p.x +
-          (game.ride ? game.ride.slideX * 0.16 : -16 * Math.sin(((p.x - X(0)) / CELL_W) * TAU)) -
+          (game.ride ? clamp(game.ride.slideX * 0.3, -60, 60) : -16 * Math.sin(((p.x - X(0)) / CELL_W) * TAU)) -
           game.camX) *
         follow;
       game.camY +=
         (p.y +
-          (game.ride ? game.ride.slideY * 0.16 : -9 * Math.sin(((p.y - Y(0)) / CELL_H) * TAU)) -
+          (game.ride ? clamp(game.ride.slideY * 0.3, -40, 40) : -9 * Math.sin(((p.y - Y(0)) / CELL_H) * TAU)) -
           game.camY) *
         follow;
     }
