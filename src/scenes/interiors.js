@@ -1,5 +1,6 @@
 import { town } from "../world/town.js";
 import { artwork, game, held, p, clamp, dist } from "../core/state.js";
+import { walkVector } from "../core/controls.js";
 import { g, hud, $, rect } from "../platform/canvas.js";
 import { dude } from "../art/pedestrians.js";
 import { t } from "../ui/dialogs.js";
@@ -30,14 +31,13 @@ export function indoorAction() {
   return null;
 }
 export function updateInterior(dt) {
-  const dx = Number(held.has("right")) - Number(held.has("left")),
-    dy = Number(held.has("down")) - Number(held.has("up"));
+  const [dx, dy] = walkVector();
   const x = p.x,
     y = p.y,
     mag = Math.hypot(dx, dy),
     floor = interior.room.floor;
   if (mag) {
-    const step = (dt * (held.has("run") ? 48 : 24)) / mag;
+    const step = (dt * (held.has("run") ? 48 : 24)) / Math.max(1, mag);
     p.a = Math.atan2(dy, dx);
     p.x = clamp(x + dx * step, floor.left, floor.right);
     p.y = clamp(y + dy * step, floor.top, floor.bottom);

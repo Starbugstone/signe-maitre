@@ -14,17 +14,21 @@ python3 -m http.server 8765 --bind 127.0.0.1
 
 Then [open the game](http://localhost:8765/index.html). Use **FR** or **EN** in the toolbar to change languages.
 
-| Control | Action |
-| --- | --- |
-| Arrows, WASD or ZQSD | Walk, or accelerate, reverse and steer |
-| Shift + direction | Run |
-| F | Enter or leave a nearby car |
-| H | Hold to honk in a car, or press to switch the ambulance siren on or off |
-| Space | Slap on foot or use the handbrake while driving |
-| E | Pick up a file, act at a destination, or call for a repair when a car breaks down |
-| R | Write an incident report beside a downed pedestrian |
-| M | Open the city map and view the route |
-| V | Deliver the CJ’s catchphrase |
+| Action | Keyboard | Xbox controller |
+| --- | --- | --- |
+| Walk | Arrows, WASD or ZQSD | Left stick or D-pad |
+| Steer | Left / right | Left stick or D-pad |
+| Accelerate, brake and reverse | Up / down | RT / LT, or D-pad up / down |
+| Run | Shift + direction | LB + direction |
+| Enter or leave a nearby car | F | Y |
+| Hold to honk, or press to toggle the ambulance siren | H | RB |
+| Slap on foot or pull the handbrake while driving | Space | X |
+| Pick up a file, act at a destination, or call for roadside assistance | E | A |
+| Write an incident report beside a downed pedestrian | R | Click the right stick (RS) |
+| Open or close the city map | M | View |
+| Deliver the CJ’s catchphrase | V | B |
+
+Connect an Xbox controller and press a button with the game in focus. Press **Menu** for controls. In dialogs, choose with the left stick or D-pad, confirm with **A**, and go back with **B**. Use the right stick to scroll. **B** also closes the map.
 
 Touch controls appear on small screens. Hold **Run** together with a direction to run. The **Horn** or **Siren** button appears when you take the wheel. Browser shortcuts such as Ctrl+R and Ctrl+F keep their usual meaning.
 
@@ -34,7 +38,7 @@ Take work at the étude or at a coloured case marker. The HUD arrow points strai
 
 ## Town and interiors
 
-The elevated metro crosses district boundaries on a continuous viaduct. Enter the étude on foot, choose **Go inside the office**, then press **E** near the desk to take a file or beside the mat to return to the street.
+The elevated metro crosses district boundaries on a continuous viaduct. Enter the étude on foot, choose **Go inside the office**, then press **E** or **A** near the desk to take a file or beside the mat to return to the street.
 
 The playable demo has six rows and six columns. Edit the town definition in `src/world/town.js` to add districts, rail corridors, addresses and interiors. The grid supplies world bounds, road centres, canal banks and viewport ranges. Street painting and ambient population are limited to the camera neighbourhood.
 

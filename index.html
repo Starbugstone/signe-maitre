@@ -34,7 +34,8 @@ button {
   touch-action: none;
 }
 button:hover,
-button:focus-visible {
+button:focus-visible,
+dialog[data-gamepad] button:focus {
   color: #ffdf62;
   border-color: #ffdf62;
 }
@@ -148,9 +149,17 @@ dialog h2 {
 dialog p {
   line-height: 1.45;
 }
+dialog[data-gamepad] .keyboard-help {
+  display: none;
+}
 dialog button {
   padding: 8px 12px;
   margin: 3px 5px 3px 0;
+}
+#dialogControls {
+  margin-bottom: 0;
+  color: #ffdf77;
+  font: 12px/1.45 monospace;
 }
 #mapLegend {
   display: none;
@@ -402,7 +411,9 @@ canvas {
     <dialog id="panel" aria-labelledby="heading">
       <h2 id="heading"></h2>
       <p id="copy"></p>
+      <p id="controllerHelp" hidden></p>
       <div id="choices"></div>
+      <p id="dialogControls" hidden></p>
     </dialog>
     <script>(() => {
   // src/world/layout.js
@@ -529,6 +540,47 @@ canvas {
   var canalTop = Y(canalRow) + 16;
   var canalBottom = Y(canalRow + 1) - 15;
 
+  // src/core/controls.js
+  var sources = /* @__PURE__ */ new Map();
+  var analog = { x: 0, y: 0, steering: 0, throttle: 0 };
+  function clearAnalog() {
+    analog.x = analog.y = analog.steering = analog.throttle = 0;
+  }
+  var held = {
+    has(control2) {
+      return sources.has(control2);
+    },
+    add(control2, source) {
+      if (!sources.has(control2)) sources.set(control2, /* @__PURE__ */ new Set());
+      sources.get(control2).add(source);
+    },
+    delete(control2, source) {
+      if (source === void 0) {
+        sources.delete(control2);
+        return;
+      }
+      const owners = sources.get(control2);
+      if (owners?.delete(source) && !owners.size) sources.delete(control2);
+    },
+    clear() {
+      sources.clear();
+      clearAnalog();
+    }
+  };
+  function axis(positive, negative, fallback) {
+    const plus = held.has(positive), minus = held.has(negative);
+    return plus || minus ? Number(plus) - Number(minus) : fallback;
+  }
+  function walkVector() {
+    return [axis("right", "left", analog.x), axis("down", "up", analog.y)];
+  }
+  function steeringInput() {
+    return axis("right", "left", analog.steering);
+  }
+  function throttleInput() {
+    return axis("up", "down", analog.throttle);
+  }
+
   // src/core/state.js
   var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   var dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -544,7 +596,6 @@ canvas {
   var trails = [];
   var fx = [];
   var done = /* @__PURE__ */ new Set();
-  var held = /* @__PURE__ */ new Set();
   var game = {
     artReady: false,
     konamiHero: false,
@@ -638,7 +689,7 @@ canvas {
     const looks = isFighter(kind) ? fighterLooks : civilianLooks;
     return looks[Math.floor(random() * looks.length)];
   }
-  function person(x, y, kind = "local", axis = "x", random = rand) {
+  function person(x, y, kind = "local", axis2 = "x", random = rand) {
     const n = {
       x,
       y,
@@ -648,7 +699,7 @@ canvas {
       phase: random() * TAU,
       ...chooseLook(kind, random),
       kind,
-      axis,
+      axis: axis2,
       sign: random() < 0.5 ? -1 : 1,
       pace: 13 + random() * 6,
       patrol: 25 + random() * 23,
@@ -1266,7 +1317,8 @@ canvas {
   function motorSound() {
     if (!engineGain) return;
     const running = game.sound && game.ride && game.ride.condition !== 0 && !game.viewMap && !panel.open, now = game.audio.currentTime;
-    engineGain.gain.setTargetAtTime(running ? held.has("up") ? 0.11 : 0.069 : 0, now, 0.07);
+    const throttle = Math.max(0, throttleInput());
+    engineGain.gain.setTargetAtTime(running ? 0.069 + 0.041 * throttle : 0, now, 0.07);
     const roll = running ? Math.hypot(game.ride.slideX, game.ride.slideY) : 0;
     let friction = 0;
     if (held.has("action") && roll > 7) {
@@ -1280,8 +1332,8 @@ canvas {
     skidGain.gain.setTargetAtTime(friction, now, friction ? 0.024 : 0.033);
     if (!running) return;
     const speed = Math.abs(game.ride.speed), gear = Math.min(3, Math.floor(speed / 49));
-    engineOsc.frequency.setTargetAtTime(35 + (speed - gear * 43) * 0.72 + (held.has("up") ? 9 : 0), now, 0.075);
-    engineFilter.frequency.setTargetAtTime(160 + speed * 0.91 + (held.has("up") ? 80 : 0), now, 0.1);
+    engineOsc.frequency.setTargetAtTime(35 + (speed - gear * 43) * 0.72 + 9 * throttle, now, 0.075);
+    engineFilter.frequency.setTargetAtTime(160 + speed * 0.91 + 80 * throttle, now, 0.1);
   }
   function crashClip(kind, heavy) {
     const key = kind + (heavy ? "!" : "");
@@ -1491,16 +1543,16 @@ canvas {
   // src/ui/strings.js
   var words = {
     goInside: ["Go inside the office", "Entrer dans l\u2019\xE9tude"],
-    leaveRoom: ["E \xB7 Return to the street", "E \xB7 Retourner dans la rue"],
-    caseDesk: ["E \xB7 Open the case files", "E \xB7 Ouvrir les dossiers"],
+    leaveRoom: ["{job} \xB7 Return to the street", "{job} \xB7 Retourner dans la rue"],
+    caseDesk: ["{job} \xB7 Open the case files", "{job} \xB7 Ouvrir les dossiers"],
     officeFloor: ["Walk to the desk or the street door", "Rejoignez le bureau ou la sortie"],
     stolenMedic: [
       "You have borrowed a public service. Dispatch would like a word.",
       "Vous avez emprunt\xE9 un service public. La r\xE9gulation souhaite vous parler."
     ],
-    medicKeys: ["F \xB7 Take the ambulance", "F \xB7 Prendre l\u2019ambulance"],
+    medicKeys: ["{car} \xB7 Take the ambulance", "{car} \xB7 Prendre l\u2019ambulance"],
     medicHit: ["Occupational hazard. Apparently.", "Risque du m\xE9tier. Apparemment."],
-    reportKey: ["R \xB7 Incident report", "R \xB7 Signalement"],
+    reportKey: ["{report} \xB7 Incident report", "{report} \xB7 Signalement"],
     incidentTitle: ["Street incident report", "Fiche d\u2019incident"],
     outrageTitle: ["Suspected outrage \xB7 Art. 433-5", "Signalement d\u2019outrage pr\xE9sum\xE9 \xB7 Art. 433-5"],
     tauntConsole: ["Seizing my Super Nintendo? At least save my game!", "Tu saisis ma Super Nintendo ? Sauvegarde, au moins !"],
@@ -1533,21 +1585,21 @@ canvas {
     lastIncident: ["Latest incident report", "Derni\xE8re fiche d\u2019incident"],
     nextCase: ["Next case", "Prochain dossier"],
     onSite: ["On site", "Sur place"],
-    openFile: ["E \xB7 Collect a file", "E \xB7 Retirer un dossier"],
+    openFile: ["{job} \xB7 Collect a file", "{job} \xB7 Retirer un dossier"],
     visitPickup: ["Go here to collect a file", "Retirer un dossier sur place"],
     goAddress: ["Go to the marked address", "Rejoindre l\u2019adresse indiqu\xE9e"],
-    leaveVehicle: ["F \xB7 Get out, then use E", "F \xB7 Descendre, puis appuyer sur E"],
-    useMeter: ["E \xB7 Take a sound reading", "E \xB7 Relever le niveau sonore"],
-    inventoryHere: ["E \xB7 Inventory the karaoke deck", "E \xB7 Inventorier le karaok\xE9"],
+    leaveVehicle: ["{car} \xB7 Get out, then use {job}", "{car} \xB7 Descendre, puis appuyer sur {job}"],
+    useMeter: ["{job} \xB7 Take a sound reading", "{job} \xB7 Relever le niveau sonore"],
+    inventoryHere: ["{job} \xB7 Inventory the karaoke deck", "{job} \xB7 Inventorier le karaok\xE9"],
     driveAuction: ["Deliver the lot to the auction hall", "Livrer le lot \xE0 l\u2019h\xF4tel des ventes"],
-    handOver: ["E \xB7 Hand over the lot", "E \xB7 Remettre le lot"],
-    switchToTarget: ["F \xB7 Get out beside the yellow GT", "F \xB7 Descendre pr\xE8s de la GT jaune"],
-    boardTarget: ["F \xB7 Seize the yellow GT", "F \xB7 Saisir la GT jaune"],
+    handOver: ["{job} \xB7 Hand over the lot", "{job} \xB7 Remettre le lot"],
+    switchToTarget: ["{car} \xB7 Get out beside the yellow GT", "{car} \xB7 Descendre pr\xE8s de la GT jaune"],
+    boardTarget: ["{car} \xB7 Seize the yellow GT", "{car} \xB7 Saisir la GT jaune"],
     northBoulevard: ["Find the yellow car on North Boulevard", "Trouver la voiture jaune, boulevard Nord"],
     vehicle: ["Car", "Auto"],
     breakdown: [
-      "The car has filed for sick leave. Call recovery with E.",
-      "La voiture est en arr\xEAt maladie. E pour appeler le d\xE9pannage."
+      "The car has filed for sick leave. Call recovery with {job}.",
+      "La voiture est en arr\xEAt maladie. {job} pour appeler le d\xE9pannage."
     ],
     dented: ["That dent needs its own case number.", "Cette bosse m\xE9rite son propre num\xE9ro de dossier."],
     recovery: ["Roadside assistance", "D\xE9pannage"],
@@ -1557,7 +1609,7 @@ canvas {
     ],
     repair: ["Order a repair", "Faire r\xE9parer"],
     repaired: ["Signed, stamped, roadworthy.", "Sign\xE9, tamponn\xE9, \xE7a roule."],
-    callRecovery: ["E \xB7 Call roadside assistance", "E \xB7 Appeler le d\xE9pannage"],
+    callRecovery: ["{job} \xB7 Call roadside assistance", "{job} \xB7 Appeler le d\xE9pannage"],
     catch: ["I am justice.", "La justice, c\u2019est moi."],
     office: ["Bailiff\u2019s office", "L\u2019\xE9tude"],
     repo: ["Late payment", "Retard de paiement"],
@@ -1709,14 +1761,26 @@ canvas {
       "Arrows, WASD or ZQSD move you on foot. Hold Shift to run, or hold Run with a direction on the touch pad. F gets you into or out of a nearby car. Accelerate with up, brake or reverse with down, steer with left and right. Hold H or Horn to honk. In the ambulance, press H or Siren to turn the siren on or off. Space slaps on foot or pulls the handbrake. E opens a job. Beside a downed pedestrian, press R or tap Incident report to hand over a copy. The ambulance collects anyone still waiting. M opens the city map. Press V or tap the speech button to deliver your signature line.",
       "\xC0 pied, utilisez les fl\xE8ches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une fl\xE8che sur l\u2019\xE9cran tactile. F pour monter en voiture ou en descendre. Haut pour acc\xE9l\xE9rer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou Klaxon pour klaxonner. Dans l\u2019ambulance, appuyez sur H ou Sir\xE8ne pour activer ou couper la sir\xE8ne. Espace pour gifler ou tirer le frein \xE0 main. E pour un dossier. Pr\xE8s d\u2019un passant \xE0 terre, R ou le bouton Signalement permet de remettre un double. L\u2019ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de r\xE9plique pour sortir votre phrase f\xE9tiche."
     ],
+    gamepadControls: [
+      "Left stick \xB7 Move / steer\u3000 RT / LT \xB7 Accelerate / brake\u3000 Y \xB7 Car\u3000 X \xB7 Slap / handbrake\u3000 A \xB7 Job\u3000 View \xB7 Map\u3000 Menu \xB7 Controls",
+      "Stick gauche \xB7 Marcher / tourner\u3000 RT / LT \xB7 Acc\xE9l\xE9rer / freiner\u3000 Y \xB7 Auto\u3000 X \xB7 Gifle / frein \xE0 main\u3000 A \xB7 Acte\u3000 View \xB7 Plan\u3000 Menu \xB7 Commandes"
+    ],
+    controllerHelp: [
+      "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters or exits a car. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
+      "Appuyez sur un bouton de la manette Xbox pour l\u2019activer. D\xE9placez-vous avec le stick gauche ou la croix directionnelle et maintenez LB pour courir. Y sert \xE0 monter en voiture ou \xE0 en descendre. Tournez avec le stick gauche. RT acc\xE9l\xE8re, LT freine ou fait reculer. Maintenez RB pour klaxonner ou appuyez dessus pour actionner la sir\xE8ne. X sert \xE0 gifler ou \xE0 tirer le frein \xE0 main. A ouvre un dossier. Enfoncez le stick droit (RS) pour signaler un incident. B lance une r\xE9plique. View ouvre le plan et Menu affiche les commandes."
+    ],
+    dialogControls: [
+      "Left stick / D-pad \xB7 Choose\u3000 A \xB7 Select\u3000 B \xB7 Back\u3000 Right stick \xB7 Scroll",
+      "Stick gauche / Croix \xB7 Choisir\u3000 A \xB7 Valider\u3000 B \xB7 Retour\u3000 Stick droit \xB7 D\xE9filer"
+    ],
     cityMap: ["PORT-FER  /  STREET MAP", "PORT-FER  /  PLAN DE VILLE"],
     legend1: ["\xC9 Office \xB7 R Repo \xB7 C Noise report", "\xC9 \xC9tude \xB7 R Saisie auto \xB7 C Constat"],
     legend2: ["S Home visit \xB7 A Auction \xB7 \u25C6 You", "S Saisie \xE0 domicile \xB7 A Ench\xE8res \xB7 \u25C6 Vous"],
-    mapHint: ["M / Map \xB7 Back to town", "M / Plan \xB7 Retour en ville"],
-    outHint: ["F / Car \xB7 Get out", "F / Auto \xB7 Descendre"],
-    enterHint: ["F / Car \xB7 Take the wheel", "F / Auto \xB7 Prendre le volant"],
-    footHint: ["On foot \xB7 Space to slap", "\xC0 pied \xB7 Espace pour gifler"],
-    jobKey: ["E / Job", "E / Acte"],
+    mapHint: ["{map} / Map \xB7 Back to town", "{map} / Plan \xB7 Retour en ville"],
+    outHint: ["{car} / Car \xB7 Get out", "{car} / Auto \xB7 Descendre"],
+    enterHint: ["{car} / Car \xB7 Take the wheel", "{car} / Auto \xB7 Prendre le volant"],
+    footHint: ["On foot \xB7 {action} to slap", "\xC0 pied \xB7 {action} pour gifler"],
+    jobKey: ["{job} / Job", "{job} / Acte"],
     quip: ["Quip", "R\xE9plique"],
     canvas: ["Overhead open-world game in Port-Fer", "Jeu en monde ouvert en vue de dessus \xE0 Port-Fer"],
     frLang: ["Switch to French", "Passer en fran\xE7ais"],
@@ -1726,6 +1790,14 @@ canvas {
 
   // src/ui/dialogs.js
   var lang = navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en";
+  var usingGamepad = false;
+  var bindings = {
+    car: ["F", "F", "Y"],
+    job: ["E", "E", "A"],
+    report: ["R", "R", "RS"],
+    map: ["M", "M", "View"],
+    action: ["Space", "Espace", "X"]
+  };
   try {
     const saved = localStorage.getItem("port-fer-language");
     if (["en", "fr"].includes(saved)) lang = saved;
@@ -1733,7 +1805,10 @@ canvas {
   }
   function t(key) {
     const pair = words[key];
-    return pair ? pair[lang === "fr" ? 1 : 0] : key;
+    if (!pair) return key;
+    const language = Number(lang === "fr");
+    const text = pair[language];
+    return text.includes("{") ? text.replace(/\{(\w+)\}/g, (_, control2) => bindings[control2][usingGamepad ? 2 : language]) : text;
   }
   var message = null;
   function say(id, seconds = 4, prefix = "", suffix = "") {
@@ -1753,17 +1828,28 @@ canvas {
     }
     refreshLanguage();
   }
+  function refreshInputHints() {
+    $("#reportBtn").textContent = t("reportKey");
+    $("#keys").textContent = t(usingGamepad ? "gamepadControls" : "controls");
+    $("#dialogControls").textContent = t("dialogControls");
+    renderMessage();
+  }
+  function setGamepadMode(enabled) {
+    if (usingGamepad === enabled) return;
+    usingGamepad = enabled;
+    panel.toggleAttribute("data-gamepad", enabled);
+    $("#dialogControls").hidden = !enabled;
+    refreshInputHints();
+  }
   function refreshLanguage() {
     document.documentElement.lang = lang;
     $("#language").textContent = lang === "en" ? "FR" : "EN";
     $("#language").setAttribute("aria-label", t(lang === "en" ? "frLang" : "enLang"));
     for (const [selector, id] of [
-      ["#reportBtn", "reportKey"],
       ["#help", "help"],
       ["#quip", "quip"],
       ["#mapBtn", game.viewMap ? "closeMap" : "map"],
       ["#sound", game.sound ? "audioOn" : "audioOff"],
-      ["#keys", "controls"],
       ["[data-key=car]", "touchCar"],
       ["[data-key=job]", "touchJob"],
       ["[data-key=action]", game.ride ? "touchBrake" : "touchHit"],
@@ -1773,7 +1859,7 @@ canvas {
     for (const key of ["up", "down", "left", "right"])
       $("[data-key=" + key + "]").setAttribute("aria-label", t(key));
     canvas.setAttribute("aria-label", t("canvas"));
-    renderMessage();
+    refreshInputHints();
     if (panel.open && dialogState) renderDialog();
   }
   var dialogState;
@@ -1784,7 +1870,12 @@ canvas {
     if (title === "help") heading.tabIndex = -1;
     else heading.removeAttribute("tabindex");
     heading.toggleAttribute("autofocus", title === "help");
-    $("#copy").textContent = t(copy);
+    const description = $("#copy");
+    description.textContent = t(copy);
+    description.classList.toggle("keyboard-help", title === "help");
+    const controllerHelp = $("#controllerHelp");
+    controllerHelp.hidden = title !== "help";
+    if (title === "help") controllerHelp.textContent = t("controllerHelp");
     const root = $("#choices");
     root.replaceChildren();
     for (const [name, fn] of choices) {
@@ -1798,7 +1889,10 @@ canvas {
     }
     const language = document.createElement("button");
     language.textContent = lang === "en" ? "Fran\xE7ais" : "English";
-    language.onclick = setLanguage;
+    language.onclick = () => {
+      setLanguage();
+      root.lastElementChild.focus();
+    };
     root.append(language);
   }
   function box(title, copy, choices) {
@@ -1806,6 +1900,7 @@ canvas {
     dialogState = { title, copy, choices };
     renderDialog();
     if (!panel.open) panel.showModal();
+    if (title === "help" && usingGamepad) $("#choices button").focus({ preventScroll: true });
   }
   function speak() {
     if (panel.open || game.viewMap || game.quipCooldown > 0) return;
@@ -2007,7 +2102,7 @@ canvas {
       return;
     }
     const oldAngle = v.a;
-    const opposition = throttle && Math.sign(v.speed) !== throttle && Math.abs(v.speed) > 2;
+    const opposition = v.speed * throttle < 0 && Math.abs(v.speed) > 2;
     const acceleration = opposition ? 260 : throttle < 0 ? 85 : 122;
     v.speed = clamp(v.speed + throttle * acceleration * dt, -57, 120 + 61 * ((v.condition ?? 100) / 100));
     v.speed *= Math.exp(-dt * (brake ? 4.6 : throttle ? 0.16 : 1.45));
@@ -2108,12 +2203,12 @@ canvas {
   var seatCount = 4;
   var pickupRadius = 52;
   var dispatchDelay = 12;
-  function nextPatient(people2, scene, reachable) {
-    if (scene.loaded >= seatCount) return null;
+  function nextPatient(people2, scene2, reachable) {
+    if (scene2.loaded >= seatCount) return null;
     return people2.filter(
-      (n) => n.knockedOut && !n.onStretcher && Math.hypot(n.x - scene.origin.x, n.y - scene.origin.y) <= pickupRadius && reachable(n)
+      (n) => n.knockedOut && !n.onStretcher && Math.hypot(n.x - scene2.origin.x, n.y - scene2.origin.y) <= pickupRadius && reachable(n)
     ).sort(
-      (a, b) => Math.hypot(a.x - scene.apron.x, a.y - scene.apron.y) - Math.hypot(b.x - scene.apron.x, b.y - scene.apron.y)
+      (a, b) => Math.hypot(a.x - scene2.apron.x, a.y - scene2.apron.y) - Math.hypot(b.x - scene2.apron.x, b.y - scene2.apron.y)
     )[0] ?? null;
   }
 
@@ -2516,21 +2611,19 @@ canvas {
       game.msgLife = 0;
       renderMessage();
     }
-    const left = held.has("left"), right = held.has("right"), up = held.has("up"), down = held.has("down");
     p.moving = false;
     if (game.ride) {
       const v = game.ride;
-      drive(v, dt, Number(up) - Number(down), Number(right) - Number(left), held.has("action"));
+      drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
       p.x = v.x;
       p.y = v.y;
       p.a = v.a;
       if (game.active === "repo" && v === target) game.stage = "deliver";
     } else {
-      let dx = Number(right) - Number(left), dy = Number(down) - Number(up);
+      const [dx, dy] = walkVector();
       if (dx || dy) {
         if (game.flash <= 0) p.a = Math.atan2(dy, dx);
-        let mag = Math.hypot(dx, dy);
-        const startX = p.x, startY = p.y, pace = held.has("run") ? runPace : walkPace;
+        const mag = Math.max(1, Math.hypot(dx, dy)), startX = p.x, startY = p.y, pace = held.has("run") ? runPace : walkPace;
         move(p, dx / mag * pace * dt, dy / mag * pace * dt, 2.6);
         const travel = Math.hypot(p.x - startX, p.y - startY);
         p.moving = travel > 5e-3;
@@ -2882,10 +2975,10 @@ canvas {
     return null;
   }
   function updateInterior(dt) {
-    const dx = Number(held.has("right")) - Number(held.has("left")), dy = Number(held.has("down")) - Number(held.has("up"));
+    const [dx, dy] = walkVector();
     const x = p.x, y = p.y, mag = Math.hypot(dx, dy), floor = interior.room.floor;
     if (mag) {
-      const step = dt * (held.has("run") ? 48 : 24) / mag;
+      const step = dt * (held.has("run") ? 48 : 24) / Math.max(1, mag);
       p.a = Math.atan2(dy, dx);
       p.x = clamp(x + dx * step, floor.left, floor.right);
       p.y = clamp(y + dy * step, floor.top, floor.bottom);
@@ -2948,6 +3041,65 @@ canvas {
     if (!key || e.repeat) return matched;
     if (key === konami[matched]) return matched + 1 === konami.length ? -1 : matched + 1;
     return key === konami[0] ? matched === 2 ? 2 : 1 : 0;
+  }
+
+  // src/platform/gamepad.js
+  var buttons = [
+    [0, "job"],
+    [1, "back"],
+    [2, "action"],
+    [3, "car"],
+    [4, "run"],
+    [5, "horn"],
+    [8, "map"],
+    [9, "help"],
+    [11, "report"],
+    [12, "up"],
+    [13, "down"],
+    [14, "left"],
+    [15, "right"]
+  ];
+  var stickDeadZone = 0.22;
+  var triggerDeadZone = 0.08;
+  function withDeadZone(value, deadZone) {
+    return Math.min(1, Math.max(0, (value - deadZone) / (1 - deadZone)));
+  }
+  function findGamepad(index) {
+    try {
+      const pads = navigator.getGamepads?.();
+      const supported = (pad) => pad?.connected && pad.mapping === "standard";
+      return (supported(pads?.[index]) ? pads[index] : pads?.find(supported)) ?? null;
+    } catch {
+      return null;
+    }
+  }
+  function readGamepad(pad) {
+    const controls = /* @__PURE__ */ new Set();
+    for (const [index, control2] of buttons) if (pad.buttons[index]?.pressed) controls.add(control2);
+    const x = pad.axes[0] ?? 0, y = pad.axes[1] ?? 0;
+    const length = Math.hypot(x, y);
+    const speed = withDeadZone(length, stickDeadZone);
+    const scale = length ? speed / length : 0;
+    const steering = Math.sign(x) * withDeadZone(Math.abs(x), stickDeadZone);
+    const reverse = withDeadZone(pad.buttons[6]?.value ?? 0, triggerDeadZone);
+    const accelerate = withDeadZone(pad.buttons[7]?.value ?? 0, triggerDeadZone);
+    const padX = Number(controls.has("right")) - Number(controls.has("left"));
+    const padY = Number(controls.has("down")) - Number(controls.has("up"));
+    const menuX = padX || padY ? padX : x;
+    const menuY = padX || padY ? padY : y;
+    const direction = Math.abs(menuX) >= Math.abs(menuY) ? menuX : menuY;
+    const scroll = pad.axes[3] ?? 0;
+    return {
+      controls,
+      x: x * scale,
+      y: y * scale,
+      steering,
+      throttle: accelerate - reverse,
+      stickActive: speed > 0,
+      triggersActive: accelerate > 0 || reverse > 0,
+      menuStep: Math.abs(direction) >= 0.55 ? Math.sign(direction) : 0,
+      menuScroll: Math.sign(scroll) * withDeadZone(Math.abs(scroll), stickDeadZone)
+    };
   }
 
   // src/game/cases.js
@@ -5015,6 +5167,15 @@ canvas {
   var konamiProgress = 0;
   var signalButtons = document.querySelectorAll("[data-key=horn]");
   var touchRun = $("[data-key=run]");
+  var controller = /* @__PURE__ */ Symbol("gamepad");
+  var signalKey = /* @__PURE__ */ Symbol("signal button");
+  var controllerKonami = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", back: "b", job: "a" };
+  var gamepad = null;
+  var previousPad = null;
+  var scene = null;
+  var waitForNeutral = false;
+  var blockStick = false;
+  var blockTriggers = false;
   function enterKonamiKey(e) {
     if (panel.open || game.viewMap) return false;
     konamiProgress = trackKonami(e, konamiProgress);
@@ -5056,7 +5217,10 @@ canvas {
   }
   $("#reportBtn").onclick = reportIncident;
   $("#mapBtn").onclick = toggleMap;
-  $("#help").onclick = () => box("help", "helpText", [["back"]]);
+  function showHelp() {
+    box("help", "helpText", [["back"]]);
+  }
+  $("#help").onclick = showHelp;
   $("#quip").onclick = speak;
   $("#language").onclick = setLanguage;
   $("#sound").onclick = async () => {
@@ -5070,11 +5234,14 @@ canvas {
     if (game.sound) beep(450);
     $("#sound").textContent = t(game.sound ? "audioOn" : "audioOff");
   };
-  function press(k) {
+  function startAudio() {
     if (game.sound && (!gameMix || game.audio?.state === "suspended")) enableAudio();
+  }
+  function press(k, source) {
+    if (source !== controller) startAudio();
     if (interior) {
       if (k === "job") interact();
-      else if (["up", "down", "left", "right", "run"].includes(k)) held.add(k);
+      else if (["up", "down", "left", "right", "run"].includes(k)) held.add(k, source);
       return;
     }
     if (k === "quip") {
@@ -5089,17 +5256,20 @@ canvas {
     if (k === "horn") {
       if (!game.ride || game.ride.condition === 0) return;
       if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
-      else held.add(k);
+      else held.add(k, source);
       updateVehicleSignal();
       return;
     }
-    held.add(k);
+    held.add(k, source);
     if (k === "car") board();
     if (k === "job") interact();
     if (k === "report") reportIncident();
     if (k === "action" && !game.ride) slap();
   }
+  var keySource = (e) => `key:${e.code || e.key?.toLowerCase()}`;
+  var pointerSource = (e) => `pointer:${e.pointerId}`;
   addEventListener("keydown", (e) => {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) setGamepadMode(false);
     if (panel.open) return;
     if ((e.key === " " || e.key === "Enter") && e.target.matches?.("button:focus-visible")) return;
     if (enterKonamiKey(e)) {
@@ -5109,20 +5279,22 @@ canvas {
     const k = control(e);
     if (!k) return;
     e.preventDefault();
-    if (!e.repeat) press(k);
+    if (!e.repeat) press(k, keySource(e));
   });
-  function release(k) {
-    held.delete(k);
+  function release(k, source) {
+    held.delete(k, source);
     if (k === "horn") updateVehicleSignal();
   }
   function clearInput() {
     held.clear();
+    waitForNeutral = true;
     konamiProgress = 0;
     vehicleSignalSound(null);
     motorSound();
   }
-  addEventListener("keyup", (e) => release(released(e)));
+  addEventListener("keyup", (e) => release(released(e), keySource(e)));
   addEventListener("blur", clearInput);
+  addEventListener("pointerdown", () => setGamepadMode(false), { capture: true });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) clearInput();
   });
@@ -5131,12 +5303,12 @@ canvas {
       if (e.key !== " " && e.key !== "Enter") return;
       e.preventDefault();
       e.stopPropagation();
-      if (!e.repeat) press("horn");
+      if (!e.repeat) press("horn", signalKey);
     };
     button.onkeyup = (e) => {
-      if (e.key === " " || e.key === "Enter") release("horn");
+      if (e.key === " " || e.key === "Enter") release("horn", signalKey);
     };
-    button.onblur = () => release("horn");
+    button.onblur = () => release("horn", signalKey);
   }
   for (const b of document.querySelectorAll("[data-konami]:not([data-key])"))
     b.onclick = () => enterKonamiKey({ key: b.dataset.konami });
@@ -5146,11 +5318,87 @@ canvas {
       e.preventDefault();
       b.setPointerCapture(e.pointerId);
       enterKonamiKey({ key: b.dataset.konami ?? b.dataset.key });
-      press(b.dataset.key);
+      press(b.dataset.key, pointerSource(e));
     };
-    b.onlostpointercapture = () => release(b.dataset.key);
-    b.onpointerup = () => release(b.dataset.key);
-    b.onpointercancel = () => release(b.dataset.key);
+    b.onlostpointercapture = b.onpointerup = b.onpointercancel = (e) => release(b.dataset.key, pointerSource(e));
+  }
+  function forgetGamepad() {
+    for (const key of previousPad?.controls ?? []) release(key, controller);
+    clearAnalog();
+    previousPad = gamepad = null;
+    blockStick = blockTriggers = false;
+  }
+  addEventListener("gamepaddisconnected", (e) => {
+    if (e.gamepad.index !== gamepad?.index) return;
+    forgetGamepad();
+    setGamepadMode(false);
+  });
+  function inputScene() {
+    return panel.open ? panel : game.viewMap ? "map" : interior || game.ride;
+  }
+  function controllerDialog(pressed, step) {
+    if (pressed.has("back")) {
+      panel.close();
+      return;
+    }
+    if (!step && !pressed.has("job")) return;
+    const choices = [...panel.querySelectorAll("#choices button")];
+    let index = choices.indexOf(document.activeElement);
+    if (step) {
+      index = index === -1 ? 0 : (index + step + choices.length) % choices.length;
+      choices[index]?.focus();
+    }
+    if (pressed.has("job")) choices[Math.max(0, index)]?.click();
+  }
+  function updateGamepad(dt) {
+    if (document.hidden || !document.hasFocus()) return;
+    const pad = findGamepad(gamepad?.index);
+    if (pad?.index !== gamepad?.index || pad?.id !== gamepad?.id) {
+      forgetGamepad();
+      if (!pad) setGamepadMode(false);
+      gamepad = pad;
+    }
+    if (!pad) return;
+    const sample = readGamepad(pad);
+    if (waitForNeutral) {
+      if (sample.controls.size || sample.stickActive || sample.triggersActive || sample.menuScroll) return;
+      waitForNeutral = false;
+    }
+    const pressed = new Set(sample.controls);
+    for (const key of previousPad?.controls ?? []) {
+      if (sample.controls.has(key)) pressed.delete(key);
+      else release(key, controller);
+    }
+    const before = inputScene();
+    const menuStep = sample.menuStep === previousPad?.menuStep ? 0 : sample.menuStep;
+    const moved = sample.stickActive && !previousPad?.stickActive || sample.triggersActive && !previousPad?.triggersActive;
+    if (pressed.size || moved || before === panel && (menuStep || sample.menuScroll)) setGamepadMode(true);
+    if (pressed.size || moved) startAudio();
+    if (before === panel) {
+      if (sample.menuScroll) panel.scrollTop += sample.menuScroll * dt * 420;
+      controllerDialog(pressed, menuStep);
+    } else if (pressed.has("help")) {
+      showHelp();
+    } else if (pressed.has("map") || game.viewMap && pressed.has("back")) {
+      toggleMap();
+    } else if (game.artReady && !game.viewMap) {
+      for (const key of pressed) {
+        if (enterKonamiKey({ key: controllerKonami[key] || key })) continue;
+        press(key === "back" ? "quip" : key, controller);
+        if (inputScene() !== before) break;
+      }
+    }
+    const after = inputScene();
+    const changed = previousPad && before !== scene || after !== before;
+    blockStick = sample.stickActive && (blockStick || changed);
+    blockTriggers = sample.triggersActive && (blockTriggers || changed);
+    const playing = after !== panel && after !== "map";
+    analog.x = playing && !blockStick ? sample.x : 0;
+    analog.y = playing && !blockStick ? sample.y : 0;
+    analog.steering = playing && !blockStick ? sample.steering : 0;
+    analog.throttle = playing && !blockTriggers ? sample.throttle : 0;
+    previousPad = sample;
+    scene = after;
   }
   refreshLanguage();
   say("start", 6, "clerk");
@@ -5171,6 +5419,7 @@ canvas {
   function loop(ms) {
     const dt = prev ? clamp((ms - prev) / 1e3, 0, 0.1) : 0;
     prev = ms;
+    updateGamepad(dt);
     if (game.artReady && !panel.open && !game.viewMap) {
       const steps = Math.max(1, Math.ceil(dt * 60 - 1e-8));
       for (let step = 0; step < steps; step++) (interior ? updateInterior : update)(dt / steps);

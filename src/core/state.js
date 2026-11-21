@@ -1,4 +1,5 @@
 import { X, Y } from "../world/layout.js";
+export { held } from "./controls.js";
 
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -13,8 +14,7 @@ export const cars = [],
   people = [],
   trails = [],
   fx = [],
-  done = new Set(),
-  held = new Set();
+  done = new Set();
 export const game = {
   artReady: false,
   konamiHero: false,

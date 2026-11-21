@@ -1,5 +1,6 @@
 import { callOut } from "./taunts.js";
 import { cars, dist, fx, game, held, p, people, trails } from "../core/state.js";
+import { steeringInput, throttleInput, walkVector } from "../core/controls.js";
 import { renderMessage, say } from "../ui/dialogs.js";
 import { combo, landSlap, slap } from "./slap.js";
 import { advanceTraffic, drive, quarterTurn } from "./driving.js";
@@ -36,25 +37,20 @@ function update(dt) {
     game.msgLife = 0;
     renderMessage();
   }
-  const left = held.has("left"),
-    right = held.has("right"),
-    up = held.has("up"),
-    down = held.has("down");
   p.moving = false;
   if (game.ride) {
     const v = game.ride;
-    drive(v, dt, Number(up) - Number(down), Number(right) - Number(left), held.has("action"));
+    drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
     p.x = v.x;
     p.y = v.y;
     p.a = v.a;
     if (game.active === "repo" && v === target) game.stage = "deliver";
   } else {
-    let dx = Number(right) - Number(left),
-      dy = Number(down) - Number(up);
+    const [dx, dy] = walkVector();
     if (dx || dy) {
       if (game.flash <= 0) p.a = Math.atan2(dy, dx);
-      let mag = Math.hypot(dx, dy);
-      const startX = p.x,
+      const mag = Math.max(1, Math.hypot(dx, dy)),
+        startX = p.x,
         startY = p.y,
         pace = held.has("run") ? runPace : walkPace;
       move(p, (dx / mag) * pace * dt, (dy / mag) * pace * dt, 2.6);
