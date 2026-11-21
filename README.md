@@ -56,6 +56,8 @@ npm run build
 
 The build embeds the modules, CSS and artwork in the root `index.html` for offline or HTTP play. District authors can use the [town-generation skill](.agents/skills/port-fer-town/SKILL.md) for connectivity and visual checks.
 
+To drive the built game in headless Chromium and keep screenshots as proof, run `node .agents/skills/verify-signe-maitre/scripts/pf.mjs doctor`. The [verification skill](.agents/skills/verify-signe-maitre/SKILL.md) lists the scripted player journeys.
+
 ## Street incidents
 
 After a knockdown, approach on foot and press **R** to record what happened and serve a copy. When the CJ is working a case and hears an insult directed at him, the report records the words as a possible *outrage*. After 12 seconds an ambulance approaches from outside the camera. Its medic can load up to four nearby patients by stretcher before leaving. Anyone still waiting can get another crew. Space can slap the medic, and F beside the ambulance lets you take the wheel. An interrupted stretcher trip leaves its patient available for help. A van that finds the road blocked short of the scene backs out, and dispatch sends another crew by a different approach. The legal reference for the report is [article 433-5 of the French Criminal Code](https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000054716075/2026-11-11).

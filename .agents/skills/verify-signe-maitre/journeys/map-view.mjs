@@ -1,0 +1,22 @@
+// Open the city map with the map control, check the street pauses behind it, and close it again.
+export const meta = { feature: "map-view", needs: "hud" };
+
+export default async function (d) {
+  await d.step("map-open", async () => {
+    await d.press("map");
+    const { hud } = await d.waitFor("map view", ({ hud }) => hud.map === d.t("closeMap"));
+    d.expect(hud.hint === d.t("mapHint"), "the hint explains the map", hud.hint);
+    d.expect(hud.route === null, "the route card hides while the map is open", hud.route);
+  });
+  await d.step("map-ignores-movement", async () => {
+    const before = await d.hud();
+    await d.hold(["right"], 500);
+    const after = await d.hud();
+    d.expect(after.map === d.t("closeMap") && after.district === before.district, "walking keys do not close the map", { before, after });
+  });
+  await d.step("map-closed", async () => {
+    await d.press("map");
+    const { hud } = await d.waitFor("street view", ({ hud }) => hud.map === d.t("map") && hud.route);
+    d.expect(hud.hint !== d.t("mapHint"), "the street hint returns", hud.hint);
+  });
+}
