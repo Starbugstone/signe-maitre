@@ -2,33 +2,14 @@ import { canvas, g, rect } from "../platform/canvas.js";
 import { town, canalRow, CELL_H, CELL_W, W, X, Y, canalBottom, canalTop, city } from "./town.js";
 import { artwork, game } from "../core/state.js";
 
-const plateScale = 5,
-  kerbX = 17.6,
-  kerbY = 16.8;
+import { kerbX, kerbY, plateRegistration, streetProps } from "./street-props.js";
+
+const plateScale = 5;
 const plates = {},
   northApproaches = {},
   joins = new Map();
 let setts, wall, slate, roadPaint, edgeStone;
 
-// Source control points register the centre lines and straight kerbs of each painting.
-const plateRegistration = {
-  market: [
-    [667, 749, 841],
-    [429, 500, 559],
-  ],
-  garage: [
-    [668, 750, 838],
-    [430, 503, 575],
-  ],
-  docks: [
-    [667, 751, 842],
-    [429, 499, 573],
-  ],
-  square: [
-    [669, 749, 840],
-    [429, 499, 572],
-  ],
-};
 function paintCanvas(w, h) {
   const c = document.createElement("canvas");
   c.width = Math.round(w * plateScale);
@@ -263,6 +244,24 @@ function sideAlley(ctx, x, y, left, right, south) {
     for (let dy = eave + 11; dy < foot; dy += 17) rect(ctx, drain - 0.24, y + dy, 0.7, 0.37, "#c28d71");
   }
 }
+// Let the shadow fall off as the alley opens onto the lit north pavement.
+function drawAlleyMouth(ctx, x, y, left, right) {
+  const key = "alley-mouth:" + left + right;
+  let mouth = joins.get(key);
+  if (!mouth) {
+    mouth = getJoin(key, plates[left], plates[right], true, CELL_H / 2 - 27, 11, 6);
+    const paint = mouth.getContext("2d");
+    const fade = paint.createLinearGradient(0, 0, 0, mouth.height);
+    fade.addColorStop(0, "transparent");
+    fade.addColorStop(0.7, "black");
+    paint.save();
+    paint.globalCompositeOperation = "destination-in";
+    paint.fillStyle = fade;
+    paint.fillRect(0, 0, mouth.width, mouth.height);
+    paint.restore();
+  }
+  ctx.drawImage(mouth, x - 6, y - 27, 12, 11);
+}
 function backLane(ctx, x, y) {
   for (const side of [-1, 1]) {
     const a = x + side * (kerbX + 4.6),
@@ -331,6 +330,7 @@ function drawTown(ox, oy, ctx, width, height) {
       const road = getJoin("road:" + l + r, plates[l], plates[r], true, CELL_H / 2 - 21, 42, 14);
       ctx.drawImage(road, x - 14, y - 21, 28, 42);
       sideAlley(ctx, x, y, l, r, false);
+      drawAlleyMouth(ctx, x, y, l, r);
       sideAlley(ctx, x, y, l, r, true);
     }
   for (let j = Math.max(1, firstRow); j <= lastRow; j++)
@@ -472,6 +472,54 @@ function drawCanal(ctx, visible, firstCol, lastCol) {
   }
 }
 
+// Cut foreground objects from the registered plate once. Only their painted
+// silhouettes cover actors standing behind them.
+const propSprites = new WeakMap();
+export function drawStreetProp({ x, y, item }) {
+  let sprite = propSprites.get(item);
+  if (!sprite) {
+    const left = Math.floor(Math.min(...item.outline.map((p) => p[0])) * plateScale) / plateScale,
+      top = Math.floor(item.outline[0][1] * plateScale) / plateScale;
+    const w = Math.ceil((2 * (item.x - left) + 0.4) * plateScale),
+      h = Math.ceil((item.y - top) * plateScale);
+    const image = document.createElement("canvas");
+    image.width = w;
+    image.height = h;
+    const ctx = image.getContext("2d");
+    ctx.setTransform(plateScale, 0, 0, plateScale, -left * plateScale, -top * plateScale);
+    ctx.beginPath();
+    for (const [px, py] of item.outline) ctx.lineTo(px, py);
+    ctx.closePath();
+    ctx.clip();
+    const plate = plates[item.key];
+    ctx.drawImage(
+      plate,
+      -CELL_W / 2,
+      item.key === "canal" ? 16 : -CELL_H / 2,
+      plate.width / plateScale,
+      plate.height / plateScale,
+    );
+    sprite = { image, dx: left - item.x, dy: top - item.y };
+    propSprites.set(item, sprite);
+  }
+  g.drawImage(
+    sprite.image,
+    x + sprite.dx,
+    y + sprite.dy,
+    sprite.image.width / plateScale,
+    sprite.image.height / plateScale,
+  );
+}
+export function visibleStreetProps(ox, oy) {
+  const area = town.visibleCells(ox, oy, game.vw, game.vh + 52);
+  const result = [];
+  for (let row = area.firstRow; row <= area.lastRow; row++)
+    for (let col = area.firstCol; col <= area.lastCol; col++)
+      for (const prop of streetProps(town, col, row))
+        if (prop.x >= ox - 3 && prop.x <= ox + game.vw + 3 && prop.y >= oy && prop.y <= oy + game.vh + 52)
+          result.push(prop);
+  return result;
+}
 const streets = document.createElement("canvas");
 const streetContext = streets.getContext("2d", { alpha: false });
 let cachedX = Infinity,
@@ -508,4 +556,4 @@ function streetLayer(ox, oy) {
   g.restore();
 }
 
-export { kerbY, plateScale, plates, prepareTown, streetLayer };
+export { plateScale, plates, prepareTown, streetLayer };

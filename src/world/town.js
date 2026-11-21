@@ -19,10 +19,10 @@ export const definition = {
     phase: 420 + i * 347,
   })),
   addresses: [
-    { id: "office", col: 2, row: 1, dx: 63, dy: -21, symbol: "É", color: "#ffc857" },
+    { id: "office", col: 2, row: 1, dx: 57, dy: -21, symbol: "É", color: "#ffc857" },
     { id: "repo", col: 1, row: 0, dx: 69, dy: -20, symbol: "R", color: "#ff79ae" },
     { id: "noise", col: 4, row: 3, dx: -57, dy: -18, symbol: "C", color: "#64ebd0" },
-    { id: "flat", col: 0, row: 4, dx: 77, dy: -22, symbol: "S", color: "#ffa851" },
+    { id: "flat", col: 0, row: 4, dx: 74, dy: -22, symbol: "S", color: "#ffa851" },
     { id: "auction", col: 3, row: 4, dx: 72, dy: -20, symbol: "A", color: "#c2a0ff" },
   ],
   interiors: [

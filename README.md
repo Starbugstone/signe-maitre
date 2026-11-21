@@ -54,6 +54,8 @@ npm test
 npm run build
 ```
 
+Run `npm run test:scenery` for scenery changes. It checks which pixels each object covers and walks the player through the garage and market crossing. Install the browser once with `npx playwright-core install chromium-headless-shell`. CI runs the checks on every push and pull request and saves gameplay screenshots on failure.
+
 The build embeds the modules, CSS and artwork in the root `index.html` for offline or HTTP play. District authors can use the [town-generation skill](.agents/skills/port-fer-town/SKILL.md) for connectivity and visual checks.
 
 To drive the built game in headless Chromium and keep screenshots as proof, run `node .agents/skills/verify-signe-maitre/scripts/pf.mjs doctor`. The [verification skill](.agents/skills/verify-signe-maitre/SKILL.md) lists the scripted player journeys.

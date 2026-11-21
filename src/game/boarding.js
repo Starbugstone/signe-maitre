@@ -1,6 +1,6 @@
 import { ambulance, inService, interruptRescue } from "./rescue.js";
 import { cars, dist, game, held, p } from "../core/state.js";
-import { blocked } from "../world/collision.js";
+import { footBlocked } from "../world/collision.js";
 import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
 import { panel } from "../platform/canvas.js";
@@ -13,7 +13,7 @@ function exitCar() {
       const a = game.ride.a + Math.PI / 2 + (i * Math.PI) / 4,
         x = game.ride.x + Math.cos(a) * r,
         y = game.ride.y + Math.sin(a) * r;
-      if (!blocked(x, y, 2.6)) {
+      if (!footBlocked(x, y, 2.6)) {
         game.ride.speed = 0;
         game.ride.slideX = 0;
         game.ride.slideY = 0;

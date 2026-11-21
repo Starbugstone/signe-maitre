@@ -2,6 +2,8 @@ import { g } from "../platform/canvas.js";
 import { artwork, clamp, game } from "../core/state.js";
 import { TAU } from "../world/town.js";
 
+import { sedanHalfWidth, sedanHalfLength } from "../world/vehicle-shape.js";
+
 function shadow(x, y, w, h) {
   g.fillStyle = "#15112580";
   g.beginPath();
@@ -84,12 +86,12 @@ function renderMotor(v) {
     c.fill();
   }
   // The bumper is narrower than the fenders. Wrapped corner lamps read in side view too.
-  const b = 4.8,
+  const b = sedanHalfWidth,
     r = 3.85,
     z = 4.2,
     top = 7.3,
     endWidth = 4.05,
-    end = 10.95;
+    end = sedanHalfLength;
   for (const side of [-1, 1]) {
     if (side * co < -0.001) continue;
     face(0, [

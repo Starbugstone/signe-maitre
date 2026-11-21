@@ -7,13 +7,13 @@ import { $, g, hud, label, rect } from "../platform/canvas.js";
 import { H, TAU, W, canalBottom, canalTop, jobs, roadsX, roadsY } from "../world/town.js";
 import { directions } from "../world/navigation.js";
 import { goal } from "../game/cases.js";
-import { streetLayer } from "../world/streets.js";
+import { drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
 import { drawAmbulance, drawCrew } from "../art/emergency.js";
 import { drawCar } from "../art/vehicles.js";
 import { dude } from "../art/pedestrians.js";
-import { drawRail } from "../world/rail.js";
+import { visibleRails } from "../world/rail.js";
 import { routeHUD } from "./guidance.js";
 import { nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
@@ -151,14 +151,19 @@ function draw() {
     }
   }
   if (!game.ride) actors.push({ o: p });
+  for (const prop of visibleStreetProps(ox, oy)) actors.push({ o: prop, prop: true });
+  const rails = visibleRails(ox, oy);
+  for (const rail of rails) actors.push({ o: rail, rail: true });
   actors.sort((a, b) => a.o.y - b.o.y);
   for (const a of actors) {
-    if (a.medical) drawAmbulance(a.o);
+    if (a.prop) drawStreetProp(a.o);
+    else if (a.rail) a.o.draw(false);
+    else if (a.medical) drawAmbulance(a.o);
     else if (a.crew) drawCrew(a.o, ambulance);
     else if (a.car) drawCar(a.o);
     else dude(a.o, a.o === p);
   }
-  drawRail(ox, oy);
+  for (const rail of rails) rail.draw(true);
   for (const j of jobs)
     if (!done.has(j.id) && visible(j)) pin(j, j.x, j.y - 15 + Math.sin(game.time * 3) * 0.5);
   if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {

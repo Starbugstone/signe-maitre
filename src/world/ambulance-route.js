@@ -1,5 +1,5 @@
 import { town, W, H, X, Y } from "./town.js";
-import { blocked } from "./collision.js";
+import { blocked, vehicleBlocked } from "./collision.js";
 import { outsideView } from "./viewport.js";
 
 export function walkableBetween(a, b) {
@@ -50,7 +50,8 @@ export function planApproach(patient, view, occupied) {
           let clear = true;
           for (let k = 0; k <= steps; k++) {
             const q = point(start + ((end - start) * k) / steps, centre + curb * inset);
-            if (blocked(q.x, q.y, 6) || occupied({ ...q, a, halfLength: 13.3, halfWidth: 5.45 })) {
+            const van = { ...q, a, halfLength: 13.3, halfWidth: 5.45 };
+            if (vehicleBlocked(van) || occupied(van)) {
               clear = false;
               break;
             }

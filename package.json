@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "test:scenery": "node scripts/scenery/check.mjs && node .agents/skills/verify-signe-maitre/scripts/pf.mjs run street-scenery --build probe --mute"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

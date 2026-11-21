@@ -1,0 +1,27 @@
+name: Scenery
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  street-collisions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium-headless-shell
+      - run: node .agents/skills/verify-signe-maitre/scripts/pf.mjs doctor
+      - run: npm test
+      - run: npm run test:scenery
+      - run: node .agents/skills/verify-signe-maitre/scripts/pf.mjs run street-scenery --build probe --device phone --lang fr --mute
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: scenery-failure
+          path: .verify/evidence/
+          include-hidden-files: true
+          if-no-files-found: ignore

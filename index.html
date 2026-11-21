@@ -513,10 +513,10 @@ canvas {
       phase: 420 + i * 347
     })),
     addresses: [
-      { id: "office", col: 2, row: 1, dx: 63, dy: -21, symbol: "\xC9", color: "#ffc857" },
+      { id: "office", col: 2, row: 1, dx: 57, dy: -21, symbol: "\xC9", color: "#ffc857" },
       { id: "repo", col: 1, row: 0, dx: 69, dy: -20, symbol: "R", color: "#ff79ae" },
       { id: "noise", col: 4, row: 3, dx: -57, dy: -18, symbol: "C", color: "#64ebd0" },
-      { id: "flat", col: 0, row: 4, dx: 77, dy: -22, symbol: "S", color: "#ffa851" },
+      { id: "flat", col: 0, row: 4, dx: 74, dy: -22, symbol: "S", color: "#ffa851" },
       { id: "auction", col: 3, row: 4, dx: 72, dy: -20, symbol: "A", color: "#c2a0ff" }
     ],
     interiors: [
@@ -656,13 +656,339 @@ canvas {
     if (el.textContent !== value) el.textContent = value;
   }
 
+  // src/world/street-props.js
+  var kerbX = 17.6;
+  var kerbY = 16.8;
+  var plateRegistration = {
+    market: [
+      [667, 749, 841],
+      [429, 500, 559]
+    ],
+    garage: [
+      [668, 750, 838],
+      [430, 503, 575]
+    ],
+    docks: [
+      [667, 751, 842],
+      [429, 499, 573]
+    ],
+    square: [
+      [669, 749, 840],
+      [429, 499, 572]
+    ]
+  };
+  var fixtures = {
+    garage: {
+      lamps: [[383, 96, 222], [516, 138, 222], [382, 350, 428], [521, 349, 428], [372, 489, 575], [528, 489, 575]],
+      bollards: [[246, 20, 28, 62, 144, 310, 364, 533, 575, 727, 814, 880]]
+    },
+    market: {
+      lamps: [[379, 29, 91], [521, 29, 91], [324, 199, 249], [571, 208, 249], [370, 354, 423], [527, 354, 423]],
+      bollards: [[249, 18, 15, 85, 271, 367, 533, 640, 710, 877], [374, 24, 345, 555], [524, 24, 379], [580, 25, 346, 520]]
+    },
+    docks: {
+      lamps: [[384, 21, 90], [516, 21, 90], [375, 152, 230], [525, 152, 230], [375, 342, 420], [525, 342, 420]],
+      bollards: [[250, 19, 92, 165, 335, 566, 646, 724, 861], [370, 20, 349, 555], [584, 22, 370, 531]]
+    },
+    square: {
+      lamps: [[377, 81, 148], [524, 81, 148], [361, 169, 239], [540, 169, 239], [359, 348, 416], [540, 348, 416], [361, 497, 572], [541, 497, 572]],
+      bollards: [
+        [251, 14, 58, 100, 144, 189, 290, 332, 570, 604, 652, 692, 750, 801, 844, 880],
+        [240, 15, 382, 518],
+        [214, 17, 386, 513],
+        [357, 14, 327, 569],
+        [392, 19, 384, 516],
+        [425, 18, 384, 516],
+        [514, 18, 385, 515],
+        [576, 18, 385, 515]
+      ]
+    }
+  };
+  function register(pixel, source, target2) {
+    const end = source.findIndex((stop, i2) => i2 > 0 && pixel <= stop);
+    const i = end < 0 ? source.length - 2 : end - 1;
+    return target2[i] + (target2[i + 1] - target2[i]) * (pixel - source[i]) / (source[i + 1] - source[i]);
+  }
+  function makeProps(key, mapX, mapY, lamps, bollards) {
+    function prop(x, top, bottom, widths) {
+      const height = bottom - top;
+      const right = widths.map(([f, w]) => [mapX(x + w), mapY(top + height * f)]);
+      const left = widths.map(([f, w]) => [mapX(x - w), mapY(top + height * f)]).reverse();
+      return {
+        key,
+        x: mapX(x),
+        y: mapY(bottom),
+        radius: (right.at(-1)[0] - left[0][0]) / 2,
+        outline: [...right, ...left]
+      };
+    }
+    return [
+      ...lamps.map(
+        ([x, top, foot2]) => prop(x, top, foot2, [
+          [0, 0.6],
+          [0.045, 2],
+          [0.08, 3],
+          [0.12, 6],
+          [0.16, 5],
+          [0.26, 3.8],
+          [0.3, 1.8],
+          [0.34, 1.1],
+          [0.75, 1.5],
+          [0.85, 2.5],
+          [0.96, 3.2],
+          [1, 4.1]
+        ])
+      ),
+      ...bollards.flatMap(
+        ([foot2, h, ...xs]) => xs.map(
+          (x) => prop(x, foot2 - h, foot2, [
+            [0, 0.7],
+            [0.08, 1.6],
+            [0.22, 1.8],
+            [0.32, 1],
+            [0.78, 1.2],
+            [0.9, 1.8],
+            [1, 2.3]
+          ])
+        )
+      )
+    ];
+  }
+  var props = {};
+  for (const [key, { lamps, bollards }] of Object.entries(fixtures)) {
+    const [xs, ys] = plateRegistration[key];
+    props[key] = makeProps(
+      key,
+      (x) => register(x / 0.6, [0, ...xs, 1500], [-CELL_W / 2, -kerbX, 0, kerbX, CELL_W / 2]),
+      (y) => register(y / 0.6, [0, ...ys, 1e3], [-CELL_H / 2, -kerbY, 0, kerbY, CELL_H / 2]),
+      lamps,
+      bollards
+    );
+  }
+  var canalHeight = CELL_H - 31 + 5;
+  props.canal = makeProps(
+    "canal",
+    (x) => register(x * 1536 / 900, [0, 700, 769, 834, 1536], [-145, -13, 0, 13, 145]),
+    (y) => 16 + register(
+      y * 1536 / 900,
+      [10, 65, 389, 456, 467],
+      [0, 27, canalHeight - 28, canalHeight - 4, canalHeight]
+    ),
+    [
+      [368, 172, 232],
+      [532, 172, 232],
+      [44, 206, 260],
+      [249, 206, 260],
+      [653, 206, 260],
+      [854, 206, 260]
+    ],
+    [
+      [251, 15, 291, 608, 816],
+      [260, 12, 64, 204, 888]
+    ]
+  );
+  var byLayout = /* @__PURE__ */ new WeakMap();
+  function streetProps(layout, col, row) {
+    if (!byLayout.has(layout)) byLayout.set(layout, /* @__PURE__ */ new Map());
+    const cache = byLayout.get(layout), id = row * layout.cols + col;
+    if (cache.has(id)) return cache.get(id);
+    const key = layout.blocks[row][col], result = [];
+    for (const item of props[key]) {
+      if (row === layout.canalRow && item.y > 0) continue;
+      if (row === layout.canalRow + 1 && item.y < -11) continue;
+      result.push({ x: X(col) + item.x, y: Y(row) + item.y, item });
+    }
+    if (row === layout.canalRow || row === layout.canalRow + 1)
+      for (const item of props.canal) {
+        const y = Y(layout.canalRow) + item.y;
+        if (layout.cellAt(X(col), y).row === row) result.push({ x: X(col) + item.x, y, item });
+      }
+    cache.set(id, result);
+    return result;
+  }
+
+  // src/world/viaduct.js
+  var railScaleY = (CELL_H / 2 - kerbY) / 429;
+  var railTop = 161;
+  var deckBottom = 236;
+  var foot = 378;
+  var bayWidth = CELL_W / 5;
+  var marketPiers = [88, 406, 602, 898, 1259, 1469];
+  var pierDepth = -CELL_H / 2 + foot * railScaleY;
+  function marketColumnX(pixel) {
+    const [left, centre, right] = plateRegistration.market[0];
+    if (pixel <= left) return -CELL_W / 2 + pixel * (CELL_W / 2 - kerbX) / left;
+    if (pixel <= centre) return (pixel - centre) * kerbX / (centre - left);
+    if (pixel <= right) return (pixel - centre) * kerbX / (right - centre);
+    return kerbX + (pixel - right) * (CELL_W / 2 - kerbX) / (1500 - right);
+  }
+  var marketBases = marketPiers.map((x) => [marketColumnX(x - 21), marketColumnX(x + 21)]);
+  var spanBases = Array.from({ length: 6 }, (_, i) => {
+    const x = (i - 2.5) * bayWidth;
+    return [Math.max(-CELL_W / 2, x - 20 * bayWidth / 296), Math.min(CELL_W / 2, x + 22 * bayWidth / 296)];
+  });
+  function joinedSection(westExtension, eastExtension) {
+    return {
+      westExtension,
+      eastExtension,
+      bases: spanBases.slice(westExtension ? 1 : 0, eastExtension ? -1 : void 0)
+    };
+  }
+  var lastMarketPier = CELL_W / 2 - marketColumnX(marketPiers.at(-1));
+  var firstMarketPier = CELL_W / 2 + marketColumnX(marketPiers[0]);
+  var sections = [
+    [joinedSection(0, 0), joinedSection(0, firstMarketPier)],
+    [joinedSection(lastMarketPier, 0), joinedSection(lastMarketPier, firstMarketPier)]
+  ];
+  var marketSection = { bases: marketBases };
+  function viaductSection(layout, row, col) {
+    const blocks = layout.blocks[row];
+    if (blocks[col] === "market") return marketSection;
+    return sections[Number(blocks[col - 1] === "market")][Number(blocks[col + 1] === "market")];
+  }
+
+  // src/world/vehicle-shape.js
+  var sedanHalfLength = 10.95;
+  var sedanHalfWidth = 4.8;
+  function carContact(a, b) {
+    const dx = a.x - b.x, dy = a.y - b.y;
+    const al = a.halfLength ?? 9.3, bl = b.halfLength ?? 9.3, aw = a.halfWidth ?? 4.45, bw = b.halfWidth ?? 4.45;
+    const reach = Math.hypot(al, aw) + Math.hypot(bl, bw);
+    if (Math.abs(dx) > reach || Math.abs(dy) > reach) return null;
+    const ax = Math.cos(a.a), ay = Math.sin(a.a), bx = Math.cos(b.a), by = Math.sin(b.a);
+    let depth = Infinity, nx = 0, ny = 0;
+    for (const [x, y] of [
+      [ax, ay],
+      [-ay, ax],
+      [bx, by],
+      [-by, bx]
+    ]) {
+      const span = al * Math.abs(ax * x + ay * y) + bl * Math.abs(bx * x + by * y) + aw * Math.abs(ax * y - ay * x) + bw * Math.abs(bx * y - by * x);
+      const side = dx * x + dy * y, overlap = span - Math.abs(side);
+      if (overlap <= 0) return null;
+      if (overlap < depth) {
+        depth = overlap;
+        nx = (side >= 0 ? 1 : -1) * x;
+        ny = (side >= 0 ? 1 : -1) * y;
+      }
+    }
+    return { depth, nx, ny };
+  }
+
+  // src/world/collision.js
+  var streetHalfWidth = 25;
+  var northPavement = 28;
+  var southPavement = 17;
+  var pierThickness = 3.5;
+  function blockedIn(layout, x, y, r) {
+    const W2 = layout.width, H2 = layout.height, canalTop2 = Y(layout.canalRow) + 16, canalBottom2 = Y(layout.canalRow + 1) - 15;
+    if (x < r || y < r || x > W2 - r || y > H2 - r) return true;
+    const { col, row } = layout.cellAt(x, y);
+    const dx = Math.abs(x - X(col)), dy = y - Y(row);
+    for (const post of streetProps(layout, col, row)) {
+      const radius = post.item.radius;
+      if (Math.abs(x - post.x) < r + radius && Math.hypot(x - post.x, y - post.y + radius / 2) < r + radius)
+        return true;
+    }
+    if (y > canalTop2 && y < canalBottom2) {
+      const f = (y - canalTop2) / (canalBottom2 - canalTop2);
+      if (dx < 22 - r) return false;
+      return f > 0.13 - r / 200 && f < 0.86 + r / 200;
+    }
+    const fromFoot = dy - pierDepth;
+    if (layout.lines.has(row) && fromFoot < r && fromFoot > -pierThickness - r) {
+      const { col: first } = layout.cellAt(x - r, y), { col: last } = layout.cellAt(x + r, y);
+      for (let i = first; i <= last; i++)
+        for (const [left, right] of viaductSection(layout, row, i).bases)
+          if (x + r > X(i) + left && x - r < X(i) + right) return true;
+    }
+    const seamX = Math.abs(dx - CELL_W / 2), seamY = Math.abs(Math.abs(dy) - CELL_H / 2);
+    if (r < 4 && (seamX < 2.9 || seamY < 2.9)) return false;
+    return dx > streetHalfWidth - r && !(dy >= -northPavement + r && dy <= southPavement - r);
+  }
+  var obstacles = /* @__PURE__ */ new Map();
+  function cellObstacles(col, row) {
+    const id = row * town.cols + col;
+    if (obstacles.has(id)) return obstacles.get(id);
+    const solids = [], cx = X(col), cy = Y(row);
+    function add(left, top, right, bottom) {
+      solids.push({
+        x: cx + (left + right) / 2,
+        y: cy + (top + bottom) / 2,
+        a: 0,
+        halfLength: (right - left) / 2,
+        halfWidth: (bottom - top) / 2
+      });
+    }
+    for (const side of [-1, 1]) {
+      const outer = side * CELL_W / 2, inner = side * streetHalfWidth;
+      const left = Math.min(inner, outer), right = Math.max(inner, outer);
+      if (row !== town.canalRow + 1) add(left, -CELL_H / 2, right, -northPavement);
+      if (row !== town.canalRow) add(left, southPavement, right, CELL_H / 2);
+      if (row === town.canalRow || row === town.canalRow + 1) {
+        const top = Y(town.canalRow) + 16 - cy, height = CELL_H - 31;
+        add(
+          Math.min(outer, side * 22),
+          Math.max(-CELL_H / 2, top + height * 0.13),
+          Math.max(outer, side * 22),
+          Math.min(CELL_H / 2, top + height * 0.86)
+        );
+      }
+    }
+    if (town.lines.has(row))
+      for (const [left, right] of viaductSection(town, row, col).bases)
+        add(left, pierDepth - pierThickness, right, pierDepth);
+    for (const post of streetProps(town, col, row)) {
+      const r = post.item.radius;
+      solids.push({ x: post.x, y: post.y - r / 2, a: 0, halfLength: r, halfWidth: r / 2 });
+    }
+    obstacles.set(id, solids);
+    return solids;
+  }
+  function vehicleBlocked(vehicle, x = vehicle.x, y = vehicle.y, a = vehicle.a, leaving = false) {
+    const halfLength = vehicle.halfLength ?? sedanHalfLength, halfWidth = vehicle.halfWidth ?? sedanHalfWidth;
+    const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+    const rx = cos * halfLength + sin * halfWidth, ry = sin * halfLength + cos * halfWidth;
+    if (!leaving && (x < rx || y < ry || x > town.width - rx || y > town.height - ry)) return true;
+    const first = town.cellAt(x - rx, y - ry), last = town.cellAt(x + rx, y + ry);
+    const pose = { x, y, a, halfLength, halfWidth };
+    for (let row = first.row; row <= last.row; row++)
+      for (let col = first.col; col <= last.col; col++)
+        for (const solid of cellObstacles(col, row))
+          if (Math.abs(solid.x - x) < rx + solid.halfLength && Math.abs(solid.y - y) < ry + solid.halfWidth && carContact(pose, solid))
+            return true;
+    return false;
+  }
+  var blocked = (x, y, r) => blockedIn(town, x, y, r);
+  function distanceToBody(v, x, y) {
+    const dx = x - v.x, dy = y - v.y, c = Math.cos(v.a), s = Math.sin(v.a);
+    const forward = Math.abs(dx * c + dy * s) - (v.halfLength ?? sedanHalfLength), side = Math.abs(dy * c - dx * s) - (v.halfWidth ?? sedanHalfWidth);
+    return Math.hypot(Math.max(0, forward), Math.max(0, side)) + Math.min(0, Math.max(forward, side));
+  }
+  function footBlocked(x, y, r, from) {
+    if (blocked(x, y, r)) return true;
+    return cars.some((v) => {
+      if (Math.abs(v.x - x) > 22 || Math.abs(v.y - y) > 22) return false;
+      const gap = distanceToBody(v, x, y);
+      return gap < r && (!from || gap <= distanceToBody(v, from.x, from.y));
+    });
+  }
+  function move(o, dx, dy, r) {
+    let bump = false;
+    if (!footBlocked(o.x + dx, o.y, r, o)) o.x += dx;
+    else bump = true;
+    if (!footBlocked(o.x, o.y + dy, r, o)) o.y += dy;
+    else bump = true;
+    return bump;
+  }
+
   // src/world/population.js
   function car(x, y, a, tint, model, route) {
     const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
     cars.push(v);
     return v;
   }
-  var sedan = car(p.x + 11, Y(1) - 16, 0, "cream", "\xC9tude 2000");
+  var sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "\xC9tude 2000");
   var target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
   var colors = ["blue", "olive", "rose", "silver"];
   var civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
@@ -690,6 +1016,20 @@ canvas {
     return looks[Math.floor(random() * looks.length)];
   }
   function person(x, y, kind = "local", axis2 = "x", random = rand) {
+    if (footBlocked(x, y, 3)) {
+      let clear;
+      for (let r = 2; r <= 32 && !clear; r += 2)
+        clear = [
+          [0, r],
+          [r, 0],
+          [-r, 0],
+          [0, -r]
+        ].find(([dx, dy]) => !footBlocked(x + dx, y + dy, 3));
+      if (clear) {
+        x += clear[0];
+        y += clear[1];
+      }
+    }
     const n = {
       x,
       y,
@@ -717,9 +1057,19 @@ canvas {
       seed2 = Math.imul(seed2, 1664525) + 1013904223 >>> 0;
       return seed2 / 4294967296;
     };
+    if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1)) {
+      const kerbX2 = X(col) + 112, y = Y(row) - 16;
+      for (let offset = 0; offset < CELL_W / 2; offset++) {
+        const x = [kerbX2 + offset, kerbX2 - offset].find((x2) => !vehicleBlocked({ x: x2, y, a: Math.PI }));
+        if (x !== void 0) {
+          car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
+          break;
+        }
+      }
+    }
     const horizontal = person(
       X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43),
-      Y(row) - 20,
+      Y(row) - 24,
       col % 4 === 0 ? "tough" : "local",
       "x",
       random
@@ -732,8 +1082,6 @@ canvas {
       random
     );
     horizontal.homeCell = vertical.homeCell = key;
-    if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1))
-      car(X(col) + 112, Y(row) - 16, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
     if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
     const left = X(col) + 6, right = X(col + 1) - 6, top = Y(row) + 6, bottom = Y(row + 1) - 6;
     const points = [
@@ -870,7 +1218,7 @@ canvas {
       c.closePath();
       c.fill();
     }
-    const b = 4.8, r = 3.85, z = 4.2, top = 7.3, endWidth = 4.05, end = 10.95;
+    const b = sedanHalfWidth, r = 3.85, z = 4.2, top = 7.3, endWidth = 4.05, end = sedanHalfLength;
     for (const side2 of [-1, 1]) {
       if (side2 * co < -1e-3) continue;
       face(0, [
@@ -1452,32 +1800,6 @@ canvas {
     o.stop(game.audio.currentTime + d);
   }
 
-  // src/world/collision.js
-  function blockedIn(layout, x, y, r) {
-    const W2 = layout.width, H2 = layout.height, canalTop2 = Y(layout.canalRow) + 16, canalBottom2 = Y(layout.canalRow + 1) - 15;
-    if (x < r || y < r || x > W2 - r || y > H2 - r) return true;
-    const { col, row } = layout.cellAt(x, y);
-    const dx = Math.abs(x - X(col)), dy = y - Y(row);
-    if (y > canalTop2 && y < canalBottom2) {
-      const f = (y - canalTop2) / (canalBottom2 - canalTop2);
-      if (dx < 22 - r) return false;
-      return f > 0.13 - r / 200 && f < 0.86 + r / 200;
-    }
-    const seamX = Math.abs(dx - CELL_W / 2), seamY = Math.abs(Math.abs(dy) - CELL_H / 2);
-    if (r < 4 && (seamX < 2.9 || seamY < 2.9)) return false;
-    const foot2 = 28;
-    return dx > 25 - r && !(dy >= -foot2 + r && dy <= 17 - r);
-  }
-  var blocked = (x, y, r) => blockedIn(town, x, y, r);
-  function move(o, dx, dy, r) {
-    let bump = false;
-    if (!blocked(o.x + dx, o.y, r)) o.x += dx;
-    else bump = true;
-    if (!blocked(o.x, o.y + dy, r)) o.y += dy;
-    else bump = true;
-    return bump;
-  }
-
   // src/world/viewport.js
   function viewport(cx, cy, width, height, worldWidth, worldHeight) {
     const left = Math.min(Math.max(cx - width / 2, 0), Math.max(0, worldWidth - width));
@@ -1528,7 +1850,8 @@ canvas {
             let clear = true;
             for (let k = 0; k <= steps; k++) {
               const q = point(start + (end - start) * k / steps, centre + curb * inset);
-              if (blocked(q.x, q.y, 6) || occupied({ ...q, a, halfLength: 13.3, halfWidth: 5.45 })) {
+              const van = { ...q, a, halfLength: 13.3, halfWidth: 5.45 };
+              if (vehicleBlocked(van) || occupied(van)) {
                 clear = false;
                 break;
               }
@@ -1914,7 +2237,7 @@ canvas {
     for (const r of [19, 27, 37])
       for (let i = 0; i < 8; i++) {
         const a = game.ride.a + Math.PI / 2 + i * Math.PI / 4, x = game.ride.x + Math.cos(a) * r, y = game.ride.y + Math.sin(a) * r;
-        if (!blocked(x, y, 2.6)) {
+        if (!footBlocked(x, y, 2.6)) {
           game.ride.speed = 0;
           game.ride.slideX = 0;
           game.ride.slideY = 0;
@@ -2036,30 +2359,6 @@ canvas {
 
   // src/game/driving.js
   var quarterTurn = Math.PI / 2;
-  function carContact(a, b) {
-    const dx = a.x - b.x, dy = a.y - b.y;
-    const al = a.halfLength ?? 9.3, bl = b.halfLength ?? 9.3, aw = a.halfWidth ?? 4.45, bw = b.halfWidth ?? 4.45;
-    const reach = Math.hypot(al, aw) + Math.hypot(bl, bw);
-    if (Math.abs(dx) > reach || Math.abs(dy) > reach) return null;
-    const ax = Math.cos(a.a), ay = Math.sin(a.a), bx = Math.cos(b.a), by = Math.sin(b.a);
-    let depth = Infinity, nx = 0, ny = 0;
-    for (const [x, y] of [
-      [ax, ay],
-      [-ay, ax],
-      [bx, by],
-      [-by, bx]
-    ]) {
-      const span = al * Math.abs(ax * x + ay * y) + bl * Math.abs(bx * x + by * y) + aw * Math.abs(ax * y - ay * x) + bw * Math.abs(bx * y - by * x);
-      const side = dx * x + dy * y, overlap = span - Math.abs(side);
-      if (overlap <= 0) return null;
-      if (overlap < depth) {
-        depth = overlap;
-        nx = (side >= 0 ? 1 : -1) * x;
-        ny = (side >= 0 ? 1 : -1) * y;
-      }
-    }
-    return { depth, nx, ny };
-  }
   function closingSpeed(a, b, normal) {
     return Math.max(
       0,
@@ -2072,7 +2371,7 @@ canvas {
       const hit = carContact(v, other);
       if (!hit) continue;
       const x = v.x + hit.nx * (hit.depth + 0.03), y = v.y + hit.ny * (hit.depth + 0.03);
-      if (!blocked(x, y, 6)) {
+      if (!vehicleBlocked(v, x, y)) {
         v.x = x;
         v.y = y;
       } else {
@@ -2117,6 +2416,7 @@ canvas {
         v.a = Math.abs(error) < 3e-3 ? cardinal : v.a + error * (1 - Math.exp(-dt * 12 * rolling));
     }
     v.a = angleDifference(v.a, 0);
+    if (v.a !== oldAngle && vehicleBlocked(v)) v.a = oldAngle;
     const vx = Math.cos(v.a) * v.speed, vy = Math.sin(v.a) * v.speed;
     v.slipRecovery = brake ? 0.25 : Math.max(0, (v.slipRecovery || 0) - dt);
     const grip = v.slipRecovery > 0 ? 1 - Math.exp(-dt * (3.2 + 23 * (1 - v.slipRecovery / 0.25))) : 1;
@@ -2124,8 +2424,11 @@ canvas {
     v.slideY += (vy - v.slideY) * grip;
     const oldX = v.x, oldY = v.y;
     const dx = v.slideX * dt, dy = v.slideY * dt;
-    if (move(v, dx, dy, 6)) {
-      const hitX = Math.abs(v.x - oldX - dx) > 1e-4, hitY = Math.abs(v.y - oldY - dy) > 1e-4;
+    const hitX = dx !== 0 && vehicleBlocked(v, v.x + dx, v.y);
+    if (!hitX) v.x += dx;
+    const hitY = dy !== 0 && vehicleBlocked(v, v.x, v.y + dy);
+    if (!hitY) v.y += dy;
+    if (hitX || hitY) {
       const blockedSpeed = Math.hypot(hitX ? v.slideX : 0, hitY ? v.slideY : 0);
       const tangent = hitX ? Math.abs(v.slideY) : Math.abs(v.slideX);
       if (hitX && hitY || blockedSpeed > tangent * 1.25) {
@@ -2136,7 +2439,8 @@ canvas {
       } else {
         recordImpact(v, blockedSpeed, null);
         const tangentHeading = hitX ? Math.sign(Math.sin(v.a)) * quarterTurn : Math.cos(v.a) >= 0 ? 0 : Math.PI;
-        v.a += angleDifference(tangentHeading, v.a) * (1 - Math.exp(-dt * 15));
+        const heading = v.a + angleDifference(tangentHeading, v.a) * (1 - Math.exp(-dt * 15));
+        if (!vehicleBlocked(v, v.x, v.y, heading)) v.a = heading;
         v.speed *= Math.exp(-dt * 1.8);
         if (hitX) v.slideX = 0;
         if (hitY) v.slideY = 0;
@@ -2369,8 +2673,7 @@ canvas {
     v.speed = speed;
     v.slideX = speed * v.dx;
     v.slideY = speed * v.dy;
-    const leavesTown = v.state === "leaving" && (next.x < 6 || next.x > W - 6 || next.y < 6 || next.y > H - 6);
-    if (!leavesTown && blocked(next.x, next.y, 6)) {
+    if (vehicleBlocked(next, next.x, next.y, next.a, v.state === "leaving")) {
       recordImpact(v, Math.abs(speed), null);
       stopMotion(v);
       return false;
@@ -3585,7 +3888,7 @@ canvas {
       ]
     ]
   };
-  var register = [
+  var register2 = [
     [
       [1, 0],
       [2, 0],
@@ -3992,7 +4295,7 @@ canvas {
       );
       const arm = armhole(row);
       paste(coat, null, arm);
-      const cloth = cell(artwork.slapping, 0, row, ...register[row][0]), patch = inside(noHand[row]);
+      const cloth = cell(artwork.slapping, 0, row, ...register2[row][0]), patch = inside(noHand[row]);
       for (let i = 0; i < size; i++) patch[i] &= arm[i];
       paste(coat, cloth, patch);
       if (mend[row]) {
@@ -4141,7 +4444,7 @@ canvas {
           hit.restore();
         } else {
           if (frame < 3)
-            paste(pose, cell(artwork.slapping, frame, row, ...register[row][frame]), inside(freeSide[row]));
+            paste(pose, cell(artwork.slapping, frame, row, ...register2[row][frame]), inside(freeSide[row]));
           if (row === 3 && frame < 3)
             paste(
               pose,
@@ -4227,8 +4530,6 @@ canvas {
 
   // src/world/streets.js
   var plateScale = 5;
-  var kerbX = 17.6;
-  var kerbY = 16.8;
   var plates = {};
   var northApproaches = {};
   var joins = /* @__PURE__ */ new Map();
@@ -4237,24 +4538,6 @@ canvas {
   var slate;
   var roadPaint;
   var edgeStone;
-  var plateRegistration = {
-    market: [
-      [667, 749, 841],
-      [429, 500, 559]
-    ],
-    garage: [
-      [668, 750, 838],
-      [430, 503, 575]
-    ],
-    docks: [
-      [667, 751, 842],
-      [429, 499, 573]
-    ],
-    square: [
-      [669, 749, 840],
-      [429, 499, 572]
-    ]
-  };
   function paintCanvas(w, h) {
     const c = document.createElement("canvas");
     c.width = Math.round(w * plateScale);
@@ -4460,6 +4743,23 @@ canvas {
       for (let dy = eave + 11; dy < foot2; dy += 17) rect(ctx, drain - 0.24, y + dy, 0.7, 0.37, "#c28d71");
     }
   }
+  function drawAlleyMouth(ctx, x, y, left, right) {
+    const key = "alley-mouth:" + left + right;
+    let mouth = joins.get(key);
+    if (!mouth) {
+      mouth = getJoin(key, plates[left], plates[right], true, CELL_H / 2 - 27, 11, 6);
+      const paint = mouth.getContext("2d");
+      const fade = paint.createLinearGradient(0, 0, 0, mouth.height);
+      fade.addColorStop(0, "transparent");
+      fade.addColorStop(0.7, "black");
+      paint.save();
+      paint.globalCompositeOperation = "destination-in";
+      paint.fillStyle = fade;
+      paint.fillRect(0, 0, mouth.width, mouth.height);
+      paint.restore();
+    }
+    ctx.drawImage(mouth, x - 6, y - 27, 12, 11);
+  }
   function backLane(ctx, x, y) {
     for (const side of [-1, 1]) {
       const a = x + side * (kerbX + 4.6), b = x + side * CELL_W / 2;
@@ -4522,6 +4822,7 @@ canvas {
         const road = getJoin("road:" + l + r, plates[l], plates[r], true, CELL_H / 2 - 21, 42, 14);
         ctx.drawImage(road, x - 14, y - 21, 28, 42);
         sideAlley(ctx, x, y, l, r, false);
+        drawAlleyMouth(ctx, x, y, l, r);
         sideAlley(ctx, x, y, l, r, true);
       }
     for (let j = Math.max(1, firstRow); j <= lastRow; j++)
@@ -4646,6 +4947,50 @@ canvas {
       ctx.drawImage(seam, 0, 1 * plateScale, seam.width, (ht - 4) * plateScale, x - 10, top + 1, 20, ht - 4);
     }
   }
+  var propSprites = /* @__PURE__ */ new WeakMap();
+  function drawStreetProp({ x, y, item }) {
+    let sprite = propSprites.get(item);
+    if (!sprite) {
+      const left = Math.floor(Math.min(...item.outline.map((p2) => p2[0])) * plateScale) / plateScale, top = Math.floor(item.outline[0][1] * plateScale) / plateScale;
+      const w = Math.ceil((2 * (item.x - left) + 0.4) * plateScale), h = Math.ceil((item.y - top) * plateScale);
+      const image = document.createElement("canvas");
+      image.width = w;
+      image.height = h;
+      const ctx = image.getContext("2d");
+      ctx.setTransform(plateScale, 0, 0, plateScale, -left * plateScale, -top * plateScale);
+      ctx.beginPath();
+      for (const [px, py] of item.outline) ctx.lineTo(px, py);
+      ctx.closePath();
+      ctx.clip();
+      const plate = plates[item.key];
+      ctx.drawImage(
+        plate,
+        -CELL_W / 2,
+        item.key === "canal" ? 16 : -CELL_H / 2,
+        plate.width / plateScale,
+        plate.height / plateScale
+      );
+      sprite = { image, dx: left - item.x, dy: top - item.y };
+      propSprites.set(item, sprite);
+    }
+    g.drawImage(
+      sprite.image,
+      x + sprite.dx,
+      y + sprite.dy,
+      sprite.image.width / plateScale,
+      sprite.image.height / plateScale
+    );
+  }
+  function visibleStreetProps(ox, oy) {
+    const area = town.visibleCells(ox, oy, game.vw, game.vh + 52);
+    const result = [];
+    for (let row = area.firstRow; row <= area.lastRow; row++)
+      for (let col = area.firstCol; col <= area.lastCol; col++)
+        for (const prop of streetProps(town, col, row))
+          if (prop.x >= ox - 3 && prop.x <= ox + game.vw + 3 && prop.y >= oy && prop.y <= oy + game.vh + 52)
+            result.push(prop);
+    return result;
+  }
   var streets = document.createElement("canvas");
   var streetContext = streets.getContext("2d", { alpha: false });
   var cachedX = Infinity;
@@ -4734,9 +5079,6 @@ canvas {
   // src/world/rail.js
   var leftPier = 602;
   var rightPier = 898;
-  var railTop = 161;
-  var foot = 378;
-  var verticalScale = (CELL_H / 2 - kerbY) / 429;
   var bay;
   function viaductBay() {
     if (bay) return bay;
@@ -4775,6 +5117,14 @@ canvas {
     ctx.closePath();
     ctx.clip();
     ctx.drawImage(artwork.market, 0, 0);
+    clearTrussOpenings(
+      ctx,
+      (x) => x,
+      (y) => y
+    );
+    return bay;
+  }
+  function clearTrussOpenings(ctx, sourceX, sourceY) {
     ctx.globalCompositeOperation = "destination-out";
     for (let x = 666; x < 830; x += 24) {
       for (const tri of [
@@ -4790,48 +5140,119 @@ canvas {
         ]
       ]) {
         ctx.beginPath();
-        for (const [a, b] of tri) ctx.lineTo(a, b);
+        for (const [a, b] of tri) ctx.lineTo(sourceX(a), sourceY(b));
         ctx.closePath();
         ctx.fill();
       }
     }
-    return bay;
   }
-  function drawRail(ox, oy) {
-    const { firstRow, lastRow, firstCol, lastCol } = town.visibleCells(ox, oy, game.vw, game.vh, CELL_W / 2);
-    for (let row = firstRow; row <= lastRow; row++) {
-      const line = town.lines.get(row);
-      if (!line) continue;
-      const y = Y(row) - CELL_H / 2 + railTop * verticalScale, height = (foot - railTop) * verticalScale;
-      if (y + height < oy || y - 18 > oy + game.vh) continue;
-      const bayWidth = CELL_W / 5;
-      for (let col = firstCol; col <= lastCol; col++) {
-        const x = X(col) - CELL_W / 2;
-        if (town.blocks[row][col] === "market") {
-          const depth = 72 * verticalScale;
-          g.drawImage(
-            plates.market,
-            0,
-            railTop * verticalScale * plateScale,
-            plates.market.width,
-            depth * plateScale,
-            x,
-            y,
-            CELL_W + 0.02,
-            depth
-          );
-        } else {
-          for (let i = 0; i < 5; i++) g.drawImage(viaductBay(), x + i * bayWidth, y, bayWidth + 0.04, height);
-        }
+  var marketRail;
+  function marketForeground() {
+    if (marketRail) return marketRail;
+    const plate = plates.market;
+    marketRail = document.createElement("canvas");
+    marketRail.width = plate.width;
+    marketRail.height = Math.ceil((foot - railTop) * railScaleY * plateScale);
+    const ctx = marketRail.getContext("2d");
+    const px = (u) => (marketColumnX(u) + CELL_W / 2) * plateScale;
+    const py = (v) => (v - railTop) * railScaleY * plateScale;
+    const outline = [
+      [-64, 236],
+      [-35, 247],
+      [-17, 260],
+      [-11, 270],
+      [-11, 322],
+      [-15, 328],
+      [-16, 348],
+      [-20, 359],
+      [-20, 377],
+      [20, 377],
+      [20, 359],
+      [16, 348],
+      [15, 328],
+      [11, 322],
+      [11, 270],
+      [17, 260],
+      [35, 247],
+      [64, 236]
+    ];
+    ctx.beginPath();
+    ctx.rect(0, 0, plate.width, py(deckBottom));
+    for (const pier of marketPiers) {
+      ctx.moveTo(px(pier + outline[0][0]), py(outline[0][1]));
+      for (const [dx, y] of outline) ctx.lineTo(px(pier + dx), py(y));
+      ctx.closePath();
+    }
+    ctx.clip();
+    ctx.drawImage(plate, 0, -railTop * railScaleY * plateScale);
+    clearTrussOpenings(ctx, px, py);
+    return marketRail;
+  }
+  var streetSpans = /* @__PURE__ */ new Map();
+  function streetSpan(section) {
+    if (streetSpans.has(section)) return streetSpans.get(section);
+    const source = viaductBay(), w = source.width, h = source.height;
+    const strip = document.createElement("canvas");
+    strip.width = w * 5;
+    strip.height = h;
+    const ctx = strip.getContext("2d");
+    const arch = 68;
+    for (let i = 0; i < 5; i++) {
+      const x = i * w;
+      const west = i === 0 ? section.westExtension * w / bayWidth : 0;
+      const east = i === 4 ? section.eastExtension * w / bayWidth : 0;
+      if (!west && !east) {
+        ctx.drawImage(source, x, 0);
+        continue;
       }
-      const { head, carLength, gap, count } = trainPosition(line, town.width, game.time);
-      const h = carLength * artwork.metro.height / artwork.metro.width;
-      for (let i = 0; i < count; i++) {
-        const x = head - carLength - i * (carLength + gap);
-        if (x + carLength < ox || x > ox + game.vw) continue;
-        g.drawImage(artwork.metro, x, y + 1.5 - h, carLength, h);
+      const left = Math.round(x - west), right = Math.round(x + w + east);
+      ctx.drawImage(source, 0, 0, arch, h, left, 0, arch, h);
+      ctx.drawImage(source, arch, 0, w - 2 * arch, h, left + arch, 0, right - left - 2 * arch, h);
+      ctx.drawImage(source, w - arch, 0, arch, h, right - arch, 0, arch, h);
+    }
+    streetSpans.set(section, strip);
+    return strip;
+  }
+  function drawRailLayer(row, firstCol, lastCol, overhead, ox) {
+    const top = Y(row) - CELL_H / 2, start = overhead ? railTop : deckBottom, end = overhead ? deckBottom : foot, y = top + start * railScaleY, height = (end - start) * railScaleY;
+    for (let col = firstCol; col <= lastCol; col++) {
+      const x = X(col) - CELL_W / 2;
+      if (town.blocks[row][col] === "market") {
+        const rail = marketForeground();
+        g.drawImage(
+          rail,
+          0,
+          (start - railTop) * railScaleY * plateScale,
+          rail.width,
+          height * plateScale,
+          x,
+          y,
+          CELL_W + 0.02,
+          height
+        );
+      } else {
+        const strip = streetSpan(viaductSection(town, row, col));
+        g.drawImage(strip, 0, start - railTop, strip.width, end - start, x, y, CELL_W + 0.02, height);
       }
     }
+    if (!overhead) return;
+    const { head, carLength, gap, count } = trainPosition(town.lines.get(row), town.width, game.time);
+    const h = carLength * artwork.metro.height / artwork.metro.width;
+    for (let i = 0; i < count; i++) {
+      const x = head - carLength - i * (carLength + gap);
+      if (x + carLength >= ox && x <= ox + game.vw) g.drawImage(artwork.metro, x, y + 1.5 - h, carLength, h);
+    }
+  }
+  function visibleRails(ox, oy) {
+    const { firstRow, lastRow, firstCol, lastCol } = town.visibleCells(ox, oy - 18, game.vw, game.vh + 36);
+    const rails = [];
+    for (let row = firstRow; row <= lastRow; row++) {
+      const y = Y(row) + pierDepth;
+      if (!town.lines.has(row) || y < oy || Y(row) - CELL_H / 2 + railTop * railScaleY - 18 > oy + game.vh)
+        continue;
+      rails.push({ y, draw: (overhead) => drawRailLayer(row, firstCol, lastCol, overhead, ox) });
+    }
+    return rails;
   }
 
   // src/ui/guidance.js
@@ -4983,14 +5404,19 @@ canvas {
       }
     }
     if (!game.ride) actors.push({ o: p });
+    for (const prop of visibleStreetProps(ox, oy)) actors.push({ o: prop, prop: true });
+    const rails = visibleRails(ox, oy);
+    for (const rail of rails) actors.push({ o: rail, rail: true });
     actors.sort((a, b) => a.o.y - b.o.y);
     for (const a of actors) {
-      if (a.medical) drawAmbulance(a.o);
+      if (a.prop) drawStreetProp(a.o);
+      else if (a.rail) a.o.draw(false);
+      else if (a.medical) drawAmbulance(a.o);
       else if (a.crew) drawCrew(a.o, ambulance);
       else if (a.car) drawCar(a.o);
       else dude(a.o, a.o === p);
     }
-    drawRail(ox, oy);
+    for (const rail of rails) rail.draw(true);
     for (const j2 of jobs)
       if (!done.has(j2.id) && visible(j2)) pin(j2, j2.x, j2.y - 15 + Math.sin(game.time * 3) * 0.5);
     if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {

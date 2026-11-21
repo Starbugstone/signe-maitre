@@ -1,47 +1,11 @@
 import { cars, clamp, dist, game, p, trails } from "../core/state.js";
-import { blocked, move } from "../world/collision.js";
+import { vehicleBlocked } from "../world/collision.js";
 import { recordImpact } from "./damage.js";
 import { CELL_H, CELL_W, X, Y, roadsX, roadsY } from "../world/town.js";
 
+import { carContact } from "../world/vehicle-shape.js";
+
 const quarterTurn = Math.PI / 2;
-function carContact(a, b) {
-  const dx = a.x - b.x,
-    dy = a.y - b.y;
-  const al = a.halfLength ?? 9.3,
-    bl = b.halfLength ?? 9.3,
-    aw = a.halfWidth ?? 4.45,
-    bw = b.halfWidth ?? 4.45;
-  const reach = Math.hypot(al, aw) + Math.hypot(bl, bw);
-  if (Math.abs(dx) > reach || Math.abs(dy) > reach) return null;
-  const ax = Math.cos(a.a),
-    ay = Math.sin(a.a),
-    bx = Math.cos(b.a),
-    by = Math.sin(b.a);
-  let depth = Infinity,
-    nx = 0,
-    ny = 0;
-  for (const [x, y] of [
-    [ax, ay],
-    [-ay, ax],
-    [bx, by],
-    [-by, bx],
-  ]) {
-    const span =
-      al * Math.abs(ax * x + ay * y) +
-      bl * Math.abs(bx * x + by * y) +
-      aw * Math.abs(ax * y - ay * x) +
-      bw * Math.abs(bx * y - by * x);
-    const side = dx * x + dy * y,
-      overlap = span - Math.abs(side);
-    if (overlap <= 0) return null;
-    if (overlap < depth) {
-      depth = overlap;
-      nx = (side >= 0 ? 1 : -1) * x;
-      ny = (side >= 0 ? 1 : -1) * y;
-    }
-  }
-  return { depth, nx, ny };
-}
 function closingSpeed(a, b, normal) {
   // Both velocity vectors are measured in world coordinates, including reverse and tyre slip.
   return Math.max(
@@ -56,7 +20,7 @@ function clearTraffic(v, oldX, oldY, oldAngle) {
     if (!hit) continue;
     const x = v.x + hit.nx * (hit.depth + 0.03),
       y = v.y + hit.ny * (hit.depth + 0.03);
-    if (!blocked(x, y, 6)) {
+    if (!vehicleBlocked(v, x, y)) {
       v.x = x;
       v.y = y;
     } else {
@@ -102,6 +66,7 @@ function drive(v, dt, throttle, steering, brake) {
       v.a = Math.abs(error) < 0.003 ? cardinal : v.a + error * (1 - Math.exp(-dt * 12 * rolling));
   }
   v.a = angleDifference(v.a, 0);
+  if (v.a !== oldAngle && vehicleBlocked(v)) v.a = oldAngle;
   const vx = Math.cos(v.a) * v.speed,
     vy = Math.sin(v.a) * v.speed;
   // Normal tyres track the steering axis. The handbrake deliberately lets the rear slide.
@@ -113,9 +78,11 @@ function drive(v, dt, throttle, steering, brake) {
     oldY = v.y;
   const dx = v.slideX * dt,
     dy = v.slideY * dt;
-  if (move(v, dx, dy, 6)) {
-    const hitX = Math.abs(v.x - oldX - dx) > 0.0001,
-      hitY = Math.abs(v.y - oldY - dy) > 0.0001;
+  const hitX = dx !== 0 && vehicleBlocked(v, v.x + dx, v.y);
+  if (!hitX) v.x += dx;
+  const hitY = dy !== 0 && vehicleBlocked(v, v.x, v.y + dy);
+  if (!hitY) v.y += dy;
+  if (hitX || hitY) {
     const blockedSpeed = Math.hypot(hitX ? v.slideX : 0, hitY ? v.slideY : 0);
     const tangent = hitX ? Math.abs(v.slideY) : Math.abs(v.slideX);
     if ((hitX && hitY) || blockedSpeed > tangent * 1.25) {
@@ -126,7 +93,8 @@ function drive(v, dt, throttle, steering, brake) {
     } else {
       recordImpact(v, blockedSpeed, null);
       const tangentHeading = hitX ? Math.sign(Math.sin(v.a)) * quarterTurn : Math.cos(v.a) >= 0 ? 0 : Math.PI;
-      v.a += angleDifference(tangentHeading, v.a) * (1 - Math.exp(-dt * 15));
+      const heading = v.a + angleDifference(tangentHeading, v.a) * (1 - Math.exp(-dt * 15));
+      if (!vehicleBlocked(v, v.x, v.y, heading)) v.a = heading;
       v.speed *= Math.exp(-dt * 1.8);
       if (hitX) v.slideX = 0;
       if (hitY) v.slideY = 0;

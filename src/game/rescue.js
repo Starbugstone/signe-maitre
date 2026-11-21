@@ -10,7 +10,7 @@ import { combo } from "./slap.js";
 import { box, say } from "../ui/dialogs.js";
 import { beep } from "../audio/mixer.js";
 import { town, H, W, X, Y } from "../world/town.js";
-import { blocked } from "../world/collision.js";
+import { blocked, vehicleBlocked } from "../world/collision.js";
 
 const incidents = [];
 let ambulance = null;
@@ -175,8 +175,7 @@ function medicalDrive(v, distance, dt) {
   v.speed = speed;
   v.slideX = speed * v.dx;
   v.slideY = speed * v.dy;
-  const leavesTown = v.state === "leaving" && (next.x < 6 || next.x > W - 6 || next.y < 6 || next.y > H - 6);
-  if (!leavesTown && blocked(next.x, next.y, 6)) {
+  if (vehicleBlocked(next, next.x, next.y, next.a, v.state === "leaving")) {
     recordImpact(v, Math.abs(speed), null);
     stopMotion(v);
     return false;

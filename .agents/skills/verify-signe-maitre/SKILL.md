@@ -106,6 +106,8 @@ This stops only the recorded PIDs and removes the run state. Evidence in `.verif
 - `scripts/pf.mjs` is the CLI above. Run it with `node`, or run it directly because it is executable.
 - `scripts/build.mjs` exports `renderGame({ entry })`. `pf` uses it for the freshness check and the probe, so the probe always uses the shipping esbuild configuration.
 
+For a scenery edit, run `npm run test:scenery` and review the screenshots from its `street-scenery` journey. Extend the foreground checks and the journey for new obstacles or joins. See [Street scenery](features/street-scenery.md).
+
 ## Known gaps
 
 - There is no `driveTo` yet. Repossession, car delivery, handbrake, crash damage and roadside repair need driving and do not have journeys. Their recipes are in the feature map.

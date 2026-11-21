@@ -1,11 +1,12 @@
 import { cars, game, p, people, rand } from "../core/state.js";
-import { town, canalRow, TAU, X, Y } from "./town.js";
+import { footBlocked, vehicleBlocked } from "./collision.js";
+import { town, canalRow, CELL_W, TAU, X, Y } from "./town.js";
 function car(x, y, a, tint, model, route) {
   const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
   cars.push(v);
   return v;
 }
-export const sedan = car(p.x + 11, Y(1) - 16, 0, "cream", "Étude 2000");
+export const sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "Étude 2000");
 export const target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
 const colors = ["blue", "olive", "rose", "silver"];
 const civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
@@ -37,6 +38,22 @@ function chooseLook(kind, random) {
 }
 
 export function person(x, y, kind = "local", axis = "x", random = rand) {
+  // Place residents and interrupted medics on clear ground even when their
+  // requested spot is occupied by street furniture or a parked vehicle.
+  if (footBlocked(x, y, 3)) {
+    let clear;
+    for (let r = 2; r <= 32 && !clear; r += 2)
+      clear = [
+        [0, r],
+        [r, 0],
+        [-r, 0],
+        [0, -r],
+      ].find(([dx, dy]) => !footBlocked(x + dx, y + dy, 3));
+    if (clear) {
+      x += clear[0];
+      y += clear[1];
+    }
+  }
   const n = {
     x,
     y,
@@ -64,9 +81,20 @@ function populate(col, row, key) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
+  if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1)) {
+    const kerbX = X(col) + 112, y = Y(row) - 16;
+    // Find the nearest gap in the posts along this kerb.
+    for (let offset = 0; offset < CELL_W / 2; offset++) {
+      const x = [kerbX + offset, kerbX - offset].find(x => !vehicleBlocked({ x, y, a: Math.PI }));
+      if (x !== undefined) {
+        car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
+        break;
+      }
+    }
+  }
   const horizontal = person(
     X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43),
-    Y(row) - 20,
+    Y(row) - 24,
     col % 4 === 0 ? "tough" : "local",
     "x",
     random,
@@ -79,8 +107,6 @@ function populate(col, row, key) {
     random,
   );
   horizontal.homeCell = vertical.homeCell = key;
-  if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1))
-    car(X(col) + 112, Y(row) - 16, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
   if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
   const left = X(col) + 6,
     right = X(col + 1) - 6,

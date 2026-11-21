@@ -13,4 +13,6 @@ Edit the town definition in `src/world/town.js`. A cell is centred on an interse
 
 **Pair interiors with street addresses.** Give a room a stable street door, painted backdrop, walkable floor, entry, exit and interaction anchor. Enter on foot, operate the fixture, return to the same street position, and verify that the active case and parked vehicle survive. Exercise both languages.
 
+Run `npm run test:scenery` whenever a street painting, prop, foreground layer or collision footprint changes. It runs the game in Chromium. Check the changed location as well as the garage gate and both sides of market joins. Walk toward the base and across its front with the player and an NPC, pass behind it where accessible, and drive diagonally into the corner. The actor should cover the foreground on the near side, and the far side should reveal the actor through actual gaps. Add each newly affected geometry to the browser fixtures.
+
 Run `npm test` to check the shipped map, its roads and bridges, a larger rectangular fixture, rail continuity and room anchors. Run `npm run build`. In the resulting game, follow a full train across the edited join and check the new foreground against both neighbours. Regenerate affected gameplay captures from that build under the project's visual standard.
