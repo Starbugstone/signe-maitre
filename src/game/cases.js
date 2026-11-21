@@ -1,7 +1,7 @@
 import { interior, indoorAction, enterInterior, leaveInterior } from "../scenes/interiors.js";
 import { box, lang, say } from "../ui/dialogs.js";
 import { dist, done, game, p } from "../core/state.js";
-import { auction, jobs } from "../world/town.js";
+import { auction, jobs, town } from "../world/town.js";
 import { target } from "../world/population.js";
 import { beep } from "../audio/mixer.js";
 import { panel } from "../platform/canvas.js";
@@ -10,6 +10,9 @@ import { exitCar } from "./boarding.js";
 import { incidents } from "./rescue.js";
 
 const files = ["repo", "noise", "flat"];
+function nextFile() {
+  return files.find((id) => !done.has(id));
+}
 const locations = {
   office: ["Bailiff’s office", "Étude"],
   repo: ["Crédit Sec", "Crédit Sec"],
@@ -21,8 +24,7 @@ const locations = {
 const placeName = (id) => locations[id][lang === "fr" ? 1 : 0];
 function goal() {
   if (!game.active) {
-    const nextFile = files.find((id) => !done.has(id));
-    return jobs.find((job) => job.id === nextFile) || null;
+    return town.byId.get(nextFile()) || null;
   }
   if (game.active === "repo") return game.ride === target ? auction : target;
   if (game.stage === "deliver") return auction;
@@ -127,4 +129,4 @@ function offer(id) {
   box(id, id + "Brief", [["take", () => accept(id)], ["leave"]]);
 }
 
-export { goal, interact, placeName };
+export { files, goal, interact, nextFile, objective, placeName };

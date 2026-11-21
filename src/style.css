@@ -123,6 +123,10 @@ h1 {
 #touch {
   display: none;
 }
+#streetHeader,
+#streetMessages {
+  display: contents;
+}
 dialog {
   position: absolute;
   max-width: min(480px, 92vw);
@@ -291,70 +295,189 @@ canvas {
 }
 #routeCard {
   position: absolute;
-  top: 94px;
+  top: 90px;
   left: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: min(345px, 52vw);
-  padding: 7px 10px;
-  background: #191422eb;
-  color: #ffefcf;
+  width: min(290px, 45vw);
+  padding: 9px 12px;
+  background: #1a1521f0;
   border: 1px solid #927754;
-  border-left: 3px solid #f6c153;
+  border-left: 3px solid #efbb59;
+  box-shadow: 3px 3px 0 #100e18b8;
   pointer-events: none;
-  box-shadow: 2px 2px #151220;
 }
-#routeCard[hidden] {
-  display: none;
+.fileMeta, #fileList small {
+  font: 700 10px/1.3 monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #edc58d;
 }
-#compass {
+.fileMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.fileMeta small { font: inherit; }
+#routeDistance { color: #ffdc79; text-transform: none; letter-spacing: 0; }
+#routeTitle, #fileList strong {
+  display: block;
+  color: #fff0cf;
+  font: bold 20px/1.2 Georgia, serif;
+}
+#routeBrief, #fileList p, #filesNote {
+  font: 13px/1.35 system-ui, sans-serif;
+  color: #e2d8c7;
+}
+#routeBrief { display: block; margin-top: 2px; }
+#routeStep {
+  border-top: 1px solid #705a48;
+  margin-top: 6px;
+  padding-top: 5px;
+  color: #ffdb81;
+  font: 12px/1.35 system-ui, sans-serif;
+}
+#routePlace::after { content: " · "; }
+#mapSheet {
+  position: absolute;
+  inset: 95px 4vw 54px;
+  max-width: 1150px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(230px, 1fr);
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
+}
+#routeCard[hidden], #mapSheet[hidden] { display: none; }
+body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { display: none; }
+#mapColumn {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+#mapSheet h2 { color: #ffd172; margin: 0; }
+#mapTitle { font: bold 15px/1.3 monospace; letter-spacing: .07em; }
+#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.25; margin: 12px 10px; }
+#mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
+#mapKey span { display: block; }
+#casebook {
+  max-height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid #977959;
+  border-top: 3px solid #e9b552;
+  background: #1b1722;
+  box-shadow: 3px 3px 0 #0b0a11;
+  scrollbar-color: #967b62 #1b1722;
+}
+#filesTitle { font: bold italic 25px Georgia, serif; }
+#fileList { list-style: none; padding: 0; margin: 0; }
+#fileList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #564839;
+}
+.filePin {
   display: grid;
   place-items: center;
-  flex: 0 0 26px;
-  height: 26px;
-  transform-origin: center;
-  color: #ffd363;
-  font: 26px/1 system-ui;
+  flex: 0 0 21px;
+  height: 21px;
+  border-radius: 50%;
+  color: #231b29;
+  font: bold 14px monospace;
 }
-#routeCard div {
-  min-width: 0;
-}
-#routeType,
-#routeAction,
-#routePlace {
-  display: block;
-}
-#routeType {
-  font: 700 9px monospace;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: #e1b68a;
-}
-#routePlace {
-  font-size: 15px;
-}
-#routeAction {
-  font-size: 11px;
-}
-#routeDistance {
-  align-self: flex-start;
-  white-space: nowrap;
-  font: 700 11px monospace;
-  color: #ffda73;
-}
+#fileList small { display: block; }
+#fileList p { margin: 2px 0 0; }
+#fileList .fileStep { color: #ffdb81; }
+#filesNote { font-size: 12px; margin: 12px 0 0; color: #d4bda1; }
+#filesNote:empty { display: none; }
 @media (max-width: 650px) {
   #routeCard {
-    top: 86px;
+    top: 82px;
     left: 8px;
-    padding: 4px 7px;
-    gap: 6px;
-    max-width: 82vw;
+    width: min(258px, 84vw);
+    padding: 5px 8px;
   }
-  #routePlace {
-    font-size: 13px;
+  #routeTitle { font-size: 17px; }
+  #routeBrief, #routeStep { font-size: 12px; }
+  #routeStep { margin-top: 4px; padding-top: 3px; }
+}
+@media (max-width: 650px) and (orientation: portrait) {
+  #mapSheet {
+    inset: 90px 12px max(12px, env(safe-area-inset-bottom));
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(120px, 1fr) minmax(0, auto);
+    gap: 12px;
   }
-  #routeAction {
-    font-size: 10px;
+  #casebook { max-height: 44dvh; }
+}
+@media (max-height: 500px) {
+  #mapSheet { inset: 83px 14px 12px; gap: 14px; }
+  #casebook { padding: 8px 10px; }
+  #fileList li { margin-top: 5px; padding-top: 5px; }
+  #routeCard { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
+}
+
+@media (max-width: 650px) and (orientation: portrait) {
+  body { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  #game { position: absolute; inset: 0; }
+  #streetHeader {
+    grid-row: 1;
+    position: relative;
+    display: grid;
+    gap: 5px;
+    padding: max(8px, env(safe-area-inset-top)) 8px 0;
+    pointer-events: none;
   }
+  #streetHeader > * { position: static; }
+  #brand { flex-shrink: 0; }
+  #tools { justify-content: flex-end; flex-wrap: wrap; }
+  #tools button { pointer-events: auto; }
+  #streetMessages {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 97px);
+    left: 8px;
+    right: 76px;
+    pointer-events: none;
+  }
+  #streetMessages > * { position: static; max-width: 100%; }
+  #mapSheet {
+    grid-row: 2;
+    position: relative;
+    inset: auto;
+    margin: 8px 12px max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (pointer: coarse) and (min-width: 651px) and (max-height: 500px) {
+  #tools {
+    left: calc(min(250px, 35vw) + 16px);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    pointer-events: none;
+  }
+  #tools button { pointer-events: auto; }
+  #streetMessages {
+    display: flex;
+    position: absolute;
+    left: 144px;
+    right: 195px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    pointer-events: none;
+  }
+  #streetMessages > * { position: static; max-width: 100%; }
+  #ticker { padding: 4px 8px; }
 }

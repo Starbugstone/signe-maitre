@@ -6,7 +6,7 @@ import { cars, dist, done, fx, game, p, people, trails } from "../core/state.js"
 import { $, g, hud, label, rect } from "../platform/canvas.js";
 import { H, TAU, W, canalBottom, canalTop, jobs, roadsX, roadsY } from "../world/town.js";
 import { directions } from "../world/navigation.js";
-import { goal } from "../game/cases.js";
+import { goal, nextFile } from "../game/cases.js";
 import { drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
@@ -14,16 +14,23 @@ import { drawAmbulance, drawCrew } from "../art/emergency.js";
 import { drawCar } from "../art/vehicles.js";
 import { dude } from "../art/pedestrians.js";
 import { visibleRails } from "../world/rail.js";
-import { routeHUD } from "./guidance.js";
+import { arrivalMarker, drawRouteArrow } from "./waypoint.js";
+import { atObjective, routeHUD, showMapSheet } from "./guidance.js";
 import { nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
 
-function speech(s, x, y, viewportLeft) {
+const addressPinHeight = 23;
+
+function speech(s, x, y, viewportLeft, markers) {
   g.save();
   g.font = "bold 4px system-ui";
   g.textAlign = "center";
   const width = g.measureText(s).width + 5;
   const center = Math.max(viewportLeft + width / 2 + 1, Math.min(x, viewportLeft + game.vw - width / 2 - 1));
+  // Move past the lowest marker first when a door pin and route arrow are stacked.
+  for (const marker of markers.sort((a, b) => b.y - a.y))
+    if (Math.abs(marker.x - center) < width / 2 + 6 && Math.abs(marker.y - y) < 11)
+      y = marker.y - 11;
   rect(g, center - width / 2, y - 5, width, 7, "#201728");
   rect(g, center - width / 2 + 0.45, y - 4.55, width - 0.9, 6.1, "#ffe7bc");
   g.fillStyle = "#ffe7bc";
@@ -52,28 +59,32 @@ function pin(j, x, y, small = false) {
     g.textAlign = "left";
   }
 }
-function map(x, y, w, h, full) {
-  let scale = Math.min(w / W, h / H),
-    mw = W * scale,
-    mh = H * scale;
-  rect(g, x - 2, y - 2, mw + 4, mh + 4, "#d3b991");
-  rect(g, x, y, mw, mh, "#363343");
-  for (let rx of roadsX) rect(g, x + rx * scale - 1, y, full ? 1.4 : 0.45, mh, "#8a8390");
-  for (let ry of roadsY) rect(g, x, y + ry * scale - 1, mw, full ? 1.4 : 0.45, "#8a8390");
-  rect(g, x, y + (canalTop + 23) * scale, mw, (canalBottom - canalTop - 49) * scale, "#397483");
-  for (let rx of roadsX)
+function map(left, top, w, h, full, origin = p) {
+  rect(g, left - 2, top - 2, w + 4, h + 4, "#d3b991");
+  rect(g, left, top, w, h, "#363343");
+  const inset = full ? 5 : 2;
+  const scale = Math.min((w - 2 * inset) / W, (h - 2 * inset) / H);
+  const mw = W * scale, mh = H * scale;
+  const x = left + (w - mw) / 2, y = top + (h - mh) / 2;
+  g.save();
+  const roadWidth = full ? 1.4 : 0.45;
+  for (const rx of roadsX) rect(g, x + rx * scale - roadWidth / 2, top, roadWidth, h, "#8a8390");
+  for (const ry of roadsY) rect(g, left, y + ry * scale - roadWidth / 2, w, roadWidth, "#8a8390");
+  rect(g, left, y + (canalTop + 23) * scale, w, (canalBottom - canalTop - 49) * scale, "#397483");
+  const bridgeWidth = Math.max(1, 28 * scale);
+  for (const rx of roadsX)
     rect(
       g,
-      x + (rx - 14) * scale,
+      x + rx * scale - bridgeWidth / 2,
       y + (canalTop + 23) * scale,
-      Math.max(1, 28 * scale),
+      bridgeWidth,
       (canalBottom - canalTop - 49) * scale,
       "#a39a99",
     );
-  const nav = directions();
+  const nav = directions(origin);
   if (nav) {
     g.beginPath();
-    g.moveTo(x + p.x * scale, y + p.y * scale);
+    g.moveTo(x + origin.x * scale, y + origin.y * scale);
     for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
     g.strokeStyle = "#ffe080";
     g.lineWidth = full ? 1.1 : 0.42;
@@ -83,15 +94,38 @@ function map(x, y, w, h, full) {
   let q = goal();
   if (q) {
     g.strokeStyle = "#ffe18a";
-    g.lineWidth = 1;
+    g.lineWidth = full ? 1 : 0.45;
     g.beginPath();
-    g.arc(x + q.x * scale, y + q.y * scale, 5 + Math.sin(game.time * 3), 0, TAU);
+    const pulse = Math.sin(game.time * 3);
+    g.arc(x + q.x * scale, y + q.y * scale, full ? 5 + pulse : 2.05 + pulse * 0.2, 0, TAU);
     g.stroke();
   }
-  const px = x + p.x * scale,
-    py = y + p.y * scale;
-  rect(g, px - 1.1, py - 1.1, 2.2, 2.2, "#131524");
-  rect(g, px - 0.6, py - 0.6, 1.3, 1.3, "#fff8e9");
+  const px = x + origin.x * scale,
+    py = y + origin.y * scale;
+  const radius = full ? 2.5 : 1.05;
+  g.beginPath();
+  g.moveTo(px, py - radius);
+  g.lineTo(px + radius, py);
+  g.lineTo(px, py + radius);
+  g.lineTo(px - radius, py);
+  g.closePath();
+  g.strokeStyle = "#131524";
+  g.lineWidth = full ? 1.35 : 0.55;
+  g.stroke();
+  g.fillStyle = "#fff8e9";
+  g.fill();
+  g.restore();
+}
+function drawFullMap(end, origin) {
+  showMapSheet(end);
+  rect(g, 0, 0, game.vw, game.vh, "#151521eb");
+  const area = $("#mapWindow").getBoundingClientRect();
+  const unit = game.vw / innerWidth;
+  const w = Math.min(area.width * unit, area.height * unit * W / H, 225);
+  const h = w * H / W;
+  const x = (area.left + area.width / 2) * unit - w / 2;
+  const y = (area.top + area.height / 2) * unit - h / 2;
+  map(x, y, w, h, true, origin);
 }
 function district() {
   return p.y < canalTop
@@ -108,7 +142,12 @@ function district() {
 }
 function draw() {
   if (interior) {
-    drawInterior();
+    const room = interior.room;
+    const anchor = game.active ? room.exit : nextFile() ? room.desk : null;
+    drawInterior(anchor && !atObjective(anchor, room) ? anchor : null);
+    routeHUD(anchor, room);
+    if (game.viewMap) drawFullMap(goal(), interior.returnTo);
+    else $("#mapSheet").hidden = true;
     return;
   }
   const { left: ox, top: oy } = viewport(game.camX, game.camY, game.vw, game.vh, W, H);
@@ -142,6 +181,14 @@ function draw() {
     g.stroke();
     g.restore();
   }
+  const markers = [];
+  for (const j of jobs) {
+    if (done.has(j.id) || !visible(j)) continue;
+    const y = j.y - addressPinHeight + Math.sin(game.time * 3) * 0.5;
+    pin(j, j.x, y);
+    // Speech clears the top of the pin's bob, so a displaced bubble holds still.
+    markers.push({ x: j.x, y: j.y - addressPinHeight - 0.5 });
+  }
   const actors = cars.filter(visible).map((o) => ({ o, car: true, medical: o.medical }));
   for (const n of people) if (!n.onStretcher && visible(n)) actors.push({ o: n });
   if (ambulance) {
@@ -164,13 +211,15 @@ function draw() {
     else dude(a.o, a.o === p);
   }
   for (const rail of rails) rail.draw(true);
-  for (const j of jobs)
-    if (!done.has(j.id) && visible(j)) pin(j, j.x, j.y - 15 + Math.sin(game.time * 3) * 0.5);
+  if (end && !game.viewMap) {
+    if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
+    if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
+  }
   if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {
     const speaker = taunt.speaker;
     const height = speaker.look === "flatCap" || speaker.look === "rigger" ? 15 : 18;
-    speech(t(tauntLine(taunt)), speaker.x, speaker.y - height, ox);
-  } else if (game.quipTime > 0) speech(t("catch"), p.x, p.y - (game.ride ? 22 : 24), ox);
+    speech(t(tauntLine(taunt)), speaker.x, speaker.y - height, ox, markers);
+  } else if (game.quipTime > 0) speech(t("catch"), p.x, p.y - (game.ride ? 22 : 24), ox, markers);
   for (const f of fx) {
     g.save();
     g.textAlign = "center";
@@ -187,18 +236,12 @@ function draw() {
   const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
   const mw = compact ? 27 : 33,
     mh = (mw * H) / W;
-  if (!game.viewMap) map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
   routeHUD(end);
   if (game.viewMap) {
-    rect(g, 0, 0, game.vw, game.vh, "#151521eb");
-    const w = Math.min(game.vw - 16, ((game.vh - 94) * W) / H, 225),
-      h = (w * H) / W,
-      x = (game.vw - w) / 2,
-      y = (game.vh - h) / 2;
-    map(x, y, w, h, true);
-    label(g, t("cityMap"), x, y - 4, "#ffcf65", 5);
-    label(g, t("legend1"), x, y + h + 7, "#ffe2b2", 4.5);
-    label(g, t("legend2"), x, y + h + 14, "#ffe2b2", 4.5);
+    drawFullMap(end, p);
+  } else {
+    $("#mapSheet").hidden = true;
+    map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
   }
   hud("#district", district() + "  /  Port-Fer");
   hud(
@@ -215,11 +258,12 @@ function draw() {
       Math.ceil(game.heat) +
       "/3" +
       (game.ride
-        ? "　" +
+        ? // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
+          "　" +
           Math.round(Math.abs(game.ride.speed) * 0.53) +
-          " km/h　·　" +
+          "\u00a0km/h\u00a0\u00a0·\u00a0\u00a0" +
           t("vehicle") +
-          " " +
+          "\u00a0" +
           game.ride.condition +
           "%"
         : ""),

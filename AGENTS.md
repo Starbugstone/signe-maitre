@@ -11,3 +11,7 @@ For every scenery change, run `npm run test:scenery`. Revisit each changed obsta
 For town layout, street and railway joins, or enterable buildings, use the [Port-Fer town skill](.agents/skills/port-fer-town/SKILL.md). Maintain the ES modules in `src/`; `npm run build` produces the playable offline `index.html`.
 
 To prove a change in the running game, use the [verification skill](.agents/skills/verify-signe-maitre/SKILL.md). It drives the game with real keyboard and touch input and keeps screenshots, video and a HUD journal in `.verify/evidence/`. Add or repair a journey and its [feature map](.agents/skills/verify-signe-maitre/features/README.md) entry when you change what a player can do.
+
+## Alpha publishing
+
+During alpha, push all completed changes directly to `main`. Remove this section when the project enters beta.

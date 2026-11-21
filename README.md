@@ -34,7 +34,9 @@ Touch controls appear on small screens. Hold **Run** together with a direction t
 
 ## Cases
 
-Take work at the étude or at a coloured case marker. The HUD arrow points straight at the current objective. On arrival it becomes a dot and the card shows the action to take. Between cases it points to the next unfinished pickup. The city map shows the street route. Seize a vehicle and deliver it to auction, inventory a karaoke deck, or investigate a noise complaint. You can also explore on foot or by car between jobs.
+Take work at the étude or at a coloured case marker. Follow the gold arrow beside your character or vehicle along the street route. A gold marker identifies the destination, and the case card shows what to do when you arrive. Between cases the arrow leads to the next unfinished pickup. Open **Map & files** with **M**, the controller’s **View** button or the toolbar to see the route and read a short brief for each open case.
+
+[Case files on the map](port-fer-case-files.png) · [Gameplay clip of a noise complaint and the next pickup](port-fer-case-guidance.mp4)
 
 ## Town and interiors
 

@@ -33,7 +33,7 @@ Each feature file begins with an H1 and one paragraph. It then has exactly four 
 | Feature | Journey | Status |
 | --- | --- | --- |
 | [Boot, HUD, toolbar and language](./boot-hud.md) | `boot` | Scripted for shipped, probe and URL builds |
-| [City map](./map-view.md) | `map-view` | Scripted for shipped, probe and URL builds |
+| [City map and case files](./map-view.md) | `map-view` | Scripted for shipped, probe and URL builds |
 | [Étude interior](./office-interior.md) | `office-interior` | Scripted for the probe build |
 | [Cases: noise, home visit and repossession](./cases.md) | `noise-case`, `home-visit` | Noise and home visit are scripted for the probe build. Repossession is not scripted. |
 | [Cars: boarding, driving, damage and repair](./vehicles.md) | none | Not scripted because `driveTo` does not exist |

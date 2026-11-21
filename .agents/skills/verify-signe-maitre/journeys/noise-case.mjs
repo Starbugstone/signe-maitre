@@ -17,7 +17,7 @@ export default async function (d) {
   });
   await d.step("file-taken", async () => {
     await d.choose("take");
-    const { hud, state } = await d.waitFor("active case", ({ hud }) => !hud.dialog && hud.route?.type === d.t("noise"));
+    const { hud, state } = await d.waitFor("active case", ({ hud }) => !hud.dialog && hud.route?.type === d.t("currentCase"));
     d.expect(state.active === "noise", "the noise case is active", state.active);
     d.expect(hud.route.place === "Le Boum", "the route card points at Le Boum", hud.route);
   });

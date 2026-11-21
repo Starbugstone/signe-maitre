@@ -15,7 +15,7 @@ There are three case files: **Bass complaint** (Le Boum), **Home visit** (Résid
 
 - At the office door or desk, press **E** and choose a file, then **Take the file**.
 - Walk to a coloured case marker (`R`, `C` or `S`) and press **E**.
-- Follow the route card arrow or the route on the **M** map. It reads **On site** on arrival.
+- Follow the gold arrow beside the player or vehicle. The route card reads **On site** on arrival.
 
 ## Driving it with pf
 

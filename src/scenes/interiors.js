@@ -4,6 +4,7 @@ import { walkVector } from "../core/controls.js";
 import { g, hud, $, rect } from "../platform/canvas.js";
 import { dude } from "../art/pedestrians.js";
 import { t } from "../ui/dialogs.js";
+import { arrivalMarker } from "../ui/waypoint.js";
 import { footfall } from "../audio/mixer.js";
 
 export let interior = null;
@@ -48,7 +49,7 @@ export function updateInterior(dt) {
   p.walkDistance = last + travelled;
   if (Math.floor(last / 6.8) !== Math.floor(p.walkDistance / 6.8)) footfall(Math.floor(p.walkDistance / 6.8));
 }
-export function drawInterior() {
+export function drawInterior(anchor) {
   const { room } = interior,
     scale = Math.min(game.vw / room.width, game.vh / room.height);
   const left = (game.vw - room.width * scale) / 2,
@@ -59,9 +60,9 @@ export function drawInterior() {
   g.scale(scale, scale);
   g.drawImage(artwork[room.image], 0, 0, room.width, room.height);
   dude(p, true);
+  if (anchor) arrivalMarker(anchor);
   g.restore();
   hud("#district", t(room.door) + " / Port-Fer");
   hud("#hint", t(indoorAction() || "officeFloor"));
-  $("#routeCard").hidden = true;
   $("#reportBtn").hidden = true;
 }

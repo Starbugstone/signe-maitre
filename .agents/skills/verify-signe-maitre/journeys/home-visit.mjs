@@ -11,7 +11,7 @@ export default async function (d) {
     await d.choose("flat");
     await d.waitFor("brief", ({ hud }) => hud.dialog?.copy === d.t("flatBrief"));
     await d.choose("take");
-    const { hud } = await d.waitFor("active case", ({ hud }) => !hud.dialog && hud.route?.type === d.t("flat"));
+    const { hud } = await d.waitFor("active case", ({ hud }) => !hud.dialog && hud.route?.type === d.t("currentCase"));
     d.expect(hud.route.place === "Résidence Mireille", "the route card points at Résidence Mireille", hud.route);
   });
   await d.step("at-residence", async () => {

@@ -130,6 +130,10 @@ h1 {
 #touch {
   display: none;
 }
+#streetHeader,
+#streetMessages {
+  display: contents;
+}
 dialog {
   position: absolute;
   max-width: min(480px, 92vw);
@@ -298,72 +302,191 @@ canvas {
 }
 #routeCard {
   position: absolute;
-  top: 94px;
+  top: 90px;
   left: 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: min(345px, 52vw);
-  padding: 7px 10px;
-  background: #191422eb;
-  color: #ffefcf;
+  width: min(290px, 45vw);
+  padding: 9px 12px;
+  background: #1a1521f0;
   border: 1px solid #927754;
-  border-left: 3px solid #f6c153;
+  border-left: 3px solid #efbb59;
+  box-shadow: 3px 3px 0 #100e18b8;
   pointer-events: none;
-  box-shadow: 2px 2px #151220;
 }
-#routeCard[hidden] {
-  display: none;
+.fileMeta, #fileList small {
+  font: 700 10px/1.3 monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #edc58d;
 }
-#compass {
+.fileMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.fileMeta small { font: inherit; }
+#routeDistance { color: #ffdc79; text-transform: none; letter-spacing: 0; }
+#routeTitle, #fileList strong {
+  display: block;
+  color: #fff0cf;
+  font: bold 20px/1.2 Georgia, serif;
+}
+#routeBrief, #fileList p, #filesNote {
+  font: 13px/1.35 system-ui, sans-serif;
+  color: #e2d8c7;
+}
+#routeBrief { display: block; margin-top: 2px; }
+#routeStep {
+  border-top: 1px solid #705a48;
+  margin-top: 6px;
+  padding-top: 5px;
+  color: #ffdb81;
+  font: 12px/1.35 system-ui, sans-serif;
+}
+#routePlace::after { content: " · "; }
+#mapSheet {
+  position: absolute;
+  inset: 95px 4vw 54px;
+  max-width: 1150px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(230px, 1fr);
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
+}
+#routeCard[hidden], #mapSheet[hidden] { display: none; }
+body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { display: none; }
+#mapColumn {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+#mapSheet h2 { color: #ffd172; margin: 0; }
+#mapTitle { font: bold 15px/1.3 monospace; letter-spacing: .07em; }
+#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.25; margin: 12px 10px; }
+#mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
+#mapKey span { display: block; }
+#casebook {
+  max-height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid #977959;
+  border-top: 3px solid #e9b552;
+  background: #1b1722;
+  box-shadow: 3px 3px 0 #0b0a11;
+  scrollbar-color: #967b62 #1b1722;
+}
+#filesTitle { font: bold italic 25px Georgia, serif; }
+#fileList { list-style: none; padding: 0; margin: 0; }
+#fileList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #564839;
+}
+.filePin {
   display: grid;
   place-items: center;
-  flex: 0 0 26px;
-  height: 26px;
-  transform-origin: center;
-  color: #ffd363;
-  font: 26px/1 system-ui;
+  flex: 0 0 21px;
+  height: 21px;
+  border-radius: 50%;
+  color: #231b29;
+  font: bold 14px monospace;
 }
-#routeCard div {
-  min-width: 0;
-}
-#routeType,
-#routeAction,
-#routePlace {
-  display: block;
-}
-#routeType {
-  font: 700 9px monospace;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: #e1b68a;
-}
-#routePlace {
-  font-size: 15px;
-}
-#routeAction {
-  font-size: 11px;
-}
-#routeDistance {
-  align-self: flex-start;
-  white-space: nowrap;
-  font: 700 11px monospace;
-  color: #ffda73;
-}
+#fileList small { display: block; }
+#fileList p { margin: 2px 0 0; }
+#fileList .fileStep { color: #ffdb81; }
+#filesNote { font-size: 12px; margin: 12px 0 0; color: #d4bda1; }
+#filesNote:empty { display: none; }
 @media (max-width: 650px) {
   #routeCard {
-    top: 86px;
+    top: 82px;
     left: 8px;
-    padding: 4px 7px;
-    gap: 6px;
-    max-width: 82vw;
+    width: min(258px, 84vw);
+    padding: 5px 8px;
   }
-  #routePlace {
-    font-size: 13px;
+  #routeTitle { font-size: 17px; }
+  #routeBrief, #routeStep { font-size: 12px; }
+  #routeStep { margin-top: 4px; padding-top: 3px; }
+}
+@media (max-width: 650px) and (orientation: portrait) {
+  #mapSheet {
+    inset: 90px 12px max(12px, env(safe-area-inset-bottom));
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(120px, 1fr) minmax(0, auto);
+    gap: 12px;
   }
-  #routeAction {
-    font-size: 10px;
+  #casebook { max-height: 44dvh; }
+}
+@media (max-height: 500px) {
+  #mapSheet { inset: 83px 14px 12px; gap: 14px; }
+  #casebook { padding: 8px 10px; }
+  #fileList li { margin-top: 5px; padding-top: 5px; }
+  #routeCard { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
+}
+
+@media (max-width: 650px) and (orientation: portrait) {
+  body { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  #game { position: absolute; inset: 0; }
+  #streetHeader {
+    grid-row: 1;
+    position: relative;
+    display: grid;
+    gap: 5px;
+    padding: max(8px, env(safe-area-inset-top)) 8px 0;
+    pointer-events: none;
   }
+  #streetHeader > * { position: static; }
+  #brand { flex-shrink: 0; }
+  #tools { justify-content: flex-end; flex-wrap: wrap; }
+  #tools button { pointer-events: auto; }
+  #streetMessages {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 97px);
+    left: 8px;
+    right: 76px;
+    pointer-events: none;
+  }
+  #streetMessages > * { position: static; max-width: 100%; }
+  #mapSheet {
+    grid-row: 2;
+    position: relative;
+    inset: auto;
+    margin: 8px 12px max(12px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (pointer: coarse) and (min-width: 651px) and (max-height: 500px) {
+  #tools {
+    left: calc(min(250px, 35vw) + 16px);
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    pointer-events: none;
+  }
+  #tools button { pointer-events: auto; }
+  #streetMessages {
+    display: flex;
+    position: absolute;
+    left: 144px;
+    right: 195px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    pointer-events: none;
+  }
+  #streetMessages > * { position: static; max-width: 100%; }
+  #ticker { padding: 4px 8px; }
 }
 </style>
   </head>
@@ -372,25 +495,42 @@ canvas {
       id="game"
       aria-label="Overhead street map of Port-Fer. Move with arrows, WASD or ZQSD. Use F for cars, E for jobs, Space for action."
     ></canvas>
-    <div id="top">
-      <div id="brand">
-        <h1>Signé, Maître !</h1>
-        <div id="district"></div>
+    <div id="streetHeader">
+      <div id="top">
+        <div id="brand">
+          <h1>Signé, Maître !</h1>
+          <div id="district"></div>
+        </div>
+        <div id="stats"></div>
       </div>
-      <div id="stats"></div>
+      <div id="tools">
+        <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
+        ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
+        ><button id="language">FR</button><button id="vehicleSignal" data-key="horn" hidden>Horn</button>
+      </div>
+      <aside id="routeCard" hidden>
+        <div class="fileMeta"><small id="routeType"></small><b id="routeDistance"></b></div>
+        <strong id="routeTitle"></strong>
+        <span id="routeBrief"></span>
+        <div id="routeStep"><b id="routePlace"></b><span id="routeAction"></span></div>
+      </aside>
     </div>
-    <div id="tools">
-      <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
-      ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
-      ><button id="language">FR</button><button id="vehicleSignal" data-key="horn" hidden>Horn</button>
+    <section id="mapSheet" hidden aria-labelledby="mapTitle">
+      <div id="mapColumn">
+        <h2 id="mapTitle"></h2>
+        <div id="mapWindow"></div>
+        <div id="mapKey"><span></span><span></span></div>
+      </div>
+      <section id="casebook" tabindex="0" aria-labelledby="filesTitle">
+        <h2 id="filesTitle"></h2>
+        <ol id="fileList"></ol>
+        <p id="filesNote"></p>
+      </section>
+    </section>
+    <div id="streetMessages">
+      <div id="ticker" role="status"></div>
+      <div id="hint"></div>
     </div>
-    <aside id="routeCard" hidden>
-      <span id="compass" aria-hidden="true">➜</span>
-      <div><small id="routeType"></small><strong id="routePlace"></strong><span id="routeAction"></span></div>
-      <b id="routeDistance"></b>
-    </aside>
-    <div id="ticker" role="status"></div>
-    <div id="hint"></div>
     <div id="keys">
       ↑ ↓ ← → / WASD / ZQSD &nbsp; Move or drive　 F &nbsp; Enter / exit　 SPACE &nbsp; Slap / handbrake　 E
       &nbsp; Job　 M &nbsp; Map
@@ -1907,14 +2047,28 @@ canvas {
     ],
     lastIncident: ["Latest incident report", "Derni\xE8re fiche d\u2019incident"],
     nextCase: ["Next case", "Prochain dossier"],
+    currentCase: ["Active case", "Dossier en cours"],
+    openCase: ["Available", "Disponible"],
+    casebook: ["Case files", "Dossiers"],
+    fileSources: ["Pick up a file at its address or at the bailiff\u2019s office.", "Retirez un dossier \xE0 son adresse ou \xE0 l\u2019\xE9tude."],
+    filesWaiting: ["The other files will be available when you close or return this one.", "Les autres dossiers seront disponibles une fois celui-ci clos ou rendu."],
+    waitingCase: ["On the desk", "En attente"],
+    filesClosed: ["All three cases are closed. Port-Fer is yours to explore.", "Les trois dossiers sont clos. Port-Fer est \xE0 vous."],
+    repoSummary: ["Recover the overdue Moutarde GT and deliver it to auction.", "Saisissez la Moutarde GT et livrez-la aux ench\xE8res."],
+    noiseSummary: ["Measure the bass outside Le Boum and sign the noise report.", "Relevez le niveau sonore devant Le Boum et signez le constat."],
+    flatSummary: ["Inventory a gold karaoke deck and take it to auction.", "Inventoriez un karaok\xE9 dor\xE9 et portez-le aux ench\xE8res."],
+    deskRoute: ["Choose a file at the desk", "Choisir un dossier au bureau"],
+    exitRoute: ["Return to the street", "Rejoindre la sortie"],
     onSite: ["On site", "Sur place"],
     openFile: ["{job} \xB7 Collect a file", "{job} \xB7 Retirer un dossier"],
-    visitPickup: ["Go here to collect a file", "Retirer un dossier sur place"],
+    visitPickup: ["Pick up the file", "Retirer le dossier"],
     goAddress: ["Go to the marked address", "Rejoindre l\u2019adresse indiqu\xE9e"],
     leaveVehicle: ["{car} \xB7 Get out, then use {job}", "{car} \xB7 Descendre, puis appuyer sur {job}"],
     useMeter: ["{job} \xB7 Take a sound reading", "{job} \xB7 Relever le niveau sonore"],
     inventoryHere: ["{job} \xB7 Inventory the karaoke deck", "{job} \xB7 Inventorier le karaok\xE9"],
-    driveAuction: ["Deliver the lot to the auction hall", "Livrer le lot \xE0 l\u2019h\xF4tel des ventes"],
+    driveAuction: ["Deliver the lot", "Livrer le lot"],
+    deliverCar: ["Deliver the GT", "Livrer la GT"],
+    handOverCar: ["{job} \xB7 Hand over the GT", "{job} \xB7 Remettre la GT"],
     handOver: ["{job} \xB7 Hand over the lot", "{job} \xB7 Remettre le lot"],
     switchToTarget: ["{car} \xB7 Get out beside the yellow GT", "{car} \xB7 Descendre pr\xE8s de la GT jaune"],
     boardTarget: ["{car} \xB7 Seize the yellow GT", "{car} \xB7 Saisir la GT jaune"],
@@ -2059,7 +2213,7 @@ canvas {
     clang: ["CLANG!", "BONG !"],
     health: ["HP", "PV"],
     heat: ["Heat", "Alerte"],
-    map: ["Map", "Plan"],
+    map: ["Map & files", "Plan et dossiers"],
     closeMap: ["Close map", "Fermer le plan"],
     help: ["Controls", "Commandes"],
     audioOn: ["Sound on", "Son activ\xE9"],
@@ -3252,6 +3406,67 @@ canvas {
     if (n.down) dazedStars(n);
   }
 
+  // src/ui/waypoint.js
+  function drawRouteArrow(path) {
+    const lead = game.ride ? 26 : 17;
+    let ahead = game.ride ? 52 : 40;
+    let aim = p;
+    for (const node of path.slice(1)) {
+      const length = dist(aim, node);
+      if (length > ahead) {
+        const f = ahead / length;
+        aim = { x: aim.x + f * (node.x - aim.x), y: aim.y + f * (node.y - aim.y) };
+        break;
+      }
+      ahead -= length;
+      aim = node;
+    }
+    const angle = Math.atan2(aim.y - p.y, aim.x - p.x);
+    const position = { x: p.x + Math.cos(angle) * lead, y: p.y - 3 + Math.sin(angle) * lead };
+    g.save();
+    g.translate(position.x, position.y);
+    g.rotate(angle);
+    g.beginPath();
+    g.moveTo(5.3, 0);
+    g.lineTo(-3.6, -3.9);
+    g.lineTo(-1.8, 0);
+    g.lineTo(-3.6, 3.9);
+    g.closePath();
+    g.lineJoin = "round";
+    g.strokeStyle = "#21172b";
+    g.lineWidth = 1.9;
+    g.stroke();
+    g.fillStyle = "#ffcf59";
+    g.fill();
+    g.beginPath();
+    g.moveTo(-2.7, -3.1);
+    g.lineTo(3.7, -0.2);
+    g.strokeStyle = "#fff1bf";
+    g.lineWidth = 0.7;
+    g.stroke();
+    g.restore();
+    return position;
+  }
+  function arrivalMarker(point, lift = 0) {
+    const rest = point.y - lift - 2;
+    const y = rest + 0.6 * Math.sin(game.time * 3);
+    g.save();
+    g.beginPath();
+    g.moveTo(point.x - 3.5, y - 3.8);
+    g.lineTo(point.x, y - 2.8);
+    g.lineTo(point.x + 3.5, y - 3.8);
+    g.lineTo(point.x, y + 0.6);
+    g.closePath();
+    g.strokeStyle = "#221728";
+    g.lineJoin = "round";
+    g.lineWidth = 1.5;
+    g.stroke();
+    g.fillStyle = "#ffda6e";
+    g.fill();
+    g.restore();
+    return { x: point.x, y: rest - 2.6 };
+  }
+
   // src/scenes/interiors.js
   var interior = null;
   function enterInterior(id) {
@@ -3291,7 +3506,7 @@ canvas {
     p.walkDistance = last + travelled;
     if (Math.floor(last / 6.8) !== Math.floor(p.walkDistance / 6.8)) footfall(Math.floor(p.walkDistance / 6.8));
   }
-  function drawInterior() {
+  function drawInterior(anchor) {
     const { room } = interior, scale = Math.min(game.vw / room.width, game.vh / room.height);
     const left = (game.vw - room.width * scale) / 2, top = (game.vh - room.height * scale) / 2;
     rect(g, 0, 0, game.vw, game.vh, "#171420");
@@ -3300,10 +3515,10 @@ canvas {
     g.scale(scale, scale);
     g.drawImage(artwork[room.image], 0, 0, room.width, room.height);
     dude(p, true);
+    if (anchor) arrivalMarker(anchor);
     g.restore();
     hud("#district", t(room.door) + " / Port-Fer");
     hud("#hint", t(indoorAction() || "officeFloor"));
-    $("#routeCard").hidden = true;
     $("#reportBtn").hidden = true;
   }
 
@@ -3407,6 +3622,9 @@ canvas {
 
   // src/game/cases.js
   var files = ["repo", "noise", "flat"];
+  function nextFile() {
+    return files.find((id) => !done.has(id));
+  }
   var locations = {
     office: ["Bailiff\u2019s office", "\xC9tude"],
     repo: ["Cr\xE9dit Sec", "Cr\xE9dit Sec"],
@@ -3418,8 +3636,7 @@ canvas {
   var placeName = (id) => locations[id][lang === "fr" ? 1 : 0];
   function goal() {
     if (!game.active) {
-      const nextFile = files.find((id) => !done.has(id));
-      return jobs.find((job) => job.id === nextFile) || null;
+      return town.byId.get(nextFile()) || null;
     }
     if (game.active === "repo") return game.ride === target ? auction : target;
     if (game.stage === "deliver") return auction;
@@ -5032,12 +5249,12 @@ canvas {
     return { a, ends, horizontal };
   }
   var routeCache;
-  function directions() {
+  function directions(origin = p) {
     const end = goal();
     if (!end) return null;
-    if (routeCache && routeCache.vehicle === game.ride && routeCache.end === end && dist(routeCache.start, p) < 3 && dist(routeCache.lastEnd, end) < 2)
+    if (routeCache && routeCache.vehicle === game.ride && routeCache.end === end && dist(routeCache.start, origin) < 3 && dist(routeCache.lastEnd, end) < 2)
       return routeCache;
-    const start = { x: p.x, y: p.y }, finish = { x: end.x, y: end.y }, a = streetAnchor(start), b = streetAnchor(finish);
+    const start = { x: origin.x, y: origin.y }, finish = { x: end.x, y: end.y }, a = streetAnchor(start), b = streetAnchor(finish);
     let options = [];
     if (a.horizontal && b.horizontal && a.a.y === b.a.y || !a.horizontal && !b.horizontal && a.a.x === b.a.x)
       options.push([start, a.a, b.a, finish]);
@@ -5256,7 +5473,8 @@ canvas {
   }
 
   // src/ui/guidance.js
-  function atObjective(end) {
+  function atObjective(end, room) {
+    if (room) return dist(p, end) < (game.active ? 11 : 15);
     return dist(end, p) < (end === target ? 22 : 36);
   }
   function routeInstruction(end) {
@@ -5265,32 +5483,79 @@ canvas {
       return "callRecovery";
     if (!game.active) return near ? "openFile" : "visitPickup";
     if (game.active === "repo")
-      return game.ride === target ? near ? "handOver" : "driveAuction" : near ? game.ride ? "switchToTarget" : "boardTarget" : "northBoulevard";
+      return game.ride === target ? near ? "handOverCar" : "deliverCar" : near ? game.ride ? "switchToTarget" : "boardTarget" : "northBoulevard";
     if (game.stage === "deliver") return near ? "handOver" : "driveAuction";
     if (near) return game.ride ? "leaveVehicle" : game.active === "noise" ? "useMeter" : "inventoryHere";
-    return "goAddress";
+    return game.active === "noise" ? "record" : "tagLot";
   }
-  function routeHUD(end) {
+  function routeHUD(end, room) {
     const card = $("#routeCard");
     card.hidden = !end || game.viewMap;
     if (card.hidden) return;
-    const id = end === target ? "target" : end.id, near = atObjective(end), compass = $("#compass");
-    const bearing = Math.atan2(end.y - p.y, end.x - p.x);
-    compass.style.transform = near ? "none" : "rotate(" + bearing + "rad)";
-    hud("#compass", near ? "\u25CF" : "\u279C");
-    hud("#routeType", game.active ? t(game.active) : t("nextCase") + " \xB7 " + t(id));
-    hud("#routePlace", placeName(id));
-    hud("#routeDistance", near ? t("onSite") : Math.round(dist(p, end) * 0.15) + " m");
-    hud("#routeAction", t(routeInstruction(end)));
+    const file = game.active || nextFile();
+    const near = atObjective(end, room);
+    const step = room ? game.active ? near ? "leaveRoom" : "exitRoute" : near ? "caseDesk" : "deskRoute" : routeInstruction(end);
+    hud("#routeType", t(game.active ? "currentCase" : "nextCase"));
+    hud("#routeTitle", t(file));
+    hud("#routeBrief", t(file + "Summary"));
+    hud("#routePlace", placeName(room ? room.door : end === target ? "target" : end.id));
+    hud("#routeDistance", near ? t("onSite") : room ? "" : Math.round(dist(p, end) * 0.15) + " m");
+    hud("#routeAction", t(step));
+  }
+  var sheetLanguage;
+  function showMapSheet(end) {
+    const sheet = $("#mapSheet");
+    if (!sheet.hidden && sheetLanguage === lang) return;
+    sheet.hidden = false;
+    sheetLanguage = lang;
+    hud("#mapTitle", t("cityMap"));
+    hud("#mapKey span:first-child", t("legend1"));
+    hud("#mapKey span:last-child", t("legend2"));
+    hud("#filesTitle", t("casebook"));
+    const list = $("#fileList");
+    list.replaceChildren();
+    const open = files.filter((id) => !done.has(id) && id !== game.active);
+    const tracked = game.active || nextFile();
+    for (const id of game.active ? [game.active, ...open] : open) {
+      const row = document.createElement("li");
+      const address = town.byId.get(id);
+      const pin2 = document.createElement("b");
+      pin2.className = "filePin";
+      pin2.textContent = address.symbol;
+      pin2.style.backgroundColor = address.color;
+      const details = document.createElement("div");
+      const status = document.createElement("small");
+      const state = id === tracked ? game.active ? "currentCase" : "nextCase" : game.active ? "waitingCase" : "openCase";
+      status.textContent = id === game.active ? t(state) : t(state) + " \xB7 " + placeName(id);
+      const name = document.createElement("strong");
+      name.textContent = t(id);
+      const brief = document.createElement("p");
+      brief.textContent = t(id + "Summary");
+      details.append(status, name, brief);
+      if (id === game.active) {
+        const step = document.createElement("p");
+        step.className = "fileStep";
+        step.textContent = placeName(end === target ? "target" : end.id) + " \xB7 " + t(objective());
+        details.append(step);
+      }
+      row.append(pin2, details);
+      list.append(row);
+    }
+    hud("#filesNote", !tracked ? t("filesClosed") : game.active ? open.length ? t("filesWaiting") : "" : t("fileSources"));
+    $("#casebook").scrollTop = 0;
   }
 
   // src/ui/renderer.js
-  function speech(s, x, y, viewportLeft) {
+  var addressPinHeight = 23;
+  function speech(s, x, y, viewportLeft, markers) {
     g.save();
     g.font = "bold 4px system-ui";
     g.textAlign = "center";
     const width = g.measureText(s).width + 5;
     const center = Math.max(viewportLeft + width / 2 + 1, Math.min(x, viewportLeft + game.vw - width / 2 - 1));
+    for (const marker of markers.sort((a, b) => b.y - a.y))
+      if (Math.abs(marker.x - center) < width / 2 + 6 && Math.abs(marker.y - y) < 11)
+        y = marker.y - 11;
     rect(g, center - width / 2, y - 5, width, 7, "#201728");
     rect(g, center - width / 2 + 0.45, y - 4.55, width - 0.9, 6.1, "#ffe7bc");
     g.fillStyle = "#ffe7bc";
@@ -5319,26 +5584,32 @@ canvas {
       g.textAlign = "left";
     }
   }
-  function map(x, y, w, h, full) {
-    let scale = Math.min(w / W, h / H), mw = W * scale, mh = H * scale;
-    rect(g, x - 2, y - 2, mw + 4, mh + 4, "#d3b991");
-    rect(g, x, y, mw, mh, "#363343");
-    for (let rx of roadsX) rect(g, x + rx * scale - 1, y, full ? 1.4 : 0.45, mh, "#8a8390");
-    for (let ry of roadsY) rect(g, x, y + ry * scale - 1, mw, full ? 1.4 : 0.45, "#8a8390");
-    rect(g, x, y + (canalTop + 23) * scale, mw, (canalBottom - canalTop - 49) * scale, "#397483");
-    for (let rx of roadsX)
+  function map(left, top, w, h, full, origin = p) {
+    rect(g, left - 2, top - 2, w + 4, h + 4, "#d3b991");
+    rect(g, left, top, w, h, "#363343");
+    const inset = full ? 5 : 2;
+    const scale = Math.min((w - 2 * inset) / W, (h - 2 * inset) / H);
+    const mw = W * scale, mh = H * scale;
+    const x = left + (w - mw) / 2, y = top + (h - mh) / 2;
+    g.save();
+    const roadWidth = full ? 1.4 : 0.45;
+    for (const rx of roadsX) rect(g, x + rx * scale - roadWidth / 2, top, roadWidth, h, "#8a8390");
+    for (const ry of roadsY) rect(g, left, y + ry * scale - roadWidth / 2, w, roadWidth, "#8a8390");
+    rect(g, left, y + (canalTop + 23) * scale, w, (canalBottom - canalTop - 49) * scale, "#397483");
+    const bridgeWidth = Math.max(1, 28 * scale);
+    for (const rx of roadsX)
       rect(
         g,
-        x + (rx - 14) * scale,
+        x + rx * scale - bridgeWidth / 2,
         y + (canalTop + 23) * scale,
-        Math.max(1, 28 * scale),
+        bridgeWidth,
         (canalBottom - canalTop - 49) * scale,
         "#a39a99"
       );
-    const nav = directions();
+    const nav = directions(origin);
     if (nav) {
       g.beginPath();
-      g.moveTo(x + p.x * scale, y + p.y * scale);
+      g.moveTo(x + origin.x * scale, y + origin.y * scale);
       for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
       g.strokeStyle = "#ffe080";
       g.lineWidth = full ? 1.1 : 0.42;
@@ -5348,21 +5619,49 @@ canvas {
     let q = goal();
     if (q) {
       g.strokeStyle = "#ffe18a";
-      g.lineWidth = 1;
+      g.lineWidth = full ? 1 : 0.45;
       g.beginPath();
-      g.arc(x + q.x * scale, y + q.y * scale, 5 + Math.sin(game.time * 3), 0, TAU);
+      const pulse = Math.sin(game.time * 3);
+      g.arc(x + q.x * scale, y + q.y * scale, full ? 5 + pulse : 2.05 + pulse * 0.2, 0, TAU);
       g.stroke();
     }
-    const px = x + p.x * scale, py = y + p.y * scale;
-    rect(g, px - 1.1, py - 1.1, 2.2, 2.2, "#131524");
-    rect(g, px - 0.6, py - 0.6, 1.3, 1.3, "#fff8e9");
+    const px = x + origin.x * scale, py = y + origin.y * scale;
+    const radius = full ? 2.5 : 1.05;
+    g.beginPath();
+    g.moveTo(px, py - radius);
+    g.lineTo(px + radius, py);
+    g.lineTo(px, py + radius);
+    g.lineTo(px - radius, py);
+    g.closePath();
+    g.strokeStyle = "#131524";
+    g.lineWidth = full ? 1.35 : 0.55;
+    g.stroke();
+    g.fillStyle = "#fff8e9";
+    g.fill();
+    g.restore();
+  }
+  function drawFullMap(end, origin) {
+    showMapSheet(end);
+    rect(g, 0, 0, game.vw, game.vh, "#151521eb");
+    const area = $("#mapWindow").getBoundingClientRect();
+    const unit = game.vw / innerWidth;
+    const w = Math.min(area.width * unit, area.height * unit * W / H, 225);
+    const h = w * H / W;
+    const x = (area.left + area.width / 2) * unit - w / 2;
+    const y = (area.top + area.height / 2) * unit - h / 2;
+    map(x, y, w, h, true, origin);
   }
   function district() {
     return p.y < canalTop ? p.x < 548 ? "Les Abattoirs" : p.x < 1030 ? "Centre-Ville" : "Quartier des Pr\xEAts" : p.y < canalBottom ? "Canal Saint-Proc\xE8s" : p.x < 825 ? "Les Docks" : "La Foire";
   }
   function draw() {
     if (interior) {
-      drawInterior();
+      const room = interior.room;
+      const anchor = game.active ? room.exit : nextFile() ? room.desk : null;
+      drawInterior(anchor && !atObjective(anchor, room) ? anchor : null);
+      routeHUD(anchor, room);
+      if (game.viewMap) drawFullMap(goal(), interior.returnTo);
+      else $("#mapSheet").hidden = true;
       return;
     }
     const { left: ox, top: oy } = viewport(game.camX, game.camY, game.vw, game.vh, W, H);
@@ -5395,6 +5694,13 @@ canvas {
       g.stroke();
       g.restore();
     }
+    const markers = [];
+    for (const j2 of jobs) {
+      if (done.has(j2.id) || !visible(j2)) continue;
+      const y = j2.y - addressPinHeight + Math.sin(game.time * 3) * 0.5;
+      pin(j2, j2.x, y);
+      markers.push({ x: j2.x, y: j2.y - addressPinHeight - 0.5 });
+    }
     const actors = cars.filter(visible).map((o) => ({ o, car: true, medical: o.medical }));
     for (const n of people) if (!n.onStretcher && visible(n)) actors.push({ o: n });
     if (ambulance) {
@@ -5417,13 +5723,15 @@ canvas {
       else dude(a.o, a.o === p);
     }
     for (const rail of rails) rail.draw(true);
-    for (const j2 of jobs)
-      if (!done.has(j2.id) && visible(j2)) pin(j2, j2.x, j2.y - 15 + Math.sin(game.time * 3) * 0.5);
+    if (end && !game.viewMap) {
+      if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
+      if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
+    }
     if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {
       const speaker = taunt.speaker;
       const height = speaker.look === "flatCap" || speaker.look === "rigger" ? 15 : 18;
-      speech(t(tauntLine(taunt)), speaker.x, speaker.y - height, ox);
-    } else if (game.quipTime > 0) speech(t("catch"), p.x, p.y - (game.ride ? 22 : 24), ox);
+      speech(t(tauntLine(taunt)), speaker.x, speaker.y - height, ox, markers);
+    } else if (game.quipTime > 0) speech(t("catch"), p.x, p.y - (game.ride ? 22 : 24), ox, markers);
     for (const f of fx) {
       g.save();
       g.textAlign = "center";
@@ -5439,20 +5747,20 @@ canvas {
     g.restore();
     const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
     const mw = compact ? 27 : 33, mh = mw * H / W;
-    if (!game.viewMap) map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
     routeHUD(end);
     if (game.viewMap) {
-      rect(g, 0, 0, game.vw, game.vh, "#151521eb");
-      const w = Math.min(game.vw - 16, (game.vh - 94) * W / H, 225), h = w * H / W, x = (game.vw - w) / 2, y = (game.vh - h) / 2;
-      map(x, y, w, h, true);
-      label(g, t("cityMap"), x, y - 4, "#ffcf65", 5);
-      label(g, t("legend1"), x, y + h + 7, "#ffe2b2", 4.5);
-      label(g, t("legend2"), x, y + h + 14, "#ffe2b2", 4.5);
+      drawFullMap(end, p);
+    } else {
+      $("#mapSheet").hidden = true;
+      map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
     }
     hud("#district", district() + "  /  Port-Fer");
     hud(
       "#stats",
-      "\u20AC" + game.wallet + "  \xB7  " + t("health") + " " + p.hp + "/5  \xB7  " + t("heat") + " " + Math.ceil(game.heat) + "/3" + (game.ride ? "\u3000" + Math.round(Math.abs(game.ride.speed) * 0.53) + " km/h\u3000\xB7\u3000" + t("vehicle") + " " + game.ride.condition + "%" : "")
+      "\u20AC" + game.wallet + "  \xB7  " + t("health") + " " + p.hp + "/5  \xB7  " + t("heat") + " " + Math.ceil(game.heat) + "/3" + (game.ride ? (
+        // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
+        "\u3000" + Math.round(Math.abs(game.ride.speed) * 0.53) + "\xA0km/h\xA0\xA0\xB7\xA0\xA0" + t("vehicle") + "\xA0" + game.ride.condition + "%"
+      ) : "")
     );
     const j = jobs.find((j2) => dist(j2, p) < 36);
     const nearJob = j ? t("jobKey") + " \xB7 " + t(j.name) : "";
@@ -5635,7 +5943,7 @@ canvas {
     vehicleSignalSound(mode);
   }
   function toggleMap() {
-    if (panel.open || interior) return;
+    if (panel.open) return;
     game.viewMap = !game.viewMap;
     konamiProgress = 0;
     held.clear();
@@ -5665,6 +5973,11 @@ canvas {
   }
   function press(k, source) {
     if (source !== controller) startAudio();
+    if (k === "map") {
+      toggleMap();
+      return;
+    }
+    if (game.viewMap || panel.open) return;
     if (interior) {
       if (k === "job") interact();
       else if (["up", "down", "left", "right", "run"].includes(k)) held.add(k, source);
@@ -5674,11 +5987,6 @@ canvas {
       speak();
       return;
     }
-    if (k === "map") {
-      toggleMap();
-      return;
-    }
-    if (game.viewMap || panel.open) return;
     if (k === "horn") {
       if (!game.ride || game.ride.condition === 0) return;
       if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
@@ -5697,6 +6005,7 @@ canvas {
   addEventListener("keydown", (e) => {
     if (!e.ctrlKey && !e.metaKey && !e.altKey) setGamepadMode(false);
     if (panel.open) return;
+    if (game.viewMap && e.target === $("#casebook") && e.key.startsWith("Arrow")) return;
     if ((e.key === " " || e.key === "Enter") && e.target.matches?.("button:focus-visible")) return;
     if (enterKonamiKey(e)) {
       e.preventDefault();
@@ -5807,6 +6116,8 @@ canvas {
       showHelp();
     } else if (pressed.has("map") || game.viewMap && pressed.has("back")) {
       toggleMap();
+    } else if (game.viewMap && sample.menuScroll) {
+      $("#casebook").scrollTop += sample.menuScroll * dt * 420;
     } else if (game.artReady && !game.viewMap) {
       for (const key of pressed) {
         if (enterKonamiKey({ key: controllerKonami[key] || key })) continue;

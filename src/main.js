@@ -61,7 +61,7 @@ function updateVehicleSignal() {
 }
 
 function toggleMap() {
-  if (panel.open || interior) return;
+  if (panel.open) return;
   game.viewMap = !game.viewMap;
   konamiProgress = 0;
   held.clear();
@@ -90,6 +90,11 @@ function startAudio() {
 }
 function press(k, source) {
   if (source !== controller) startAudio();
+  if (k === "map") {
+    toggleMap();
+    return;
+  }
+  if (game.viewMap || panel.open) return;
   if (interior) {
     if (k === "job") interact();
     else if (["up", "down", "left", "right", "run"].includes(k)) held.add(k, source);
@@ -99,11 +104,6 @@ function press(k, source) {
     speak();
     return;
   }
-  if (k === "map") {
-    toggleMap();
-    return;
-  }
-  if (game.viewMap || panel.open) return;
   if (k === "horn") {
     if (!game.ride || game.ride.condition === 0) return;
     if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
@@ -122,6 +122,7 @@ const pointerSource = (e) => `pointer:${e.pointerId}`;
 addEventListener("keydown", (e) => {
   if (!e.ctrlKey && !e.metaKey && !e.altKey) setGamepadMode(false);
   if (panel.open) return;
+  if (game.viewMap && e.target === $("#casebook") && e.key.startsWith("Arrow")) return;
   if ((e.key === " " || e.key === "Enter") && e.target.matches?.("button:focus-visible")) return;
   if (enterKonamiKey(e)) {
     e.preventDefault();
@@ -238,6 +239,8 @@ function updateGamepad(dt) {
     showHelp();
   } else if (pressed.has("map") || (game.viewMap && pressed.has("back"))) {
     toggleMap();
+  } else if (game.viewMap && sample.menuScroll) {
+    $("#casebook").scrollTop += sample.menuScroll * dt * 420;
   } else if (game.artReady && !game.viewMap) {
     for (const key of pressed) {
       if (enterKonamiKey({ key: controllerKonami[key] || key })) continue;

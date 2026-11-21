@@ -18,18 +18,18 @@ function streetAnchor(point) {
   return { a, ends, horizontal };
 }
 let routeCache;
-function directions() {
+function directions(origin = p) {
   const end = goal();
   if (!end) return null;
   if (
     routeCache &&
     routeCache.vehicle === game.ride &&
     routeCache.end === end &&
-    dist(routeCache.start, p) < 3 &&
+    dist(routeCache.start, origin) < 3 &&
     dist(routeCache.lastEnd, end) < 2
   )
     return routeCache;
-  const start = { x: p.x, y: p.y },
+  const start = { x: origin.x, y: origin.y },
     finish = { x: end.x, y: end.y },
     a = streetAnchor(start),
     b = streetAnchor(finish);

@@ -12,25 +12,42 @@
       id="game"
       aria-label="Overhead street map of Port-Fer. Move with arrows, WASD or ZQSD. Use F for cars, E for jobs, Space for action."
     ></canvas>
-    <div id="top">
-      <div id="brand">
-        <h1>Signé, Maître !</h1>
-        <div id="district"></div>
+    <div id="streetHeader">
+      <div id="top">
+        <div id="brand">
+          <h1>Signé, Maître !</h1>
+          <div id="district"></div>
+        </div>
+        <div id="stats"></div>
       </div>
-      <div id="stats"></div>
+      <div id="tools">
+        <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
+        ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
+        ><button id="language">FR</button><button id="vehicleSignal" data-key="horn" hidden>Horn</button>
+      </div>
+      <aside id="routeCard" hidden>
+        <div class="fileMeta"><small id="routeType"></small><b id="routeDistance"></b></div>
+        <strong id="routeTitle"></strong>
+        <span id="routeBrief"></span>
+        <div id="routeStep"><b id="routePlace"></b><span id="routeAction"></span></div>
+      </aside>
     </div>
-    <div id="tools">
-      <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
-      ><button id="help">Keys</button><button id="sound">Sound off</button><button id="quip">Quip</button
-      ><button id="language">FR</button><button id="vehicleSignal" data-key="horn" hidden>Horn</button>
+    <section id="mapSheet" hidden aria-labelledby="mapTitle">
+      <div id="mapColumn">
+        <h2 id="mapTitle"></h2>
+        <div id="mapWindow"></div>
+        <div id="mapKey"><span></span><span></span></div>
+      </div>
+      <section id="casebook" tabindex="0" aria-labelledby="filesTitle">
+        <h2 id="filesTitle"></h2>
+        <ol id="fileList"></ol>
+        <p id="filesNote"></p>
+      </section>
+    </section>
+    <div id="streetMessages">
+      <div id="ticker" role="status"></div>
+      <div id="hint"></div>
     </div>
-    <aside id="routeCard" hidden>
-      <span id="compass" aria-hidden="true">➜</span>
-      <div><small id="routeType"></small><strong id="routePlace"></strong><span id="routeAction"></span></div>
-      <b id="routeDistance"></b>
-    </aside>
-    <div id="ticker" role="status"></div>
-    <div id="hint"></div>
     <div id="keys">
       ↑ ↓ ← → / WASD / ZQSD &nbsp; Move or drive　 F &nbsp; Enter / exit　 SPACE &nbsp; Slap / handbrake　 E
       &nbsp; Job　 M &nbsp; Map
