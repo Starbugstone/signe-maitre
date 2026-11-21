@@ -116,3 +116,50 @@ test("a car crossing an arriving ambulance creates an impact before the van is s
   assert.ok(van.condition < 100 && car.condition < 100);
   assert.equal(van.speed, 0);
 });
+function settle() {
+  // Let earlier vans finish and drive out of sight before a scene is staged.
+  people.length = 0;
+  parkPlayer(100, 100);
+  for (let i = 0; i < 60 * 90 && (rescue.ambulance || cars.some((c) => rescue.inService(c))); i++)
+    rescueTick();
+  assert.equal(rescue.ambulance, null);
+  cars.length = 0;
+}
+test("a van boxed in short of the scene backs out and another approach reaches the patient", () => {
+  settle();
+  parkPlayer(1295, 278);
+  const waiting = patient(p.x + 6, p.y);
+  rescueTick();
+  const van = rescue.ambulance;
+  assert.ok(van);
+  // A stalled car straddles the lane well before the van is close enough to park early.
+  const wreck = {
+    x: van.x + 40 * van.dx,
+    y: van.y + 40 * van.dy,
+    a: van.a,
+    speed: 0,
+    slideX: 0,
+    slideY: 0,
+    condition: 100,
+  };
+  cars.push(wreck);
+  const gap = (v) => Math.hypot(v.x - wreck.x, v.y - wreck.y);
+  for (let i = 0; i < 60 * 2; i++) rescueTick();
+  assert.equal(rescue.ambulance, van, "a short hold-up is not a reason to leave");
+  const boxed = gap(van);
+  assert.ok(Math.hypot(van.x - waiting.x, van.y - waiting.y) > 80);
+  let replacement = null;
+  for (let i = 0; i < 60 * 4 && !replacement; i++) {
+    rescueTick();
+    if (rescue.ambulance && rescue.ambulance !== van) replacement = rescue.ambulance;
+  }
+  assert.ok(replacement, "dispatch stays jammed behind the first van");
+  assert.equal(van.state, "leaving");
+  assert.equal(carContact(replacement, wreck), null);
+  for (let i = 0; i < 45; i++) rescueTick();
+  assert.ok(!cars.includes(van) || gap(van) > boxed + 4, "the first van reverses clear");
+  for (let i = 0; i < 60 * 60 && people.includes(waiting); i++) rescueTick();
+  assert.ok(!people.includes(waiting));
+  assert.equal(replacement.loaded, 1);
+  assert.ok(!cars.includes(van));
+});

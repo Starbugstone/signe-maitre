@@ -104,3 +104,20 @@ test("an obstructed dispatch waits instead of appearing on camera", () => {
     null,
   );
 });
+test("ambulances approach with the traffic in their lane", () => {
+  // Block circuits run clockwise: north and east lanes carry westbound and northbound cars.
+  for (const [x, y] of [
+    [X(4) + 60, Y(1) - 22],
+    [X(1) + 60, Y(3) - 22],
+    [X(3) + 80, Y(4) - 20],
+    [X(3) + 20, Y(3) + 60],
+    [X(1) + 20, Y(0) + 70],
+  ]) {
+    const { col, row } = town.cellAt(x, y);
+    const route = planApproach({ x, y }, viewport(x, y, 290, 185, town.width, town.height), () => false);
+    assert.ok(route, `no route at ${x},${y}`);
+    const lane = route.stop.horizontal ? route.stop.y - Y(row) : X(col) - route.stop.x;
+    assert.notEqual(lane, 0);
+    assert.equal(route.dx + route.dy, Math.sign(lane), `against the flow at ${x},${y}`);
+  }
+});

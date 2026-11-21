@@ -125,6 +125,7 @@ function releaseVan(v) {
   v.clock = 0;
   v.crew = 0;
   v.state = "leaving";
+  v.mark = null;
   departing.add(v);
   if (ambulance === v) ambulance = null;
 }
@@ -141,12 +142,33 @@ function park(v) {
 function stopMotion(v) {
   v.speed = v.slideX = v.slideY = 0;
 }
+// True once a van has gained no ground for `stallLimit` seconds. Waiting for the CJ
+// to cross is a courtesy, so it does not count.
+const stallLimit = 3;
+function stalled(v, dt) {
+  if (v.yielding || !v.mark || dist(v, v.mark) > 4) {
+    v.mark = { x: v.x, y: v.y };
+    v.stall = 0;
+    return false;
+  }
+  v.stall += dt;
+  return v.stall >= stallLimit;
+}
+// A van boxed in short of the scene backs out the way it came. Dispatch is then free
+// to plan another approach around whatever is in the road.
+function standDown(v) {
+  releaseVan(v);
+  v.reversing = true;
+}
+// `distance` is signed along the van's heading. Negative values reverse.
 function medicalDrive(v, distance, dt) {
+  v.yielding = false;
   if (!dt || !distance) return true;
   const next = { ...v, x: v.x + distance * v.dx, y: v.y + distance * v.dy };
   // The driver yields to the CJ crossing on foot, just as ordinary traffic does.
   if (!game.ride && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
     stopMotion(v);
+    v.yielding = true;
     return false;
   }
   const speed = distance / dt;
@@ -155,7 +177,7 @@ function medicalDrive(v, distance, dt) {
   v.slideY = speed * v.dy;
   const leavesTown = v.state === "leaving" && (next.x < 6 || next.x > W - 6 || next.y < 6 || next.y > H - 6);
   if (!leavesTown && blocked(next.x, next.y, 6)) {
-    recordImpact(v, speed, null);
+    recordImpact(v, Math.abs(speed), null);
     stopMotion(v);
     return false;
   }
@@ -252,6 +274,7 @@ function updateAmbulance(dt) {
     if (medicalDrive(v, step, dt)) {
       if (left <= step) park(v);
     } else if (v.condition && dist(v, v.patient) < 80) park(v);
+    if (v.state === "arriving" && stalled(v, dt)) standDown(v);
   } else if (v.state === "collecting") {
     const n = v.patient;
     if (v.clock < v.travel) v.crew = v.clock / v.travel;
@@ -278,12 +301,17 @@ function advanceDeparture(v, dt) {
     return;
   }
   v.clock += dt;
-  const speed = Math.min(84, v.speed + 45 * dt);
   if (v.clock > 2 && outsideView(v, streetView())) {
     retire(v);
     return;
   }
-  medicalDrive(v, dt * speed, dt);
+  const speed = Math.min(v.reversing ? 34 : 84, Math.abs(v.speed) + 45 * dt);
+  medicalDrive(v, (v.reversing ? -1 : 1) * dt * speed, dt);
+  // Hemmed in on one side: try the other way out.
+  if (stalled(v, dt)) {
+    v.reversing = !v.reversing;
+    v.mark = null;
+  }
 }
 function medicalCrew(v) {
   const n = v.patient,

@@ -28,7 +28,12 @@ export function planApproach(patient, view, occupied) {
       for (const shift of [0, 14, -14, 27, -27]) {
         const apron = point(along + shift, centre + curb * inset);
         if (!walkableBetween(apron, patient)) continue;
-        for (const sign of along < extent / 2 ? [-1, 1] : [1, -1]) {
+        // Enter with the traffic in that lane: block circuits run clockwise, so the north
+        // and east lanes head west and north. The centre line has no flow to follow.
+        const offset = curb * inset,
+          flow = horizontal ? Math.sign(offset) : -Math.sign(offset),
+          first = flow || (along < extent / 2 ? -1 : 1);
+        for (const sign of [first, -first]) {
           const end = along + shift + sign * 24;
           if (end < 17 || end > extent - 17) continue;
           let start = end - sign * 65;

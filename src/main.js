@@ -1,5 +1,6 @@
 import { interior, updateInterior } from "./scenes/interiors.js";
 import { $, panel } from "./platform/canvas.js";
+import { control, released } from "./platform/keys.js";
 import { artwork, clamp, game, held, p } from "./core/state.js";
 import { box, refreshLanguage, say, setLanguage, speak, t } from "./ui/dialogs.js";
 import { reportIncident } from "./game/rescue.js";
@@ -35,25 +36,6 @@ $("#sound").onclick = async () => {
   if (game.sound) beep(450);
   $("#sound").textContent = t(game.sound ? "audioOn" : "audioOff");
 };
-const keys = {
-  arrowup: "up",
-  w: "up",
-  z: "up",
-  arrowdown: "down",
-  s: "down",
-  arrowleft: "left",
-  a: "left",
-  q: "left",
-  arrowright: "right",
-  d: "right",
-  " ": "action",
-  f: "car",
-  e: "job",
-  r: "report",
-  m: "map",
-  v: "quip",
-  shift: "run",
-};
 function press(k) {
   if (game.sound && (!gameMix || game.audio?.state === "suspended")) enableAudio();
   if (interior) {
@@ -78,12 +60,12 @@ function press(k) {
 }
 addEventListener("keydown", (e) => {
   if (panel.open) return;
-  const k = keys[e.key.toLowerCase()];
+  const k = control(e);
   if (!k || (e.target.tagName === "BUTTON" && e.key === " " && e.target.matches(":focus-visible"))) return;
   e.preventDefault();
   if (!e.repeat) press(k);
 });
-addEventListener("keyup", (e) => held.delete(keys[e.key.toLowerCase()]));
+addEventListener("keyup", (e) => held.delete(released(e)));
 addEventListener("blur", () => {
   held.clear();
   motorSound();
