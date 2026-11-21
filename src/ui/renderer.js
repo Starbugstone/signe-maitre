@@ -1,3 +1,4 @@
+import { taunt, tauntLine } from "../game/taunts.js";
 import { viewport } from "../world/viewport.js";
 import { interior, drawInterior } from "../scenes/interiors.js";
 import { t } from "./dialogs.js";
@@ -17,23 +18,22 @@ import { routeHUD } from "./guidance.js";
 import { nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
 
-function speech() {
-  const s = t("catch"),
-    y = p.y - (game.ride ? 22 : 24);
+function speech(s, x, y, viewportLeft) {
   g.save();
   g.font = "bold 4px system-ui";
   g.textAlign = "center";
   const width = g.measureText(s).width + 5;
-  rect(g, p.x - width / 2, y - 5, width, 7, "#201728");
-  rect(g, p.x - width / 2 + 0.45, y - 4.55, width - 0.9, 6.1, "#ffe7bc");
+  const center = Math.max(viewportLeft + width / 2 + 1, Math.min(x, viewportLeft + game.vw - width / 2 - 1));
+  rect(g, center - width / 2, y - 5, width, 7, "#201728");
+  rect(g, center - width / 2 + 0.45, y - 4.55, width - 0.9, 6.1, "#ffe7bc");
   g.fillStyle = "#ffe7bc";
   g.beginPath();
-  g.moveTo(p.x - 1, y + 0.8);
-  g.lineTo(p.x + 2, y + 0.8);
-  g.lineTo(p.x, y + 3.8);
+  g.moveTo(x - 1, y + 0.8);
+  g.lineTo(x + 2, y + 0.8);
+  g.lineTo(x, y + 3.8);
   g.fill();
   g.fillStyle = "#34202d";
-  g.fillText(s, p.x, y + 0.1);
+  g.fillText(s, center, y + 0.1);
   g.restore();
 }
 function pin(j, x, y, small = false) {
@@ -161,7 +161,11 @@ function draw() {
   drawRail(ox, oy);
   for (const j of jobs)
     if (!done.has(j.id) && visible(j)) pin(j, j.x, j.y - 15 + Math.sin(game.time * 3) * 0.5);
-  if (game.quipTime > 0) speech();
+  if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {
+    const speaker = taunt.speaker;
+    const height = speaker.look === "flatCap" || speaker.look === "rigger" ? 15 : 18;
+    speech(t(tauntLine(taunt)), speaker.x, speaker.y - height, ox);
+  } else if (game.quipTime > 0) speech(t("catch"), p.x, p.y - (game.ride ? 22 : 24), ox);
   for (const f of fx) {
     g.save();
     g.textAlign = "center";

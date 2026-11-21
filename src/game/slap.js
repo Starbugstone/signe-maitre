@@ -1,6 +1,7 @@
 import { dist, fx, game, p, people } from "../core/state.js";
 import { panel } from "../platform/canvas.js";
 import { crashSound } from "../audio/mixer.js";
+import { isFighter } from "../world/population.js";
 import { move } from "../world/collision.js";
 import { inService, crewInReach, interruptRescue, knockDown } from "./rescue.js";
 import { say } from "../ui/dialogs.js";
@@ -41,7 +42,7 @@ function landSlap() {
   comboUntil = game.time + 0.85;
   crashSound(105, "slap");
   n.hits = (n.hits || 0) + 1;
-  n.anger = n.kind === "medic" ? 0 : 14;
+  n.anger = isFighter(n.kind) ? 14 : 0;
   n.stagger = 0.33;
   n.swing = 0;
   n.cool = 0.55;

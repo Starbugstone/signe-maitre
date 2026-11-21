@@ -62,6 +62,7 @@ Traffic damage depends on how fast vehicles close along the direction of impact.
 
 - [Gameplay recording with sound](port-fer-gameplay.mp4)
 - [Gameplay screenshot](port-fer-gameplay.png)
+- [French comedy references behind the street fighters’ taunts](docs/street-dialogue.md)
 - [CJ animation frames](cj-slap-frames.png) and [slow-motion comparison](cj-animation.gif)
 - [Ambulance artwork](port-fer-ambulance.png) and [in-game pickup](port-fer-rescue.png)
 - [Port-Fer concept art](signe-maitre-city.png)

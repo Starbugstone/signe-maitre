@@ -1,0 +1,13 @@
+# Les répliques de rue de Port-Fer
+
+Ces sept répliques originales peuvent être lancées par n’importe quel agresseur. La version anglaise du jeu adapte chaque vanne.
+
+| Réplique | D’où vient la blague ? |
+| --- | --- |
+| « Tu saisis ma Super Nintendo ? Sauvegarde, au moins ! » | Dans *Les Trois Frères*, l’huissier inscrit la Super Nintendo à son inventaire. À Port-Fer, la partie en cours vaut plus que la console aux yeux de son propriétaire. [La scène de l’huissier](https://www.youtube.com/watch?v=NXWejwpqsTY) |
+| « Pas d’A38, pas de saisie. Guichet suivant ! » | Dans *Les Douze Travaux d’Astérix*, obtenir le laissez-passer A38 est une épreuve à part entière. Le passant se fait guichetier pour renvoyer le maître faire la queue. [La maison qui rend fou](https://www.dailymotion.com/video/x8nneni) |
+| « Tu saisis ma tour Eiffel ? Gaffe aux allumettes ! » | François Pignon, dans *Le Dîner de cons*, construit des maquettes en allumettes. Le maître croit tenir un monument, mais un geste de travers suffit à ruiner la saisie. [Pignon et ses maquettes](https://www.gaumont.com/fr/film/le-diner-de-cons) · [La tour Eiffel en miniature](https://repertoire.cinema.mcc.gouv.qc.ca/wp-content/blogs.dir/2/files/sites/4/2008/09/117403.2.pdf) |
+| « Alors, Bialès, la Carioca, tu la factures en plus ? » | Dans *La Cité de la peur*, le commissaire Bialès danse la Carioca. Un habitant de Port-Fer soupçonne son propre commissaire de compter le numéro dans ses frais. [Le film et sa Carioca aux Archives de Cannes](https://www.cannes.com/fr/culture/archives-municipales/une-archive-une-histoire/la-cite-de-la-peur-un-tournage-a-cannes.html) |
+| « Mauvaise porte, Grimbert ! Tu viens saisir le paillasson ? » | Dans *Les Insaisissables* de Christian Gion, l’huissier Grimbert commence par saisir les biens de la mauvaise personne. Le paillasson est notre ajout. [La première saisie de Grimbert](https://fr.wikipedia.org/wiki/Les_Insaisissables) |
+| « Note « gilet », maître. Une serpillière vaudrait plus cher. » | Dans *Le Père Noël est une ordure*, Pierre prend le gilet tricoté par Thérèse pour une serpillière. Le passant reprend la confusion au moment d’estimer le bien. [Le cadeau de Thérèse](https://www.youtube.com/watch?v=rezRIUBq5zA) |
+| « Repose le Graal, Perceval ! Y a encore mes anchois dedans ! » | Dans l’épisode « En forme de Graal » de *Kaamelott*, Perceval imagine un Graal en forme de bocal à anchois. Le propriétaire tient surtout à récupérer son déjeuner. [L’épisode et la théorie de Perceval](https://kaamelott.hypnoweb.net/kaamelott/episode.119.2/S01E18-en-forme-de-graal-2973.html) |

@@ -1,4 +1,4 @@
-import { cars, p, people, rand } from "../core/state.js";
+import { cars, game, p, people, rand } from "../core/state.js";
 import { town, canalRow, TAU, X, Y } from "./town.js";
 function car(x, y, a, tint, model, route) {
   const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
@@ -8,6 +8,34 @@ function car(x, y, a, tint, model, route) {
 export const sedan = car(p.x + 11, Y(1) - 16, 0, "cream", "Étude 2000");
 export const target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
 const colors = ["blue", "olive", "rose", "silver"];
+const civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
+const fighterLooks = [
+  { look: "flatCap", konamiLook: "mariniere" },
+  { look: "bomber" },
+  { look: "rigger" },
+  { look: "chelsea" },
+  { look: "flatCap" },
+];
+let nextReinforcement = 0;
+
+export function isFighter(kind) {
+  return kind === "tough" || kind === "inspector";
+}
+
+export function fighterLook(n) {
+  return game.konamiHero && n.konamiLook ? n.konamiLook : n.look;
+}
+
+function chooseLook(kind, random) {
+  if (kind === "inspector") {
+    const look = fighterLooks[nextReinforcement];
+    nextReinforcement = (nextReinforcement + 1) % fighterLooks.length;
+    return look;
+  }
+  const looks = isFighter(kind) ? fighterLooks : civilianLooks;
+  return looks[Math.floor(random() * looks.length)];
+}
+
 export function person(x, y, kind = "local", axis = "x", random = rand) {
   const n = {
     x,
@@ -16,7 +44,7 @@ export function person(x, y, kind = "local", axis = "x", random = rand) {
     homeY: y,
     a: 0,
     phase: random() * TAU,
-    look: ["civilian", "worker", "lady"][Math.floor(random() * 3)],
+    ...chooseLook(kind, random),
     kind,
     axis,
     sign: random() < 0.5 ? -1 : 1,

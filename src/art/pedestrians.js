@@ -1,9 +1,21 @@
+import { fighterLook, isFighter } from "../world/population.js";
 import { shadow } from "./vehicles.js";
 import { g } from "../platform/canvas.js";
 import { artwork, game, held, p } from "../core/state.js";
 import { slapDuration } from "../game/slap.js";
 import { stepLength } from "../game/simulation.js";
 import { crowdPose, dazedStars } from "./emergency.js";
+
+function drawFighter(n) {
+  const vertical = Math.abs(Math.sin(n.a)) > 0.7;
+  const row = vertical ? (Math.sin(n.a) > 0 ? 1 : 2) : Math.cos(n.a) > 0 ? 0 : 3;
+  let frame = 0;
+  if (n.down) frame = 6;
+  else if (n.stagger > 0) frame = 5;
+  else if (n.swing > 0) frame = n.swing > 0.21 ? 3 : n.swing > 0.08 ? 4 : 0;
+  else if (n.moving) frame = [1, 0, 2, 0][Math.floor(n.gait) % 4];
+  g.drawImage(artwork[fighterLook(n)], frame * 144, row * 128, 144, 128, -9, -15.625, 18, 16);
+}
 
 function dude(n, player) {
   shadow(n.x, n.y, player ? 3.5 : 2.6, 1.2);
@@ -34,6 +46,8 @@ function dude(n, player) {
       // Standing pose (also at spawn): the same suit and hands as the walk, run and slap atlases.
       g.drawImage(hero.slapping, 3 * 152, row * 132, 152, 132, -9.8, -16.8, 19.6, 17);
     }
+  } else if (isFighter(n.kind)) {
+    drawFighter(n);
   } else if (n.kind === "medic") {
     if (n.down) {
       g.drawImage(artwork.medicDown, -6.2, -10.2, 12.4, 10.6);
@@ -71,6 +85,7 @@ function dude(n, player) {
     g.drawImage(artwork[n.look], cycle * 92, dir * 114, 92, 114, -5.6, -13.65, 11.2, 13.8);
   }
   g.restore();
+  if (n.down) dazedStars(n);
 }
 
 export { dude };

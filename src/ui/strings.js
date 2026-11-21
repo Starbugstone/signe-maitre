@@ -12,6 +12,13 @@ const words = {
   reportKey: ["R · Incident report", "R · Signalement"],
   incidentTitle: ["Street incident report", "Fiche d’incident"],
   outrageTitle: ["Suspected outrage · Art. 433-5", "Signalement d’outrage présumé · Art. 433-5"],
+  tauntConsole: ["Seizing my Super Nintendo? At least save my game!", "Tu saisis ma Super Nintendo ? Sauvegarde, au moins !"],
+  tauntPermit: ["No A38, no seizure. Next window!", "Pas d’A38, pas de saisie. Guichet suivant !"],
+  tauntMatches: ["Seizing my Eiffel Tower? Mind the matchsticks!", "Tu saisis ma tour Eiffel ? Gaffe aux allumettes !"],
+  tauntCarioca: ["Well, Bialès? Do you charge extra for the Carioca?", "Alors, Bialès, la Carioca, tu la factures en plus ?"],
+  tauntDoormat: ["Wrong door, Grimbert! Here to seize the doormat?", "Mauvaise porte, Grimbert ! Tu viens saisir le paillasson ?"],
+  tauntCardigan: ["Put down “cardigan”. A floorcloth would fetch more.", "Note « gilet », maître. Une serpillière vaudrait plus cher."],
+  tauntGrail: ["Put the Grail down, Perceval! My anchovies are still in it!", "Repose le Graal, Perceval ! Y a encore mes anchois dedans !"],
   bystander: ["Pedestrian", "Passant"],
   outburst: ["“You little stamp-wielding toady!”", "« Sale petit larbin à tampon ! »"],
   outrageCopy: [

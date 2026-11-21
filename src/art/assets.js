@@ -1,3 +1,8 @@
+import flatCap from "../../assets/flatCap.webp";
+import bomber from "../../assets/bomber.webp";
+import mariniere from "../../assets/mariniere.webp";
+import rigger from "../../assets/rigger.webp";
+import chelsea from "../../assets/chelsea.webp";
 import medicDown from "../../assets/medicDown.webp";
 import ambulanceWreck from "../../assets/ambulanceWreck.webp";
 import ambulanceDented from "../../assets/ambulanceDented.webp";
@@ -24,6 +29,11 @@ import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
 import canalImage from "../../assets/canal.webp";
 export const imageData = {
+  flatCap,
+  bomber,
+  mariniere,
+  rigger,
+  chelsea,
   medicDown,
   ambulanceWreck,
   ambulanceDented,

@@ -1,3 +1,4 @@
+import { callOut } from "./taunts.js";
 import { cars, dist, fx, game, held, p, people, trails } from "../core/state.js";
 import { renderMessage, say } from "../ui/dialogs.js";
 import { combo, landSlap, slap } from "./slap.js";
@@ -125,6 +126,7 @@ function update(dt) {
       n.insultCase = game.active;
       say("outburst", 3.6, "bystander");
     }
+    if (chase && !game.ride && d < 42) callOut(n);
     if (chase && d > 10) {
       n.a = Math.atan2(p.y - n.y, p.x - n.x);
       move(n, Math.cos(n.a) * dt * 51, Math.sin(n.a) * dt * 51, 3);
