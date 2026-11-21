@@ -14,10 +14,11 @@ import {
 } from "./hero-rig.js";
 import { artwork } from "../core/state.js";
 import { TAU } from "../world/town.js";
+import { dressKonami, tintKonamiSuit } from "./konami-costume.js";
 
 // Build the CJ from registered artwork. A facing has one carrying arm and folio;
 // strides replace the legs, and a strike replaces only the free shoulder and arm.
-function prepareHero() {
+function prepareHero(alternate = false) {
   const width = 152,
     height = 132;
   const sheets = {};
@@ -75,6 +76,10 @@ function prepareHero() {
     const tile = blank();
     tile.getContext("2d").putImageData(pixels, 0, 0);
     return tile;
+  }
+  function heroTile(pixels, row, windup = false) {
+    const tile = canvasOf(pixels);
+    return alternate ? dressKonami(tile, artwork.konamiHeads, row, windup) : tile;
   }
   function upperHalf(row) {
     return [[0, 0], [width, 0], ...hem[row].slice().reverse()];
@@ -289,10 +294,14 @@ function prepareHero() {
     c.fillStyle = "#df8a61";
     c.fillRect(x - 0.4, y - 1.2, 0.85, 0.75);
   }
+  function finishPose(c, frame, row) {
+    if (alternate) tintKonamiSuit(c, frame * width, row * height, width, height);
+    seal(c, row);
+  }
   for (let row = 0; row < 4; row++) {
     const stand = cell(artwork.slapping, 3, row),
       coatPixels = jacket(row, stand);
-    const coat = canvasOf(coatPixels),
+    const coat = heroTile(coatPixels, row),
       arm = freeArm(row, stand);
     for (let frame = 0; frame < 4; frame++) {
       const hit = sheets.slapping.getContext("2d");
@@ -302,7 +311,7 @@ function prepareHero() {
       if (row === 1 && (frame === 1 || frame === 2)) {
         // The arm crosses the chest from his right shoulder. Keep the left grip underneath.
         paste(pose, coatPixels, armhole(row));
-        hit.drawImage(canvasOf(pose), 0, 0);
+        hit.drawImage(heroTile(pose, row), 0, 0);
         hit.save();
         if (frame === 2) {
           hit.translate(57, 35);
@@ -348,7 +357,7 @@ function prepareHero() {
           for (let i = 0; i < size; i++)
             if (palm.data[i * 4 + 3]) for (let k = 0; k < 4; k++) v[i * 4 + k] = stand.data[i * 4 + k];
         }
-        hit.drawImage(canvasOf(pose), 0, 0);
+        hit.drawImage(heroTile(pose, row, frame === 0), 0, 0);
         if (palm) {
           hit.save();
           hit.translate(88, 62);
@@ -358,7 +367,7 @@ function prepareHero() {
           hit.restore();
         }
       }
-      seal(hit, row);
+      finishPose(hit, frame, row);
       hit.restore();
       for (const key of ["walk", "run"]) {
         const c = sheets[key].getContext("2d"),
@@ -396,13 +405,13 @@ function prepareHero() {
         lean(c);
         c.drawImage(coat, 0, 0);
         if (row !== 3) gaitArm(c, arm, row, frame, key === "run");
-        seal(c, row);
+        finishPose(c, frame, row);
         c.restore();
       }
     }
   }
   for (const sheet of Object.values(sheets)) cleanEdges(sheet);
-  Object.assign(artwork, sheets);
+  return sheets;
 }
 
 export { prepareHero };

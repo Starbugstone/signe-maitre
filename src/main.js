@@ -1,6 +1,6 @@
 import { interior, updateInterior } from "./scenes/interiors.js";
 import { $, panel } from "./platform/canvas.js";
-import { control, released } from "./platform/keys.js";
+import { control, released, trackKonami } from "./platform/keys.js";
 import { artwork, clamp, game, held, p } from "./core/state.js";
 import { box, refreshLanguage, say, setLanguage, speak, t } from "./ui/dialogs.js";
 import { reportIncident } from "./game/rescue.js";
@@ -15,9 +15,11 @@ import { CELL_H, CELL_W, TAU, X, Y } from "./world/town.js";
 import { draw } from "./ui/renderer.js";
 import { imageData } from "./art/assets.js";
 
+let konamiProgress = 0;
 function toggleMap() {
   if (panel.open || interior) return;
   game.viewMap = !game.viewMap;
+  konamiProgress = 0;
   held.clear();
   $("#mapBtn").textContent = t(game.viewMap ? "closeMap" : "map");
 }
@@ -60,6 +62,15 @@ function press(k) {
 }
 addEventListener("keydown", (e) => {
   if (panel.open) return;
+  if (!game.viewMap) {
+    konamiProgress = trackKonami(e, konamiProgress);
+    if (konamiProgress === -1) {
+      konamiProgress = 0;
+      game.konamiHero = !game.konamiHero;
+      e.preventDefault();
+      return;
+    }
+  }
   const k = control(e);
   if (!k || (e.target.tagName === "BUTTON" && e.key === " " && e.target.matches(":focus-visible"))) return;
   e.preventDefault();
@@ -68,6 +79,7 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => held.delete(released(e)));
 addEventListener("blur", () => {
   held.clear();
+  konamiProgress = 0;
   motorSound();
 });
 for (const b of document.querySelectorAll("[data-key]")) {
@@ -90,7 +102,8 @@ Promise.all(
     artwork[key] = img;
   }),
 ).then(() => {
-  prepareHero();
+  artwork.hero = prepareHero();
+  artwork.konamiHero = prepareHero(true);
   prepareTown();
   game.artReady = true;
 });

@@ -17,6 +17,7 @@ import ladyImage from "../../assets/lady.webp";
 import civilianImage from "../../assets/civilian.webp";
 import motorImage from "../../assets/motor.webp";
 import walkImage from "../../assets/walk.webp";
+import konamiHeads from "../../assets/konami-heads.webp";
 import marketImage from "../../assets/market.webp";
 import garageImage from "../../assets/garage.webp";
 import docksImage from "../../assets/docks.webp";
@@ -42,6 +43,7 @@ export const imageData = {
   civilian: civilianImage,
   motor: motorImage,
   walk: walkImage,
+  konamiHeads,
   market: marketImage,
   garage: garageImage,
   docks: docksImage,

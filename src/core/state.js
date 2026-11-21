@@ -17,6 +17,7 @@ export const cars = [],
   held = new Set();
 export const game = {
   artReady: false,
+  konamiHero: false,
   ride: null,
   time: 0,
   heat: 0,

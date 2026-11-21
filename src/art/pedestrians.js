@@ -10,16 +10,17 @@ function dude(n, player) {
   g.save();
   g.translate(n.x, n.y);
   if (player) {
+    const hero = game.konamiHero ? artwork.konamiHero : artwork.hero;
     const vertical = Math.abs(Math.sin(n.a)) > 0.78;
     if (!vertical) game.lastDir = Math.cos(n.a) < 0 ? -1 : 1;
     const row = vertical ? (Math.sin(p.a) > 0 ? 1 : 2) : game.lastDir > 0 ? 0 : 3;
     if (game.flash > 0) {
       const frame = Math.min(3, Math.floor(((slapDuration - game.flash) / slapDuration) * 4));
-      g.drawImage(artwork.slapping, 152 * frame, 132 * row, 152, 132, -9.8, -16.8, 19.6, 17);
+      g.drawImage(hero.slapping, 152 * frame, 132 * row, 152, 132, -9.8, -16.8, 19.6, 17);
     } else if (n.moving) {
       const step = Math.floor((n.walkDistance || 0) / (stepLength / 2)) % 4;
       g.drawImage(
-        held.has("run") ? artwork.run : artwork.walk,
+        held.has("run") ? hero.run : hero.walk,
         step * 152,
         row * 132,
         152,
@@ -31,7 +32,7 @@ function dude(n, player) {
       );
     } else {
       // Standing pose (also at spawn): the same suit and hands as the walk, run and slap atlases.
-      g.drawImage(artwork.slapping, 3 * 152, row * 132, 152, 132, -9.8, -16.8, 19.6, 17);
+      g.drawImage(hero.slapping, 3 * 152, row * 132, 152, 132, -9.8, -16.8, 19.6, 17);
     }
   } else if (n.kind === "medic") {
     if (n.down) {
