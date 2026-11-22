@@ -22,14 +22,13 @@ function normUnit(dx, dy) {
 // Compute the exact C1-tangent entry or exit geometry for an anticlockwise roundabout in screen coords (+X right, +Y down).
 // armAngle = direction FROM roundabout centre TO the arm street.
 // Returns: { straightPt, ringPt, ringAngle, fillet: { cx, cy, r, startA, deltaA } }.
-function roundaboutFillet(cx, cy, R, armAngle, laneOffset, isEntry) {
+function roundaboutFillet(cx, cy, R, armAngle, laneOffset, isEntry, f) {
   const ax = Math.cos(armAngle),
     ay = Math.sin(armAngle);
   // In arm local frame: +v along arm (outward from centre), +u to driver's right on entry (clockwise -90° from +v).
   // Check South arm (armAngle = +pi/2, ax=0, ay=1): entry driver heads North (-v), right is East (+1, 0) = (ay, -ax).
   const ux = ay,
     uy = -ax;
-  const f = FILLET_R;
   const d = laneOffset;
   const sign = isEntry ? 1 : -1;
   // Local coords of fillet centre: u_f = sign * (d + f), v_f = sqrt((R+f)^2 - (d+f)^2).
@@ -77,7 +76,12 @@ function roundaboutFillet(cx, cy, R, armAngle, laneOffset, isEntry) {
 }
 
 // Compile a closed cycle of road node IDs from `town.roads` into C1-continuous line & arc segments.
-export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
+export function compileNodeCycle(town, nodeIds, {
+  laneOffset = RIGHT_LANE,
+  turnRadius = CORNER_R,
+  filletRadius = Math.max(FILLET_R, turnRadius),
+  ringOffset = 0,
+} = {}) {
   const n = nodeIds.length;
   if (n < 3) return null;
   const nodes = nodeIds.map((id) => town.roadNodeById.get(id));
@@ -98,11 +102,11 @@ export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
       outLaneY = ox * laneOffset;
 
     if (curr.kind === "roundabout") {
-      const R = roundaboutCircRadius(curr);
+      const R = roundaboutCircRadius(curr) + ringOffset;
       const armIn = Math.atan2(prev.y - curr.y, prev.x - curr.x);
       const armOut = Math.atan2(next.y - curr.y, next.x - curr.x);
-      const entry = roundaboutFillet(curr.x, curr.y, R, armIn, laneOffset, true);
-      const exit = roundaboutFillet(curr.x, curr.y, R, armOut, laneOffset, false);
+      const entry = roundaboutFillet(curr.x, curr.y, R, armIn, laneOffset, true, filletRadius);
+      const exit = roundaboutFillet(curr.x, curr.y, R, armOut, laneOffset, false, filletRadius);
       // Anticlockwise sweep on screen = negative deltaA (strictly in (-TAU, 0)).
       let deltaA = wrapAngle(exit.ringAngle - entry.ringAngle);
       if (deltaA >= -0.05) deltaA -= TAU;
@@ -154,7 +158,7 @@ export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
     // Standard corner turn (right or left turn at 90° intersection).
     // Right turn (cross > 0): corner is inside the lane at (curr + inLane + outLane) pulled back by CORNER_R.
     // Left turn (cross < 0): wider turn radius so left-turning cars swing cleanly across the junction.
-    const r = cross > 0 ? CORNER_R : CORNER_R + 2 * laneOffset;
+    const r = cross > 0 ? turnRadius : turnRadius + 2 * laneOffset;
     // Intersection of the two offset lane lines:
     // L_in:  (curr + inLane) + t * (ix, iy)
     // L_out: (curr + outLane) + u * (ox, oy)
@@ -207,7 +211,8 @@ export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
     const prevNode = nodes[(i + n - 1) % n];
     const currNode = nodes[i];
     const edgeInfo = town.roadAdj.get(prevNode.id)?.find((a) => a.to === currNode.id)?.edge;
-    const isAlley = edgeInfo?.class === "alley";
+    const roadClass = edgeInfo?.class ?? "street";
+    const isAlley = roadClass === "alley";
     const x1 = prevT.outPt.x,
       y1 = prevT.outPt.y;
     const x2 = currT.inPt.x,
@@ -224,17 +229,19 @@ export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
         a: Math.atan2(y2 - y1, x2 - x1),
         inRoundabout: false,
         isAlley,
+        roadClass,
         junction: currT.junction,
         roundaboutEntry: currT.roundaboutEntry,
       });
     }
-    for (const arc of currT.arcs) segments.push({ ...arc, isAlley });
+    const outClass = town.roadAdj.get(currNode.id)?.find((a) => a.to === nodes[(i + 1) % n].id)?.edge.class;
+    for (const arc of currT.arcs) segments.push({ ...arc, isAlley: isAlley || outClass === "alley" });
   }
   return segments.length ? segments : null;
 }
 
 // Compile legacy rectangular `{ points: [{x,y}, ...], to }` routes (used in older tests) into segments.
-export function compileLegacyPoints(points) {
+export function compileLegacyPoints(points, turnRadius = CORNER_R) {
   const n = points.length;
   if (n < 3) return null;
   const transitions = [];
@@ -249,7 +256,7 @@ export function compileLegacyPoints(points) {
       transitions.push({ inPt: curr, outPt: curr, arcs: [] });
       continue;
     }
-    const r = CORNER_R;
+    const r = turnRadius;
     const inPt = { x: curr.x - ix * r, y: curr.y - iy * r };
     const outPt = { x: curr.x + ox * r, y: curr.y + oy * r };
     const sign = cross > 0 ? 1 : -1;
@@ -333,9 +340,14 @@ export function buildTrafficLoop(town, col, row, { maxHalfWidth = 4.8 } = {}) {
           const b = town.roadNodeById.get(path[(i + 1) % path.length]);
           area += a.x * b.y - b.x * a.y;
         }
-        const ordered = area >= 0 ? path : [path[0], ...path.slice(1).reverse()];
-        const segments = compileNodeCycle(town, ordered, RIGHT_LANE);
-        return segments ? { nodeIds: ordered, segments } : null;
+        const canReverse = path.every((id, i) =>
+          (town.roadAdj.get(id) || []).some((a) => a.to === path[(i + path.length - 1) % path.length] && allowed(a)),
+        );
+        const ordered = area >= 0 || !canReverse ? path : [path[0], ...path.slice(1).reverse()];
+        const classes = ordered.map((id, i) => town.roadAdj.get(id).find((a) => a.to === ordered[(i + 1) % ordered.length]).edge.class);
+        const roadClass = classes.includes("alley") ? "alley" : classes.includes("street") ? "street" : "avenue";
+        const segments = compileNodeCycle(town, ordered, roadClass === "alley" ? { laneOffset: 2.5 } : {});
+        return segments ? { nodeIds: ordered, segments, class: roadClass } : null;
       }
       return null;
     }

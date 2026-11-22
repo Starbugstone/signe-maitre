@@ -64,16 +64,17 @@ export default async (d) => {
   });
   await d.step("board the launch and sound the horn", async () => {
     await d.press("car");
-    await d.waitFor("launch at the helm", ({ state }) => state.ride?.model === "launch");
+    await d.waitFor("launch at the helm with the cast-off ticker", ({ state, hud }) =>
+      state.ride?.model === "launch" && hud.ticker.includes(d.t("boatBoarded")),
+    );
     const button = d.device === "desktop" ? "#vehicleSignal" : "#touchSignal";
     d.expect(await d.page.locator(button).textContent() === d.t("shipHorn"), "The horn control takes the ship label");
     await Promise.all([
       d.hold(["horn"], 480),
       d.waitFor("ship horn held", ({ state }) => state.shipHorn, 2000),
     ]);
-    const { stats, ticker } = await d.hud();
+    const { stats } = await d.hud();
     d.expect(stats.includes(d.t("launch")) && stats.includes(d.t("knots")), "The helm shows knots and the launch name");
-    d.expect(ticker.includes(d.t("boatBoarded")), "The launch ticker confirms casting off");
   });
   await d.step("pass beneath the bridge", async () => {
     await lineUpForBridge(d, bridge);
@@ -91,8 +92,21 @@ export default async (d) => {
     // Make room to turn the full hull, then approach the north quay bow-first.
     await poweredUntil(d, ["up", "right"], (b) => b.y > initial.river.top + 42 && b.a > 0.7, 24);
     await poweredUntil(d, ["up", "left"], (b) => b.a < -1.12, 30);
-    const hit = await poweredUntil(d, ["up"], (b) => b.bumps > first.bumps, 24);
-    d.expect(hit.ride.y <= initial.river.top + hit.ride.halfLength + 2, "The bow struck the north quay", hit.ride);
+    // The hull can recoil after the impact. Use the bow's maximum reach and allow
+    // another approach when passing traffic makes contact in deeper water.
+    const reach = Math.hypot(first.halfLength, first.halfWidth) + 4;
+    const struckQuay = (b, previousBumps) => b.bumps > previousBumps && b.y <= initial.river.top + reach;
+    let hit = await d.state();
+    let struck = struckQuay(hit.ride, first.bumps);
+    for (let pulse = 0; pulse < 70 && !struck; pulse++) {
+      const previousBumps = hit.ride.bumps;
+      const correction = angleDiff(-Math.PI / 2, hit.ride.a) - hit.ride.yaw * 0.18;
+      const rudder = Math.abs(correction) > 0.14 ? [correction > 0 ? "right" : "left"] : [];
+      await d.hold(["up", ...rudder], 140);
+      hit = await d.state();
+      struck = struckQuay(hit.ride, previousBumps);
+    }
+    d.expect(struck, "The bow struck the north quay", hit.ride);
     d.expect(hit.ride.lastImpact >= 3 && hit.ride.condition > 0, "The quay deflects the hull and keeps the helm usable", hit.ride);
   });
   await d.step("return to the anchor", async () => {
@@ -109,10 +123,15 @@ export default async (d) => {
   await d.step("take the moored barge", async () => {
     const barge = initial.boats.find((b) => b.model === "barge" && b.mooring);
     const berth = initial.river.moorings.find((m) => m.id === barge.mooring);
-    // Patrol the north promenade in stretches so each crossing gets a fresh detour allowance.
+    // Break up the north promenade at bridge crossings. Scale the time allowance to
+    // each stretch so slower touch frames still have time to reach the next crossing.
+    const walkPromenade = async (x) => {
+      const { p } = await d.state();
+      await d.walkTo({ x, y: berth.quay.y }, { tol: 5, timeout: 15000 + 80 * Math.abs(x - p.x) });
+    };
     for (const b of initial.river.bridges.filter((b) => b.x > home.x && b.x < berth.x))
-      await d.walkTo({ x: b.x + 44, y: berth.quay.y }, { tol: 5, timeout: 22000 });
-    await d.walkTo(berth.quay, { tol: 5, timeout: 22000 });
+      await walkPromenade(b.x + 44);
+    await walkPromenade(berth.quay.x);
     await d.press("car");
     const result = await d.waitFor("barge theft", ({ state }) => state.ride?.model === "barge" && state.heat > 0);
     d.expect(result.state.heat < 1, "Taking the barge raises heat by less than a level", result.state.heat);

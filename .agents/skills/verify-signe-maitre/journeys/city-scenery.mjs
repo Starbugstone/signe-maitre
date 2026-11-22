@@ -6,7 +6,7 @@
 // screenshot at gameplay scale with the player, the street's pedestrians and traffic in it.
 import { town, X, Y } from "../../../../src/world/town.js";
 import { blockedIn } from "../../../../src/world/collision.js";
-import { brakeToStop, driveRouteTo } from "./big-city.mjs";
+import { brakeToStop, driveRouteTo, turnSlowly } from "./big-city.mjs";
 
 export const meta = { feature: "street-scenery", needs: "probe" };
 
@@ -17,14 +17,34 @@ export async function leaveCar(d) {
   return state;
 }
 export async function boardCar(d) {
-  const { sedan } = await d.state();
-  await d.walkTo({ x: sedan.x, y: sedan.y - 9 }, { tol: 13 });
+  const { sedan, p } = await d.state();
+  const canBoard = () => d.waitFor("the sedan is within boarding reach", ({ state, hud }) =>
+    Math.hypot(state.p.x - state.sedan.x, state.p.y - state.sedan.y) < 19 && hud.hint.includes(d.t("enterHint")), 1800);
+  if (!(await canBoard().catch(() => false))) {
+    // Use whichever side of the parked car is open beside the tower or a station.
+    const cos = Math.cos(sedan.a), sin = Math.sin(sedan.a);
+    const spots = [-10, 10].map((side) => ({ x: sedan.x - sin * side, y: sedan.y + cos * side }));
+    spots.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));
+    let reached = false;
+    for (const spot of spots) {
+      if (blockedIn(town, spot.x, spot.y, 2.6)) continue;
+      try {
+        await d.walkTo(spot, { tol: 6, timeout: 10000 });
+        await canBoard();
+        reached = true;
+        break;
+      } catch (error) {
+        d.note("trying the other side of the sedan", { spot, error: error.message });
+      }
+    }
+    d.expect(reached, "the player can reach the sedan", { p, sedan });
+  }
   await d.press("car");
-  await d.waitFor("back in the sedan", ({ state }) => !!state.ride, 6000);
+  await d.waitFor("back in the sedan", ({ state }) => state.ride?.label === sedan.label, 6000);
 }
 
 export default async function (d) {
-  const drive = (dest, options = {}) => driveRouteTo(d, dest, { tol: 26, timeout: 170000, maxSpeed: 58, ...options });
+  const drive = (dest, options = {}) => driveRouteTo(d, dest, { tol: 26, timeout: 170000, maxSpeed: 46, ...options });
   const near = (a, b, r) => Math.hypot(a.x - b.x, a.y - b.y) <= r;
   const arrive = async (name, dest, what, reach = 40) => {
     await d.step(name, async () => {
@@ -44,6 +64,13 @@ export default async function (d) {
   await arrive("place-de-la-contrainte", { x: X(6) + 70, y: Y(5) + 6 }, "sedan beside the obelisk roundabout");
   await arrive("arc-des-saisies", { x: X(3) + 76, y: Y(3) + 6 }, "sedan beside Arc des Saisies");
 
+  // Turn on the east arm where the road is wide, then take the next bridge south.
+  // The tour stops beside the Arc for its painting. The big-city journey covers circulation.
+  await d.step("turn-east-from-the-arc", async () => {
+    const { ride } = await turnSlowly(d, 0, 12);
+    d.expect(Math.abs(ride.a) < 0.35 && ride.condition > 0, "sedan turned toward the next bridge", ride);
+  });
+  await arrive("north-bank-bridge-approach", { x: X(4) - 6, y: Y(6) - 45 }, "sedan on the north bridge approach");
   const tower = town.monuments.find((m) => m.id === "tour-fer");
   await arrive("tour-de-fer-underpass", { x: tower.x + 60, y: tower.y - 6 }, "sedan beneath Tour de Fer");
   await d.step("tour-de-fer-on-foot", async () => {

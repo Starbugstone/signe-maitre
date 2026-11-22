@@ -46,7 +46,7 @@ The playable demo has six rows and six columns. Edit the town definition in `src
 
 ## Development
 
-The game is maintained in ES modules. `src/world/` owns layout, terrain, rail and population. `src/scenes/` handles interiors. `src/game/` contains the simulation, vehicles, cases and rescue crews. `src/art/`, `src/audio/` and `src/ui/` draw the world, synthesise sound and handle the interface. Paintings and sprite atlases live in `assets/`. The optional `tools/art/bake-ambulance.py` rebuilds the turning and damaged ambulance atlases from the painted van.
+The game is maintained in ES modules. `src/world/` owns layout, terrain, rail and population. `src/scenes/` handles interiors. `src/game/` contains the simulation, vehicles, cases and rescue crews. `src/art/`, `src/audio/` and `src/ui/` draw the world, synthesise sound and handle the interface. Paintings and sprite atlases live in `assets/`. `src/game/fleet.js` lists every vehicle with its size, handling, engine sound and artwork. The optional `tools/art/bake-vehicle.py` rebuilds the 64-heading atlases (intact, dented, wreck) from each vehicle's panel paintings, as set out in `tools/art/fleet-bake.json`; `node tools/art/fleet-sheet.mjs` draws them all as contact sheets with the game's own renderer.
 
 With Node.js 22 or later, run the following from the project folder.
 
@@ -67,6 +67,8 @@ To drive the built game in headless Chromium and keep screenshots as proof, run 
 After a knockdown, approach on foot and press **R** to record what happened and serve a copy. When the CJ is working a case and hears an insult directed at him, the report records the words as a possible *outrage*. After 12 seconds an ambulance approaches from outside the camera. Its medic can load up to four nearby patients by stretcher before leaving. Anyone still waiting can get another crew. Space can slap the medic, and F beside the ambulance lets you take the wheel. An interrupted stretcher trip leaves its patient available for help. A van that finds the road blocked short of the scene backs out, and dispatch sends another crew by a different approach. The legal reference for the report is [article 433-5 of the French Criminal Code](https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000054716075/2026-11-11).
 
 Traffic damage depends on how fast vehicles close along the direction of impact. A head-on crash can total the car. Use **E** for roadside assistance if the engine stops.
+
+The streets carry more than sedans: the near-silent Volta E, a heavy 4×4, a line bus that pulls up at its stops, a dump truck and couriers on motorbikes. Any of them can be taken with **F**, and each drives differently: the bus and the truck are slow and swing wide, the motorbike is quick, banks into its turns and folds at the first wall. In a crash the lighter vehicle takes the larger share, and a heavy one shoves parked cars aside. One of each stands at the étude's kerb, seized and waiting for the auction.
 
 ## Gameplay and art
 

@@ -123,28 +123,41 @@ Copy the framing of the existing street paintings in `assets/market.webp`, `asse
 
 ## Vehicle art contract (Astra C paints, Fable bakes every atlas)
 
-The game shows vehicles from the same elevated camera at 64 headings. The sedan and ambulance are baked from orthographic panel paintings onto a simple 3D body (`tools/art/bake-ambulance.py`, `assets/rescueVan.webp`). New vehicles use the same pipeline.
+The game shows vehicles from the same elevated camera at 64 headings. The sedan and ambulance are baked from orthographic panel paintings onto a simple 3D body (`tools/art/bake-vehicle.py`, `assets/rescueVan.webp`). New vehicles use the same pipeline.
 
 For each vehicle paint, on a transparent or flat magenta (#ff00ff) background, orthographic panels at the same pixel scale: left side, top (roof/deck), front and rear. Save as `art-src/vehicles/<id>/{side,top,front,rear}.png` plus `art-src/vehicles/<id>/spec.json` with the real length, width and height in metres and the pixel bounds of each panel. Also paint one 3/4 elevated hero view (`hero.png`) to check the baked result against.
 
 Ids: `volta` (electric saloon), `suv`, `bus`, `dumper` (dump truck, tipper body), `moto` (motorbike with a rider in the bailiff colours as a separate layer `rider.png`), `barge`, `riverboat`, `speedboat`, `launch`, `ringTrain` (one carriage plus a cab end, two-tone green; baked into `assets/ringTrainTurns.webp` and `assets/ringTrainCabTurns.webp`).
 
-Finished atlases follow the ambulance layout: 64 headings in an 8 × 8 grid, one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length and ground or waterline origin in pixels) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
+Finished atlases follow the ambulance format: 64 headings in an 8 × 8 sheet, clockwise from east, square frames (192 px for a car-sized body, larger for long ones; the json gives the size), one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length and ground or waterline origin in pixels) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
 
 ## Fleet contract (Fable publishes)
 
 `src/game/fleet.js` exports `fleet`, a map from id to:
 
 ```js
-{ id, name: { fr, en }, domain: "road" | "water" | "rail",
+{ id, label,                       // label is the interface-string key of the name: t(entry.label)
+  name: { fr, en }, domain: "road" | "water" | "rail",
   halfLength, halfWidth,           // world units; sedan is 10.95 × 4.8
-  mass, topSpeed, reverseSpeed, accel, brake, steer, grip,
+  mass, topSpeed, reverseSpeed, accel, reverseAccel, brake, steer, grip,
+  turn,                            // tightest turning radius: steering fades in below steer × turn,
+                                   // and traffic takes corners on max(8, turn)
+  pivot?,                          // a long body swings about a point this share of halfLength behind its centre
+  leans?,                          // a two-wheeler: driving keeps `vehicle.lean` in -1..1
   sound: "petrol" | "electric" | "diesel" | "moto" | "boat",
-  atlas: { intact, dented?, wreck? }, // artwork keys
-  traffic: { weight, lanes: ["avenue", "street", "alley"?] } }
+  atlas: { intact, dented, wreck, ridden?, courier?, riddenHeadings? } | null, // artwork keys; null = the sedan's run-time wrap
+  tints?: { [vehicle.tint]: { intact, dented, wreck } }, // other colours of the same model (the red Volta)
+  sprite: { frame, scale, cx, cy }, // atlas cell in px, px per world unit, ground centre in the cell
+  traffic: { weight, parked, lanes: ["avenue", "street", "alley"?], pace, stops? } }
 ```
 
-Vehicles in `cars` carry `model` (a fleet id). Driving, collision and rendering read the fleet entry instead of the sedan constants.
+It also exports `fleetOf(vehicle)` (the entry for a vehicle, the sedan for anything unknown), `pickModel(roadClass, random, parked?)` (a weighted draw of the models allowed on a class of road) and `routeClass(route)` (reads `route.class`, `"street"` when a route does not say).
+
+Vehicles in `cars` carry `model` (a fleet id), `label` (the name shown to the player: a string key or a nameplate such as "Biscotte") and their own `halfLength` and `halfWidth`, stamped from the fleet entry when they are made. `car(x, y, a, tint, model, route)` in `src/world/population.js` accepts a fleet id; any other string is kept as a sedan's nameplate. Driving, damage, boarding, sound and rendering read the fleet entry through `fleetOf`; collision reads the stamped half-extents. `src/art/fleet-art.js` exports `drawVehicle(vehicle)`, which the street renderer calls for every road vehicle.
+
+Car-class bodies keep the sedan's half-width (4.8): the lanes are 12 units apart and cars park 10 units off the lane line. The bus and dump truck use the 4.8-unit collision half-width and overhang it visually. They take wider corners and shallower roundabout entries and exits, with a 5.8-unit lane offset to clear the parked row. `buildTrafficLoop` sets `class` to the narrowest road on the loop and records `roadClass` on each straight segment. Motorbikes are the only fleet model picked for an alley loop. A bus may use a mixed avenue/street loop and stops only on its avenue straights.
+
+Atlases are baked by `tools/art/bake-vehicle.py` from `tools/art/fleet-bake.json`. The frame size varies with the body (a 12 m bus does not fit 192 px at a useful scale); the `sprite` block and each `art-src/baked/<id>.json` say what was used.
 
 ## Ring train hooks (Opus publishes)
 

@@ -1,4 +1,5 @@
 import { taunt, tauntLine } from "../game/taunts.js";
+import { bodyExtra } from "../world/collision.js";
 import { viewport } from "../world/viewport.js";
 import { interior, drawInterior } from "../scenes/interiors.js";
 import { t } from "./dialogs.js";
@@ -11,7 +12,7 @@ import { drawBridgeDecks, drawOverheadMonuments, drawStreetProp, streetLayer, vi
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
 import { drawAmbulance, drawCrew } from "../art/emergency.js";
-import { drawCar } from "../art/vehicles.js";
+import { drawVehicle } from "../art/fleet-art.js";
 import { dude } from "../art/pedestrians.js";
 import { visibleRails } from "../world/rail.js";
 import { drawOverTrain } from "../world/ring-art.js";
@@ -267,11 +268,16 @@ function draw() {
     g.translate(trail.x, trail.y);
     g.rotate(trail.a);
     g.globalAlpha = Math.min(0.45, trail.t * 0.18);
-    rect(g, -5, -3.4, 4, 0.7, "#201722");
-    rect(g, -5, 3.4, 4, 0.7, "#201722");
+    // One tyre line per wheel track; a two-wheeler leaves a single one.
+    const track = (trail.w ?? 4.8) - 1.4;
+    rect(g, -5, -Math.max(0, track), 4, 0.7, "#201722");
+    if (track > 1) rect(g, -5, track, 4, 0.7, "#201722");
     g.restore();
   }
-  const visible = (o) => Math.abs(o.x - cx) < game.vw / 2 + 30 && Math.abs(o.y - cy) < game.vh / 2 + 28;
+  const visible = (o) => {
+    const overhang = bodyExtra(o);
+    return Math.abs(o.x - cx) < game.vw / 2 + 30 + overhang && Math.abs(o.y - cy) < game.vh / 2 + 28 + overhang;
+  };
   for (const m of river.moorings) if (visible(m.quay)) drawMooring(m);
   const ridingBoat = game.ride?.domain === "water";
   const speed = ridingBoat ? Math.hypot(game.ride.slideX, game.ride.slideY) : Math.abs(game.ride?.speed ?? 0);
@@ -311,7 +317,7 @@ function draw() {
     else if (a.rail) a.o.draw(false);
     else if (a.medical) drawAmbulance(a.o);
     else if (a.crew) drawCrew(a.o, ambulance);
-    else if (a.car) drawCar(a.o);
+    else if (a.car) drawVehicle(a.o);
     else dude(a.o, a.o === p);
   }
   for (const rail of rails) rail.draw(true);

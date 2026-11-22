@@ -11,6 +11,7 @@ import { box, say } from "../ui/dialogs.js";
 import { beep } from "../audio/mixer.js";
 import { town, H, W, X, Y } from "../world/town.js";
 import { blocked, vehicleBlocked } from "../world/collision.js";
+import { fleet } from "./fleet.js";
 
 const incidents = [];
 let ambulance = null;
@@ -92,9 +93,9 @@ function dispatchAmbulance(n) {
     dy,
     a,
     medical: true,
-    model: "Ambulance",
-    halfLength: 13.3,
-    halfWidth: 5.45,
+    model: "ambulance",
+    halfLength: fleet.ambulance.halfLength,
+    halfWidth: fleet.ambulance.halfWidth,
     condition: 100,
     speed: 0,
     slideX: 0,

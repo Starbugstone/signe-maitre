@@ -1,3 +1,4 @@
+import { fleet } from "../game/fleet.js";
 const words = {
   goInside: ["Go inside the office", "Entrer dans l’étude"],
   leaveRoom: ["{job} · Return to the street", "{job} · Retourner dans la rue"],
@@ -314,5 +315,7 @@ const words = {
   districtRiveGauche: ["Clerks’ Quarter", "Quartier des Clercs"],
   districtDocks: ["Ferre Docks", "Les Docks de la Ferre"],
 };
+
+for (const entry of Object.values(fleet)) words[entry.label] = [entry.name.en, entry.name.fr];
 
 export { words };

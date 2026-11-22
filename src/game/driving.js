@@ -1,11 +1,13 @@
 import { cars, clamp, dist, fx, game, p, people, trails } from "../core/state.js";
 import { beep } from "../audio/mixer.js";
-import { distanceToBody, vehicleBlocked } from "../world/collision.js";
+import { bodyExtra, distanceToBody, vehicleBlocked } from "../world/collision.js";
 import { outsideView, viewport } from "../world/viewport.js";
 import { recordImpact } from "./damage.js";
 import { H, W } from "../world/town.js";
 import { compileLegacyPoints, evalSegment } from "../world/routes.js";
 import { carContact, sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
+import { fleetOf } from "./fleet.js";
+import { busStop } from "./fleet-traffic.js";
 
 const quarterTurn = Math.PI / 2;
 const TAU = 2 * Math.PI;
@@ -17,8 +19,24 @@ function closingSpeed(a, b, normal) {
     ((b.slideX || 0) - (a.slideX || 0)) * normal.nx + ((b.slideY || 0) - (a.slideY || 0)) * normal.ny,
   );
 }
-
-function clearTraffic(v, oldX, oldY, oldAngle) {
+// How much of its closing speed a heavy vehicle keeps against a lighter one, and the push
+// that goes with it. Equal masses give nothing, so two cars still stop each other dead.
+function shove(v, other, hit, travel) {
+  const mass = fleetOf(v).mass,
+    against = fleetOf(other).mass;
+  if (mass <= against * 1.5 || other.route || other.medical || other === game.ride) return 0;
+  const share = Math.min(0.85, (mass - against) / (mass + against));
+  const x = other.x - hit.nx * travel * share,
+    y = other.y - hit.ny * travel * share;
+  if (vehicleBlocked(other, x, y) || cars.some((o) => o !== v && o !== other && carContact({ ...other, x, y }, o)))
+    return 0;
+  if ([p, ...people].some((n) => (n !== p || !game.ride) && distanceToBody({ ...other, x, y }, n.x, n.y) < 2.6)) return 0;
+  other.x = x;
+  other.y = y;
+  delete other.homeCell;
+  return share;
+}
+function clearTraffic(v, oldX, oldY, oldAngle, dt) {
   for (const other of cars) {
     if (other === v) continue;
     const hit = carContact(v, other);
@@ -41,7 +59,9 @@ function clearTraffic(v, oldX, oldY, oldAngle) {
     if (v.condition === 0) break;
     // Stop penetration, but preserve a slower car's forward motion in a rear-end impact.
     const inward = Math.max(0, -v.slideX * hit.nx - v.slideY * hit.ny);
-    const correction = Math.min(force, inward);
+    // A heavier body keeps part of its way and shoves a parked car or a wreck ahead of it.
+    const share = shove(v, other, hit, inward * dt);
+    const correction = Math.min(force, inward) * (1 - share);
     v.slideX += correction * hit.nx;
     v.slideY += correction * hit.ny;
     v.speed = v.slideX * Math.cos(v.a) + v.slideY * Math.sin(v.a);
@@ -57,15 +77,24 @@ function drive(v, dt, throttle, steering, brake) {
     v.speed = v.slideX = v.slideY = 0;
     return;
   }
-  const oldAngle = v.a;
+  const { x: oldX, y: oldY, a: oldAngle } = v;
+  const spec = fleetOf(v);
   const opposition = v.speed * throttle < 0 && Math.abs(v.speed) > 2;
-  const acceleration = opposition ? 260 : throttle < 0 ? 85 : 122;
-  v.speed = clamp(v.speed + throttle * acceleration * dt, -57, 120 + 61 * ((v.condition ?? 100) / 100));
+  const acceleration = opposition ? spec.brake : throttle < 0 ? spec.reverseAccel : spec.accel;
+  // A battered engine loses a third of its top speed.
+  const top = spec.topSpeed * (120 + 61 * ((v.condition ?? 100) / 100)) / 181;
+  v.speed = clamp(v.speed + throttle * acceleration * dt, -spec.reverseSpeed, top);
   v.speed *= Math.exp(-dt * (brake ? 4.6 : throttle ? 0.16 : 1.45));
   if (!throttle && Math.abs(v.speed) < 0.55) v.speed = 0;
-  const steerRate = brake ? 3.6 : 2.65 - 0.72 * Math.min(1, Math.abs(v.speed) / 150);
-  const rolling = Math.min(1, Math.abs(v.speed) / 18);
+  const steerRate = (brake ? 3.6 : 2.65 - 0.72 * Math.min(1, Math.abs(v.speed) / 150)) * (spec.steer / 2.65);
+  // Steering fades in from a standstill: no body turns tighter than its turning circle.
+  const rolling = Math.min(1, Math.abs(v.speed) / (spec.steer * spec.turn));
   v.a += steering * Math.sign(v.speed) * rolling * steerRate * dt;
+  // A two-wheeler banks into the turn; the picture follows `lean`.
+  if (spec.leans) {
+    const bank = steering * Math.sign(v.speed) * Math.min(1, Math.abs(v.speed) / 90);
+    v.lean = (v.lean || 0) + (bank - (v.lean || 0)) * (1 - Math.exp(-dt * 9));
+  }
   if (!steering && !brake && rolling) {
     const cardinal = Math.round(v.a / quarterTurn) * quarterTurn;
     const error = angleDifference(cardinal, v.a);
@@ -73,16 +102,26 @@ function drive(v, dt, throttle, steering, brake) {
       v.a = Math.abs(error) < 0.003 ? cardinal : v.a + error * (1 - Math.exp(-dt * 12 * rolling));
   }
   v.a = angleDifference(v.a, 0);
-  if (v.a !== oldAngle && vehicleBlocked(v)) v.a = oldAngle;
+  if (v.a !== oldAngle) {
+    // A long vehicle swings about its rear axle: the nose pulls out and the tail follows.
+    const back = (spec.pivot || 0) * spec.halfLength,
+      x = v.x + back * (Math.cos(v.a) - Math.cos(oldAngle)),
+      y = v.y + back * (Math.sin(v.a) - Math.sin(oldAngle));
+    if (vehicleBlocked(v, x, y)) v.a = oldAngle;
+    else {
+      v.x = x;
+      v.y = y;
+    }
+  }
   const vx = Math.cos(v.a) * v.speed,
     vy = Math.sin(v.a) * v.speed;
   // Normal tyres track the steering axis. The handbrake deliberately lets the rear slide.
   v.slipRecovery = brake ? 0.25 : Math.max(0, (v.slipRecovery || 0) - dt);
-  const grip = v.slipRecovery > 0 ? 1 - Math.exp(-dt * (3.2 + 23 * (1 - v.slipRecovery / 0.25))) : 1;
+  // A heavy body takes a moment to follow its front wheels.
+  const hold = spec.grip >= 1 ? 1 : 1 - Math.exp(-dt * 16 * spec.grip);
+  const grip = v.slipRecovery > 0 ? Math.min(hold, 1 - Math.exp(-dt * (3.2 + 23 * (1 - v.slipRecovery / 0.25)))) : hold;
   v.slideX += (vx - v.slideX) * grip;
   v.slideY += (vy - v.slideY) * grip;
-  const oldX = v.x,
-    oldY = v.y;
   const dx = v.slideX * dt,
     dy = v.slideY * dt;
   const hitX = dx !== 0 && vehicleBlocked(v, v.x + dx, v.y);
@@ -107,8 +146,8 @@ function drive(v, dt, throttle, steering, brake) {
       if (hitY) v.slideY = 0;
     }
   }
-  clearTraffic(v, oldX, oldY, oldAngle);
-  if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5 });
+  clearTraffic(v, oldX, oldY, oldAngle, dt);
+  if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5, w: spec.halfWidth });
 }
 
 // Traffic follows compiled C1-continuous closed routes (straights, 90° corners, anticlockwise roundabouts).
@@ -124,7 +163,8 @@ let nextTrafficId = 1;
 function ensureCompiled(c, route) {
   if (route.segments) return;
   if (route.points) {
-    route.segments = compileLegacyPoints(route.points);
+    route.segments = compileLegacyPoints(route.points, Math.max(8, fleetOf(c).turn));
+    if (!route.segments) return;
     // Find nearest segment & offset matching c's initial position.
     let bestIdx = 0,
       bestS = 0,
@@ -236,7 +276,7 @@ function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 ||
       dy = o.y - path.y;
     const forward = dx * cos + dy * sin,
       side = -dx * sin + dy * cos;
-    if (forward <= 0 || forward > reach + 30) return;
+    if (forward <= 0 || forward > reach + 30 + bodyExtra(c) + Math.max(0, along - sedanHalfLength)) return;
     if (side + across < low - margin || side - across > high + margin) return;
     const clear = forward - length - along;
     if (clear < gap) {
@@ -310,7 +350,15 @@ function honk(c, at) {
   if (at && at !== p && !at.down) at.startled = { from: c, until: game.time + 1.6 };
 }
 
+const behindBody = (c, other) =>
+  (other.x - c.x) * Math.cos(c.a) + (other.y - c.y) * Math.sin(c.a) < 0;
+
+// If a long tail has been held mid-turn, allow a shallow brush while it swings clear.
+const tailBrush = (c, other, hit) =>
+  c.route.wait > 2 && bodyExtra(c) > 0 && hit.depth < 2.5 && behindBody(c, other);
+
 function vehicleOnPath(c, route, lane, from, reach) {
+  const turning = route.segments[route.segIndex].type === "arc";
   for (let d = Math.max(4, from); d <= reach; d += 4) {
     const p0 = pathAt(route, d, lane);
     const pose = placed(p0, lane);
@@ -318,21 +366,30 @@ function vehicleOnPath(c, route, lane, from, reach) {
     for (const o of cars) {
       if (o === c || yieldsTo(c, o)) continue;
       if (!p0.inRoundabout && (crossing(o, pose.a) || oncoming(o, pose.a))) continue;
-      if (Math.abs(o.x - pose.x) > 26 || Math.abs(o.y - pose.y) > 26) continue;
-      if (carContact(body, o) && !carContact({ ...c, halfLength: c.halfLength, halfWidth: c.halfWidth }, o))
+      const near = 26 + bodyExtra(c) + bodyExtra(o);
+      if (Math.abs(o.x - pose.x) > near || Math.abs(o.y - pose.y) > near) continue;
+      const hit = carContact(body, o);
+      if (hit && !(turning && tailBrush(c, o, hit)) && !carContact(c, o))
         return { gap: d - 4, what: o };
     }
   }
   return { gap: Infinity, what: null };
 }
-
+// Room a driver leaves a walker: a body's width, or a hand's breadth once they have
+// waited four seconds for someone who will not move, and until they are clear again.
+function walkerRoom(route) {
+  if (route.wait > 4) route.squeezing = true;
+  else if (route.wait === 0) route.squeezing = false;
+  return route.squeezing ? 0.8 : 2.6;
+}
 function walkerOnPath(c, route, lane, reach) {
-  const walkers = game.ride || game.transit ? people : [...people, p];
+  const walkers = game.ride || game.transit ? people : [...people, p],
+    room = walkerRoom(route);
   for (let d = 4; d <= reach; d += 4) {
     const pose = placed(pathAt(route, d, lane), lane);
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
     for (const n of walkers)
-      if (Math.abs(n.x - pose.x) < 16 && Math.abs(n.y - pose.y) < 16 && distanceToBody(body, n.x, n.y) < 2.6)
+      if (Math.abs(n.x - pose.x) < 16 + bodyExtra(c) && Math.abs(n.y - pose.y) < 16 + bodyExtra(c) && distanceToBody(body, n.x, n.y) < room)
         return { gap: d - 4, what: n };
   }
   return { gap: Infinity, what: null };
@@ -374,9 +431,10 @@ function advanceTraffic(c, dt) {
   route.laneTarget ??= 0;
   route.speed ??= 0;
   route.wait ??= 0;
-
-  const cruise = route.pace * 1.25;
-  const probe = advanceAlong(route.segments, route.segIndex, route.s, 0);
+  const spec = fleetOf(c),
+    long = bodyExtra(c);
+  const cruise = route.pace * 1.25 * spec.traffic.pace;
+  const probe = pathAt(route, 0);
   const ghost = route.wait > 6 && offscreen(c);
   const here = { x: probe.x, y: probe.y, a: probe.a };
 
@@ -407,7 +465,7 @@ function advanceTraffic(c, dt) {
   const junc = !probe.turning ? probe.seg.junction : null;
   const rbEntry = !probe.turning ? probe.seg.roundaboutEntry : null;
 
-  const within = (o, r) => junc && Math.abs(o.x - junc.x) < r && Math.abs(o.y - junc.y) < r;
+  const within = (o, r, extra = bodyExtra(o)) => junc && Math.abs(o.x - junc.x) < r + extra && Math.abs(o.y - junc.y) < r + extra;
   const headingIn = (o) => junc && (junc.x - o.x) * (o.slideX || 0) + (junc.y - o.y) * (o.slideY || 0) > 0;
   const onTraffic = (o) => {
     for (let k = 0; k < 3 && o?.route; k++) {
@@ -431,7 +489,7 @@ function advanceTraffic(c, dt) {
   const outside = junc ? !within(c, 40) : false;
 
   const exitBlocked = () => {
-    for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46; d += 6) {
+    for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46 + 2 * long; d += 6) {
       const pose = placed(pathAt(route, d), route.lane);
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
       const stuck = cars.find((o) => o !== c && !o.route && o !== game.ride && isStalled(o) && carContact(body, o));
@@ -448,27 +506,27 @@ function advanceTraffic(c, dt) {
   let occupied = false;
   if (rbEntry) {
     // Yield outside the roundabout kerb (front bumper clear of outerRadius) to circulating traffic.
-    if (rbOutside && !ghost && probe.remaining < stopRem + 36) {
-      const circulating = roundaboutBusy(c, rbEntry);
-      if (circulating) {
+    if (rbOutside && probe.remaining < stopRem + 36) {
+      yieldCar = roundaboutBusy(c, rbEntry);
+      if (yieldCar && !ghost) {
         occupied = true;
-        yieldCar = circulating;
         desired = Math.min(desired, Math.max(0, (probe.remaining - stopRem) * 2.5));
       }
     }
   } else if (junc) {
-    exitCar = probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
+    exitCar = probe.remaining < 34 + long && route.laneTarget === 0 ? exitBlocked() : null;
     const holdingCar = outside && !ghost ? cars.find(holds) : null;
     yieldCar = holdingCar;
     occupied = outside && !ghost && (!!holdingCar || !!exitCar);
     if (occupied) {
-      const toLine = Math.max(Math.abs(c.x - junc.x), Math.abs(c.y - junc.y)) - 40 - 0.5;
+      const toLine = Math.max(Math.abs(c.x - junc.x), Math.abs(c.y - junc.y)) - 40 - long - 0.5;
       desired = Math.min(desired, Math.max(0, toLine * 2.5));
     }
   }
 
   if (route.laneTarget !== route.lane) desired = Math.min(desired, Math.max(8, cruise * 0.6));
-  const accel = desired > route.speed ? trafficAccel : trafficBrake;
+  if (spec.traffic.stops) desired = busStop(c, route, probe, desired, dt);
+  const accel = desired > route.speed ? trafficAccel * Math.min(1, spec.accel / 122 + 0.35) : trafficBrake;
   route.speed += clamp(desired - route.speed, -accel * dt, accel * dt);
 
   // Pull out around a parked or wrecked car before reaching its bumper.
@@ -511,7 +569,7 @@ function advanceTraffic(c, dt) {
 
   function blockedAt(pose, moving) {
     if (!moving) return "still";
-    if (!ghost && junc && outside && within(pose, 40) && cars.some(holds)) return "junction";
+    if (!ghost && junc && outside && within(pose, 40, long) && cars.some(holds)) return "junction";
     if (
       !ghost &&
       rbEntry &&
@@ -520,11 +578,11 @@ function advanceTraffic(c, dt) {
       roundaboutBusy(c, rbEntry)
     )
       return "junction";
-    if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
+    if ((pose.lane || route.lane || path.inRoundabout || path.seg.isAlley) && vehicleBlocked(pose)) return "kerb";
     if (
       !game.ride &&
       !game.transit &&
-      distanceToBody(pose, p.x, p.y) < 2.6 &&
+      distanceToBody(pose, p.x, p.y) < walkerRoom(route) &&
       distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y)
     )
       return p;
@@ -533,8 +591,8 @@ function advanceTraffic(c, dt) {
       const hit = carContact(pose, other);
       if (!hit) continue;
       const before = carContact(c, other)?.depth ?? 0;
-      const behind = (other.x - c.x) * Math.cos(c.a) + (other.y - c.y) * Math.sin(c.a) < 0;
-      if (probe.turning && !other.route && isStalled(other) && behind) continue;
+      if (probe.turning && !other.route && isStalled(other) && behindBody(c, other)) continue;
+      if (probe.turning && tailBrush(c, other, hit)) continue;
       const graze =
         probe.turning &&
         route.wait > 2 &&
@@ -565,7 +623,9 @@ function advanceTraffic(c, dt) {
   }
   if (obstructed || desired < 1) route.wait += dt;
   else if (!ghost) route.wait = Math.max(0, route.wait - dt * 2);
-  else if (gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
+  // An offscreen driver needs to keep moving until it is past the yield line and its
+  // obstruction. Before then, a clear look-ahead can just mean the blocker is around the bend.
+  else if (!yieldCar && !exitCar && gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
 
   const other = typeof blocker === "object" ? blocker : null;
   if (
@@ -609,6 +669,10 @@ function advanceTraffic(c, dt) {
   c.x = next.x;
   c.y = next.y;
   c.a = next.a;
+  if (spec.leans) {
+    const bank = path.turning ? Math.sign(path.seg.deltaA) * 0.85 : 0;
+    c.lean = (c.lean || 0) + (bank - (c.lean || 0)) * (1 - Math.exp(-dt * 7));
+  }
   route.segIndex = path.segIndex;
   route.s = path.s;
   route.lane = lane;

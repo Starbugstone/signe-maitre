@@ -29,7 +29,7 @@ export default async function (d) {
     const { sedan } = await d.state();
     await d.walkTo({ x: sedan.x, y: sedan.y + 12 }, { tol: 5 });
     await d.press("car");
-    const { state } = await d.waitFor("in the sedan", ({ state }) => state.ride?.model === "Étude 2000");
+    const { state } = await d.waitFor("in the sedan", ({ state }) => state.ride?.label === "Étude 2000");
     d.expect(!!state.ride, "the player drives the sedan", state.ride);
   });
   await d.step("drive-off", async () => {

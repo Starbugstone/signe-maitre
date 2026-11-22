@@ -115,10 +115,12 @@ import { ringLine } from "./src/game/transit.js";
 import { carriagesOf, trainsetAt } from "./src/game/ring-route.js";
 const xy = (o) => o && { x: +o.x.toFixed(2), y: +o.y.toFixed(2) };
 const veh = (v) => v && {
-  ...xy(v), model: v.model, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical,
+  ...xy(v), a: +v.a.toFixed(4), model: v.model, label: v.label, speed: +(v.speed || 0).toFixed(2),
+  condition: v.condition, medical: !!v.medical, halfLength: v.halfLength, halfWidth: v.halfWidth,
+  halted: (v.route?.stopFor || 0) > 0, routeId: v.route?.id, showpiece: v.showpiece,
+  roadClass: v.route?.segments?.[v.route.segIndex]?.roadClass,
   ...(v.domain === "water" && {
-    a: +v.a.toFixed(4), vx: +v.slideX.toFixed(2), vy: +v.slideY.toFixed(2), yaw: +v.yaw.toFixed(3),
-    halfLength: v.halfLength, halfWidth: v.halfWidth,
+    vx: +v.slideX.toFixed(2), vy: +v.slideY.toFixed(2), yaw: +v.yaw.toFixed(3),
     bumps: v.bumps, lastImpact: +v.lastImpact.toFixed(2), mooring: v.mooring, traffic: !!v.traffic,
   }),
 };
@@ -153,6 +155,7 @@ window.__pf = Object.freeze({
           }),
         };
       })(),
+      parked: cars.filter((c) => !c.route && !c.medical && c !== game.ride).map(veh),
       boats: boatFleet.boats.flatMap((b, id) => b.incoming ? [] : [{ id, ...veh(b) }]),
       boatDock: game.ride?.domain === "water" ? berthInReach()?.id ?? null : null,
       shipHorn: game.ride?.domain === "water" && held.has("horn"),
@@ -164,12 +167,12 @@ window.__pf = Object.freeze({
 `;
 }
 
-async function buildFiles(mode) {
+async function buildFiles(mode, runDir) {
   const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
   if (mode === "probe") {
-    await mkdir(verifyDir, { recursive: true });
     const html = await renderGame({ entry: await probeEntry() });
-    const file = join(verifyDir, "probe.html");
+    await mkdir(runDir, { recursive: true });
+    const file = join(runDir, "probe.html");
     await writeFile(file, html);
     return file;
   }
@@ -273,7 +276,8 @@ async function run(opts) {
   const lang = opts.lang || "en";
   const mode = opts.url ? "url" : opts.build || "shipped";
   const id = opts["run-id"] || new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "-" + process.pid;
-  const file = mode === "url" ? null : await buildFiles(mode);
+  const runDir = join(runsRoot, id);
+  const file = mode === "url" ? null : await buildFiles(mode, runDir);
   if (mode === "shipped") {
     const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
     if (sha(await renderGame()) !== sha(await readFile(file, "utf8")))
@@ -281,7 +285,6 @@ async function run(opts) {
   }
   const url = opts.url || pathToFileURL(file).href;
   const build = file ? sha(await readFile(file, "utf8")).slice(0, 12) : "remote";
-  const runDir = join(runsRoot, id);
   await mkdir(runDir, { recursive: true });
   const server = await pw.chromium.launchServer({ executablePath: chrome, args: ["--no-sandbox"], headless: !opts.headed });
   await writeFile(join(runDir, "pids.json"), JSON.stringify({ harness: process.pid, chromium: server.process().pid }));

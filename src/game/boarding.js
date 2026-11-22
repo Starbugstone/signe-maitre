@@ -1,7 +1,9 @@
 import { boatFleet, boardableBoat, dockBoat, dockingMooring, river, takeBoat } from "./boats.js";
 import { ambulance, inService, interruptRescue } from "./rescue.js";
 import { cars, dist, game, held, p } from "../core/state.js";
-import { blocked, footBlocked } from "../world/collision.js";
+import { blocked, distanceToBody, footBlocked } from "../world/collision.js";
+import { sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
+import { fleetOf } from "./fleet.js";
 import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
 import { panel } from "../platform/canvas.js";
@@ -22,12 +24,20 @@ function clearLine(car, x, y) {
 function exitCar() {
   if (!game.ride) return false;
   // Prefer a door with room to walk away; a tight spot beats being trapped inside.
+  // The spots ring the body at the sedan's door distance, however long or narrow it is.
+  const car = game.ride,
+    long = (car.halfLength ?? sedanHalfLength) - sedanHalfLength,
+    wide = (car.halfWidth ?? sedanHalfWidth) - sedanHalfWidth,
+    cos = Math.cos(car.a),
+    sin = Math.sin(car.a);
   for (const roomy of [true, false])
   for (const r of [19, 27, 37])
     for (let i = 0; i < 8; i++) {
-      const a = game.ride.a + Math.PI / 2 + (i * Math.PI) / 4,
-        x = game.ride.x + Math.cos(a) * r,
-        y = game.ride.y + Math.sin(a) * r;
+      const a = Math.PI / 2 + (i * Math.PI) / 4,
+        forward = Math.cos(a) * Math.max(4, r + long),
+        side = Math.sin(a) * Math.max(4, r + wide),
+        x = car.x + cos * forward - sin * side,
+        y = car.y + sin * forward + cos * side;
       if (!footBlocked(x, y, 2.6) && clearLine(game.ride, x, y) && (!roomy || roomToWalk(x, y))) {
         game.ride.speed = 0;
         game.ride.slideX = 0;
@@ -44,6 +54,11 @@ function exitCar() {
   say("moveCar");
   return false;
 }
+// How far the player is from a vehicle, as the sedan measures it from its centre: a long
+// body is as easy to board at either end as amidships.
+function reach(c) {
+  return Math.min(dist(c, p), distanceToBody(c, p.x, p.y) + sedanHalfLength);
+}
 function nearestCar() {
   const unattended = cars.find((v) => v.medical && v.keysUntil > game.time && dist(p, v) < 22);
   if (unattended) return unattended;
@@ -52,7 +67,7 @@ function nearestCar() {
   let nearest = null,
     d = 22;
   for (const c of cars) {
-    const distance = dist(c, p);
+    const distance = reach(c);
     if (distance >= 22) continue;
     const score = distance + (c.route ? 4 : 0);
     if (nearest === null || score < d) {
@@ -133,7 +148,7 @@ function board() {
     game.stage = "deliver";
     say("seized");
   } else if (c.medical) say("stolenMedic", 4, "dispatch");
-  else say(c === sedan ? "sedan" : "keysIn", 4, c === sedan ? "" : c.model);
+  else say(c === sedan ? "sedan" : "keysIn", 4, c === sedan ? "" : c.label || fleetOf(c).label);
 }
 
 export { berthInReach, board, exitCar, nearestBoat, nearestCar };

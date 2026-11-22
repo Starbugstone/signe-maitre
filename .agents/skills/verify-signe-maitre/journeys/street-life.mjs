@@ -6,7 +6,7 @@ export const meta = { feature: "street-life", needs: "probe" };
 export default async function (d) {
   await d.step("board", async () => {
     await d.press("car");
-    await d.waitFor("in the sedan", ({ state, hud }) => state.ride?.model === "Étude 2000" && hud.stats.includes("km/h"));
+    await d.waitFor("in the sedan", ({ state, hud }) => state.ride?.label === "Étude 2000" && hud.stats.includes("km/h"));
     if (d.device !== "desktop") {
       const signal = d.page.locator("#touchSignal");
       d.expect(await signal.isVisible() && await signal.innerText() === d.t("vehicleHorn"), "the Horn control appears");
