@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  boardableBoat, createBoatFleet, dockBoat, dockingMooring, driveBoat, hullOnWater, makeBoat, riverFor,
+  boardableBoat, createBoatFleet, dockBoat, dockingMooring, driveBoat, hullOnWater, makeBoat,
   takeBoat, updateBoats,
 } from "../src/game/boats.js";
 import { town } from "../src/world/town.js";
@@ -58,7 +58,7 @@ test("boat-to-boat impacts keep hulls apart and reduce the incoming velocity", (
 });
 
 test("the nearest office mooring has the launch and can be boarded again after stepping ashore", () => {
-  const water = riverFor(town), office = town.byId.get("office");
+  const water = town.river, office = town.byId.get("office");
   const { boats } = createBoatFleet(water, office);
   const home = [...water.moorings].sort((a, b) =>
     Math.hypot(a.quay.x - office.x, a.quay.y - office.y) - Math.hypot(b.quay.x - office.x, b.quay.y - office.y))[0];
@@ -86,16 +86,16 @@ test("the nearest office mooring has the launch and can be boarded again after s
   assert.equal(takeBoat(barge), false);
 });
 
-test("traffic runs both ways without overlap in the painted canal and waits at a single-lane arch", () => {
+test("traffic runs both ways without overlap on la Ferre and waits at a single-lane arch", () => {
   const water = testRiver((x, y, r) => x + r > 576 && x - r < 624 && (y - r < 70 || y + r > 110));
   const office = town.byId.get("office");
-  for (const layout of [riverFor(town), water]) {
+  for (const layout of [town.river, water]) {
     const fleet = createBoatFleet(layout, office);
     const moving = new Map(fleet.boats.filter((b) => b.traffic).map((b) => [b, 0]));
     let horns = 0;
     const gateDirections = new Set();
     if (layout === water) assert.equal(fleet.gates.length, 1);
-    for (let i = 0; i < 60 * 140; i++) {
+    for (let i = 0; i < 60 * (layout === town.river ? 260 : 140); i++) {
       updateBoats(layout, fleet, dt, null, 0, 0, () => horns++);
       if (fleet.gates[0]?.direction) gateDirections.add(fleet.gates[0].direction);
       const active = fleet.boats.filter((b) => !b.incoming);

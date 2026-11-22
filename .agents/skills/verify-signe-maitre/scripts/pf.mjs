@@ -116,6 +116,7 @@ const veh = (v) => v && {
   ...xy(v), model: v.model, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical,
   ...(v.domain === "water" && {
     a: +v.a.toFixed(4), vx: +v.slideX.toFixed(2), vy: +v.slideY.toFixed(2), yaw: +v.yaw.toFixed(3),
+    halfLength: v.halfLength, halfWidth: v.halfWidth,
     bumps: v.bumps, lastImpact: +v.lastImpact.toFixed(2), mooring: v.mooring, traffic: !!v.traffic,
   }),
 };
@@ -135,7 +136,7 @@ window.__pf = Object.freeze({
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
       traffic: cars.filter((c) => c.route).map(veh),
-      boats: boatFleet.boats.filter((b) => !b.incoming).map(veh),
+      boats: boatFleet.boats.flatMap((b, id) => b.incoming ? [] : [{ id, ...veh(b) }]),
       boatDock: game.ride?.domain === "water" ? berthInReach()?.id ?? null : null,
       shipHorn: game.ride?.domain === "water" && held.has("horn"),
       river: { top: river.top, bottom: river.bottom, bridges: river.bridges.map((b) => ({ ...b })),

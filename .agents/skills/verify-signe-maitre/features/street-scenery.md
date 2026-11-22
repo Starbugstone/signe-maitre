@@ -10,7 +10,7 @@ The garage and market share a railway above a pedestrian alley. The player can e
 
 ## How to get to it (user POV)
 
-Walk west from the étude along the north pavement. Visit the garage gate, walk back east to the alley between the market and garage, then pass under the span and return to the pavement.
+Walk east from the étude along the north pavement of Place de la Contrainte (column 7, row 5) past the garage pillar into the adjacent seam alley, step inside the alley, and return to the pavement. The automated pixel suite (`scripts/scenery/scene.js`) also inspects the northern and southern Petite Ceinture market joins, roundabout islands, Marais alleys, bridges, Tour de Fer underpass and vertical ring viaduct piers.
 
 ## Driving it with pf
 

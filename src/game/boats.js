@@ -1,5 +1,5 @@
 import { clamp, dist } from "../core/state.js";
-import { X, Y, town } from "../world/town.js";
+import { town } from "../world/town.js";
 import { carContact } from "../world/vehicle-shape.js";
 
 const metre = 4.8; // A 4.55 m saloon is 21.9 world units long.
@@ -9,46 +9,6 @@ export const boatTypes = {
   speedboat: { length: 7, beam: 2.15, mass: 1.8, thrust: 49, topSpeed: 123, rudder: 1.8, drag: 0.23, grip: 1.45 },
   launch: { length: 10, beam: 2.8, mass: 4, thrust: 31, topSpeed: 84, rudder: 1.48, drag: 0.32, grip: 1.85 },
 };
-
-export function riverFor(layout) {
-  if (layout.river) return layout.river;
-  // The legacy painting contains its own banks, moored hulls and abutments.
-  const north = Y(layout.canalRow) + 16;
-  const top = north + 53, bottom = north + 172;
-  const bridges = Array.from({ length: layout.cols }, (_, col) => ({ col, x: X(col), halfWidth: 22 }));
-  const solids = [
-    [-135, -74, 54, 78], [55, 137, 54, 76], // North moored hulls
-    [-141, -93, 151, 172], [54, 141, 151, 172], // South moored hulls
-    [-38, -24, 53, 73], [24, 40, 53, 73], // Bridge abutments
-  ];
-  const moorings = [
-    [2, -49, 84, 18, 0], [1, -141, 94, 18, 0],
-    [3, -53, 158, 187, 0], [4, -14, 94, 18, Math.PI],
-    [0, 46, 84, 18, 0], [5, -56, 158, 187, 0],
-  ].filter(([col]) => col < layout.cols).map(([col, dx, dy, sy, a]) => ({
-    id: "canal-" + col, x: X(col) + dx, y: north + dy, a, quay: { x: X(col) + dx, y: north + sy },
-  }));
-  return {
-    top, bottom, islands: [], bridges, moorings,
-    centreline: [
-      { x: layout.width > 1400 ? 322 : 0, y: north + 121 },
-      { x: layout.width > 1400 ? layout.width - 458 : layout.width, y: north + 121 },
-    ],
-    onWater(x, y, r) {
-      if (x < r || x > layout.width - r || y < top + r || y > bottom - r) return false;
-      const { col } = layout.cellAt(x, y);
-      return [-1, 0, 1].every((offset) => {
-        const i = col + offset;
-        if (i < 0 || i >= layout.cols) return true;
-        const u = x - X(i), v = y - north;
-        return solids.every(([left, right, near, far]) =>
-          Math.hypot(u - clamp(u, left, right), v - clamp(v, near, far)) >= r);
-      });
-    },
-  };
-}
-
-export const river = riverFor(town);
 
 export function makeBoat(model, pose) {
   const type = boatTypes[model];
@@ -218,7 +178,9 @@ function makeLane(river, moored, sign) {
     while (knots[knot + 1].x < x) knot++;
     const a = knots[knot], b = knots[knot + 1];
     const mid = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
-    const preferred = mid + sign * (hull.halfWidth + laneGap);
+    // The published centreline goes south of the island. Mirror its detour for westbound traffic.
+    const channel = sign > 0 ? mid : river.top + river.bottom - mid;
+    const preferred = channel + sign * (hull.halfWidth + laneGap);
     const column = new Map();
     for (let y = Math.ceil((river.top + hull.halfWidth) / 2) * 2; y <= river.bottom - hull.halfWidth; y += 2) {
       if (!river.onWater(x, y, hull.halfWidth)) continue;
@@ -405,4 +367,5 @@ export function updateBoats(river, fleet, dt, ride, throttle, rudder, horn = () 
   }
 }
 
+export const river = town.river;
 export const boatFleet = createBoatFleet(river, town.byId.get("office"));

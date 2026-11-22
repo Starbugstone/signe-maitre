@@ -11,18 +11,19 @@ The étude keeps a launch at its closest mooring. Barges and passenger boats use
 
 ## How to get to it (user POV)
 
-From the starting street, take the bridge approach south to the north quay. Follow the quay to the nearby anchor where the HUD offers to board the launch. The office sedan can stay where it is.
+From the étude in column 7, walk south to Quai Nord and turn west along the promenade. The launch waits at Quai de la Contrainte, at the anchor in column 5. The closest road bridge to the east is Pont de la Contrainte. Look for six mooring markers on the map, including one on the south side of Île de la Ferre.
 
 ## Driving it with pf
 
 ```sh
 pf run boats --build probe --video
 pf run boats --build probe --device phone --lang fr --video
+pf run river-traffic --build probe --mute
 npm run test:scenery
 ```
 
-The journey walks to the launch, boards it, uses the horn, sails under a bridge, bumps the bank and returns to the quay. It also takes a moored barge and checks the resulting Heat. It checks the boarding and docking prompts, the boat and player positions, and the sedan's parked position. The scenery fixture compares the bridge pixels with and without the launch in the arch, with the player, a pedestrian and a car on the deck.
+The journey walks to the launch, boards it, uses the horn, sails under a bridge, bumps the bank and returns to the quay. It also takes a moored barge and checks the resulting Heat. It checks the boarding and docking prompts, the boat and player positions, and the sedan's parked position. The scenery fixtures compare every road deck and both Petite Ceinture bridges with and without the launch in the water below. The road fixtures put the player, a pedestrian and a car on the deck. The traffic journey observes 260 seconds of the running game and checks that hulls stay in water, avoid one another, and cross both railway and all ten road bridges in both directions. Eastbound traffic uses the south channel and westbound traffic uses the north.
 
 ## Gotchas
 
-The journey uses the launch berth and bridge approach in the fallback canal. Check its walking and sailing approach again when the expanded river is integrated. The verification video records the screen. The journey checks the ship horn label and held input.
+The verification video records the screen. The journey checks the ship horn label and held input.
