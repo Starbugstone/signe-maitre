@@ -1,11 +1,38 @@
 import { cars, game, p, people, rand } from "../core/state.js";
 import { footBlocked, vehicleBlocked } from "./collision.js";
 import { town, canalRow, CELL_W, TAU, X, Y } from "./town.js";
+import { fleet, pickModel, routeClass } from "../game/fleet.js";
+import { carContact } from "./vehicle-shape.js";
+// `model` is a fleet id. A name the fleet does not know ("Biscotte") is a sedan's nameplate.
 function car(x, y, a, tint, model, route) {
-  const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
+  const spec = fleet[model] || fleet.sedan;
+  const v = {
+    x,
+    y,
+    a,
+    tint,
+    model: spec.id,
+    label: fleet[model] ? spec.label : model,
+    halfLength: spec.halfLength,
+    halfWidth: spec.halfWidth,
+    route,
+    condition: 100,
+    speed: 0,
+    slideX: 0,
+    slideY: 0,
+  };
   cars.push(v);
   return v;
 }
+// Seized vehicles waiting for the auction stand along the étude's own kerb, one of each
+// kind: [model, distance east of the cell's junction].
+const pound = {
+  "1,1": [["bus", -60], ["dumper", 60], ["volta", 125]],
+  "2,1": [["moto", -90], ["suv", 110]],
+};
+// Chosen so that the six blocks around the étude show every model.
+const trafficSalt = 4,
+  parkedSalt = 7;
 // Parked against the kerb bollards. Any closer to the kerb and the posts hold it fast;
 // its offside rubs 0.6 units into the westbound lane, so traffic pulls round it.
 export const sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "Étude 2000");
@@ -84,13 +111,30 @@ function populate(col, row, key) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1)) {
-    const kerbX = X(col) + 112, y = Y(row) - 16;
+  // Vehicle models draw from the cell's own well-mixed number, so the residents keep their
+  // places and neighbouring blocks do not all get the same model.
+  const cellSeed = seed;
+  const draw = (salt) => () => {
+    let h = (cellSeed ^ salt) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const kerbside = pound[key] || [];
+  if (!kerbside.length && col < town.cols - 1 && (col + row) % 2)
+    kerbside.push([pickModel("street", draw(parkedSalt), true), 112]);
+  for (const [model, east] of kerbside) {
+    const kerbX = X(col) + east, y = Y(row) - 16;
+    const { halfLength, halfWidth } = fleet[model];
     // Find the nearest gap in the posts along this kerb.
+    const free = (x) => {
+      const pose = { x, y, a: Math.PI, halfLength, halfWidth };
+      return !vehicleBlocked(pose) && !cars.some((o) => carContact(pose, o));
+    };
     for (let offset = 0; offset < CELL_W / 2; offset++) {
-      const x = [kerbX + offset, kerbX - offset].find(x => !vehicleBlocked({ x, y, a: Math.PI }));
+      const x = [kerbX + offset, kerbX - offset].find(free);
       if (x !== undefined) {
-        car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
+        car(x, y, Math.PI, colors[(col + row) % 4], model === "sedan" ? "Biscotte" : model).homeCell = key;
         break;
       }
     }
@@ -111,6 +155,9 @@ function populate(col, row, key) {
   );
   horizontal.homeCell = vertical.homeCell = key;
   if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
+  const q = Math.floor(random() * 4),
+    f = 0.12 + random() * 0.65;
+  const model = pickModel(routeClass(null), draw(trafficSalt));
   const left = X(col) + 6,
     right = X(col + 1) - 6,
     top = Y(row) + 6,
@@ -121,12 +168,10 @@ function populate(col, row, key) {
     { x: right, y: bottom },
     { x: left, y: bottom },
   ];
-  const q = Math.floor(random() * 4),
-    a = points[q],
+  const a = points[q],
     to = (q + 1) % 4,
-    b = points[to],
-    f = 0.12 + random() * 0.65;
-  car(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, Math.atan2(b.y - a.y, b.x - a.x), colors[q], "Citadine", {
+    b = points[to];
+  car(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, Math.atan2(b.y - a.y, b.x - a.x), colors[q], model === "sedan" ? "Citadine" : model, {
     points,
     to,
     pace: 24 + q * 6,

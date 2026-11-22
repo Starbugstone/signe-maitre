@@ -1,3 +1,4 @@
+import { fleet } from "../game/fleet.js";
 const words = {
   goInside: ["Go inside the office", "Entrer dans l’étude"],
   leaveRoom: ["{job} · Return to the street", "{job} · Retourner dans la rue"],
@@ -265,5 +266,7 @@ const words = {
   enLang: ["Switch to English", "Passer en anglais"],
   loading: ["Opening Port-Fer…", "Ouverture de Port-Fer…"],
 };
+
+for (const entry of Object.values(fleet)) words[entry.label] = [entry.name.en, entry.name.fr];
 
 export { words };

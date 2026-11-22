@@ -1,0 +1,712 @@
+{
+ "defaults": {
+  "unitsPerMetre": 4.76,
+  "supersample": 3,
+  "quality": 84
+ },
+ "vehicles": {
+  "ambulance": {
+   "model": "profile",
+   "out": "assets",
+   "sheet": "assets/rescueVan.webp",
+   "cell": 288,
+   "views": [
+    [
+     0,
+     0
+    ],
+    [
+     0,
+     288
+    ],
+    [
+     288,
+     288
+    ]
+   ],
+   "frame": 192,
+   "scale": 5.65,
+   "cx": 96,
+   "cy": 126,
+   "quality": 90,
+   "method": 3,
+   "profile": [
+    [
+     -14,
+     1.3
+    ],
+    [
+     -14,
+     5.3
+    ],
+    [
+     -13.6,
+     10.2
+    ],
+    [
+     -12.4,
+     11.6
+    ],
+    [
+     6.9,
+     11.6
+    ],
+    [
+     8,
+     10.7
+    ],
+    [
+     10.5,
+     6.2
+    ],
+    [
+     13.5,
+     5.4
+    ],
+    [
+     14.4,
+     4.3
+    ],
+    [
+     14.4,
+     1.3
+    ]
+   ],
+   "sideUv": [
+    [
+     22,
+     168
+    ],
+    [
+     21,
+     129
+    ],
+    [
+     29,
+     78
+    ],
+    [
+     37,
+     59
+    ],
+    [
+     201,
+     59
+    ],
+    [
+     210,
+     76
+    ],
+    [
+     229,
+     112
+    ],
+    [
+     256,
+     122
+    ],
+    [
+     265,
+     135
+    ],
+    [
+     264,
+     168
+    ]
+   ],
+   "widths": [
+    5.5,
+    5.5,
+    5.0,
+    4.6,
+    4.6,
+    4.9,
+    5.2,
+    5.3,
+    5.4,
+    5.5
+   ],
+   "roofPatch": {
+    "at": [
+     67,
+     185
+    ],
+    "top": 30,
+    "bottom": 46,
+    "half": 15,
+    "from": 105,
+    "to": 135
+   },
+   "anchorUv": [
+    136,
+    117
+   ],
+   "anchor": [
+    0,
+    5.4,
+    6
+   ],
+   "frontStrips": [
+    [
+     8,
+     9,
+     218,
+     245
+    ],
+    [
+     7,
+     8,
+     209,
+     218
+    ],
+    [
+     6,
+     7,
+     188,
+     209
+    ],
+    [
+     5,
+     6,
+     134,
+     188
+    ],
+    [
+     4,
+     5,
+     127,
+     134
+    ]
+   ],
+   "frontSpan": [
+    191,
+    96
+   ],
+   "rearStrips": [
+    [
+     0,
+     1,
+     246,
+     210
+    ],
+    [
+     1,
+     2,
+     210,
+     140
+    ],
+    [
+     2,
+     3,
+     140,
+     125
+    ]
+   ],
+   "rearSpan": [
+    90,
+    198
+   ],
+   "roofStrip": {
+    "between": [
+     3,
+     4
+    ],
+    "uv": [
+     [
+      39,
+      33
+     ],
+     [
+      37,
+      60
+     ],
+     [
+      201,
+      60
+     ],
+     [
+      194,
+      33
+     ]
+    ]
+   },
+   "wheels": [
+    [
+     -8.6,
+     68
+    ],
+    [
+     9.6,
+     226
+    ]
+   ],
+   "wheelFace": 5.6,
+   "beacons": {
+    "at": [
+     -9,
+     5
+    ],
+    "height": 12.8,
+    "source": [
+     55,
+     18,
+     80,
+     44
+    ]
+   },
+   "damage": {
+    "screen": [
+     [
+      8,
+      -4,
+      10.4
+     ],
+     [
+      8.9,
+      -1.7,
+      8.5
+     ],
+     [
+      8.2,
+      -0.5,
+      10.2
+     ],
+     [
+      9.6,
+      1.2,
+      7
+     ],
+     [
+      8.7,
+      3,
+      9
+     ],
+     [
+      10.5,
+      4,
+      6.5
+     ],
+     [
+      10.5,
+      -4,
+      6.5
+     ]
+    ],
+    "screenColor": [
+     44,
+     39,
+     54,
+     255
+    ],
+    "wreck": [
+     [
+      [
+       [
+        10.6,
+        -4,
+        6.5
+       ],
+       [
+        14,
+        -4,
+        4.8
+       ],
+       [
+        14,
+        4,
+        4.8
+       ],
+       [
+        10.6,
+        4,
+        6.5
+       ]
+      ],
+      [
+       47,
+       42,
+       45,
+       255
+      ]
+     ],
+     [
+      [
+       [
+        10.6,
+        -4,
+        6.6
+       ],
+       [
+        11,
+        -3.6,
+        11
+       ],
+       [
+        12.8,
+        0.4,
+        8.5
+       ],
+       [
+        12,
+        2,
+        9.4
+       ],
+       [
+        10.6,
+        3,
+        6.6
+       ]
+      ],
+      [
+       166,
+       139,
+       113,
+       255
+      ]
+     ],
+     [
+      [
+       [
+        13.8,
+        -5,
+        2
+       ],
+       [
+        16,
+        -3,
+        0.3
+       ],
+       [
+        15.5,
+        4,
+        0.2
+       ],
+       [
+        15,
+        3.8,
+        0.9
+       ],
+       [
+        15.2,
+        -2.6,
+        1.1
+       ]
+      ],
+      [
+       128,
+       118,
+       119,
+       255
+      ]
+     ]
+    ]
+   },
+   "states": {
+    "intact": {
+     "file": "ambulanceTurns",
+     "damage": 0,
+     "size": 192
+    },
+    "dented": {
+     "file": "ambulanceDented",
+     "damage": 0.5,
+     "size": 144
+    },
+    "wreck": {
+     "file": "ambulanceWreck",
+     "damage": 1,
+     "size": 144
+    }
+   }
+  },
+  "volta": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/volta",
+   "out": "assets",
+   "frame": 160,
+   "scale": 5,
+   "cx": 80,
+   "cy": 102,
+   "states": {
+    "intact": {
+     "file": "voltaTurns"
+    },
+    "dented": {
+     "file": "voltaDented",
+     "damage": 0.5,
+     "size": 128
+    },
+    "wreck": {
+     "file": "voltaWreck",
+     "damage": 1,
+     "size": 128
+    }
+   }
+  },
+  "suv": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/suv",
+   "out": "assets",
+   "frame": 160,
+   "scale": 5,
+   "cx": 80,
+   "cy": 104,
+   "states": {
+    "intact": {
+     "file": "suvTurns"
+    },
+    "dented": {
+     "file": "suvDented",
+     "damage": 0.5,
+     "size": 128
+    },
+    "wreck": {
+     "file": "suvWreck",
+     "damage": 1,
+     "size": 128
+    }
+   }
+  },
+  "bus": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/bus",
+   "out": "assets",
+   "frame": 264,
+   "scale": 4.2,
+   "cx": 132,
+   "cy": 164,
+   "states": {
+    "intact": {
+     "file": "busTurns"
+    },
+    "dented": {
+     "file": "busDented",
+     "damage": 0.5,
+     "size": 208
+    },
+    "wreck": {
+     "file": "busWreck",
+     "damage": 1,
+     "size": 208
+    }
+   },
+   "bonnet": false,
+   "crush": {
+    "from": 0.7,
+    "squeeze": 0.5,
+    "collapse": 0.2,
+    "cabin": 0.1
+   }
+  },
+  "dumper": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/dumper",
+   "out": "assets",
+   "frame": 200,
+   "scale": 4.2,
+   "cx": 100,
+   "cy": 130,
+   "states": {
+    "intact": {
+     "file": "dumperTurns"
+    },
+    "dented": {
+     "file": "dumperDented",
+     "damage": 0.5,
+     "size": 160
+    },
+    "wreck": {
+     "file": "dumperWreck",
+     "damage": 1,
+     "size": 160
+    }
+   },
+   "split": 1.7,
+   "wells": [
+    [
+     -3.74,
+     1.5,
+     0.17,
+     1.45
+    ]
+   ],
+   "trim": {
+    "side": [
+     [
+      -3.42,
+      2.53,
+      1.66,
+      3.3
+     ]
+    ]
+   }
+  },
+  "moto": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/moto",
+   "out": "assets",
+   "frame": 128,
+   "scale": 6,
+   "cx": 64,
+   "cy": 92,
+   "states": {
+    "intact": {
+     "file": "motoTurns"
+    },
+    "dented": {
+     "file": "motoDented",
+     "damage": 0.5,
+     "with": {
+      "crush": {
+       "squeeze": 0.12,
+       "collapse": 0.05,
+       "twist": 0.05
+      }
+     }
+    },
+    "wreck": {
+     "file": "motoWreck",
+     "damage": 1,
+     "lean": 1.42,
+     "with": {
+      "crush": {
+       "squeeze": 0.14,
+       "collapse": 0,
+       "twist": 0.08,
+       "lean": 0
+      }
+     }
+    }
+   },
+   "unitsPerMetre": 6.4,
+   "bonnet": false,
+   "ink": 0.35
+  },
+  "barge": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/barge",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 512,
+   "scale": 2.565,
+   "cx": 256,
+   "cy": 280,
+   "lengthMetres": 38,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "bargeTurns"
+    }
+   },
+   "afloat": true
+  },
+  "riverboat": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/riverboat",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 448,
+   "scale": 2.9,
+   "cx": 224,
+   "cy": 250,
+   "lengthMetres": 30,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "riverboatTurns"
+    }
+   },
+   "afloat": true
+  },
+  "speedboat": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/speedboat",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 192,
+   "scale": 5,
+   "cx": 96,
+   "cy": 112,
+   "lengthMetres": 7,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "speedboatTurns"
+    }
+   },
+   "afloat": true
+  },
+  "launch": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/launch",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 224,
+   "scale": 4.2,
+   "cx": 112,
+   "cy": 130,
+   "lengthMetres": 10,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "launchTurns"
+    }
+   },
+   "afloat": true
+  },
+  "ringTrain": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/ringTrain",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 320,
+   "scale": 3.6,
+   "cx": 160,
+   "cy": 192,
+   "lengthMetres": 18,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "ringTrainTurns"
+    }
+   }
+  },
+  "ringTrainCab": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/ringTrainCab",
+   "out": "/home/stone/dev/signe-maitre/art-src/baked",
+   "frame": 320,
+   "scale": 3.6,
+   "cx": 160,
+   "cy": 192,
+   "lengthMetres": 18,
+   "marker": true,
+   "states": {
+    "intact": {
+     "file": "ringTrainCabTurns"
+    }
+   }
+  },
+  "motoRider": {
+   "model": "sheet",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/moto",
+   "sheet": "moto_dirs.png",
+   "out": "assets",
+   "frame": 128,
+   "cx": 64,
+   "cy": 92,
+   "zoom": 0.528,
+   "quality": 88,
+   "states": {
+    "bailiff": {
+     "file": "motoRider"
+    },
+    "courier": {
+     "file": "motoCourier",
+     "recolour": {
+      "hue": 338,
+      "into": 205,
+      "saturation": 0.62,
+      "value": 0.82,
+      "spread": 16
+     }
+    }
+   }
+  }
+ }
+}

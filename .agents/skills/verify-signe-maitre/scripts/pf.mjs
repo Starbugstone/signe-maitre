@@ -110,7 +110,7 @@ import { jobs } from "./src/world/town.js";
 import { target, sedan } from "./src/world/population.js";
 import { panel } from "./src/platform/canvas.js";
 const xy = (o) => o && { x: +o.x.toFixed(2), y: +o.y.toFixed(2) };
-const veh = (v) => v && { ...xy(v), model: v.model, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical };
+const veh = (v) => v && { ...xy(v), a: +v.a.toFixed(3), model: v.model, label: v.label, halted: (v.route?.stopFor || 0) > 0, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical };
 window.__pf = Object.freeze({
   snapshot() {
     const end = goal();
@@ -127,6 +127,7 @@ window.__pf = Object.freeze({
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
       traffic: cars.filter((c) => c.route).map(veh),
+      parked: cars.filter((c) => !c.route && !c.medical && c !== game.ride).map(veh),
     };
   },
 });

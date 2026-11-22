@@ -401,13 +401,13 @@ function drawCar(v) {
   g.drawImage(renderMotor(v), v.x - 16, v.y - 110 / 7, 32, 192 / 7);
   drawDamageSmoke(v);
 }
-export function drawDamageSmoke(v) {
+export function drawDamageSmoke(v, nose = 7) {
   if (v.condition < 42) {
     const wrecked = v.condition === 0,
       count = wrecked ? 9 : 4,
       reach = wrecked ? 27 : 13;
-    const baseX = v.x + 7 * Math.cos(v.a),
-      baseY = v.y + 7 * Math.sin(v.a) - 3;
+    const baseX = v.x + nose * Math.cos(v.a),
+      baseY = v.y + nose * Math.sin(v.a) - 3;
     const clock = game.time * (wrecked ? 0.54 : 0.78) + v.x * 0.013 + v.y * 0.009;
     g.save();
     for (let i = count - 1; i >= 0; i--) {

@@ -1,3 +1,20 @@
+import voltaTurns from "../../assets/voltaTurns.webp";
+import voltaDented from "../../assets/voltaDented.webp";
+import voltaWreck from "../../assets/voltaWreck.webp";
+import suvTurns from "../../assets/suvTurns.webp";
+import suvDented from "../../assets/suvDented.webp";
+import suvWreck from "../../assets/suvWreck.webp";
+import busTurns from "../../assets/busTurns.webp";
+import busDented from "../../assets/busDented.webp";
+import busWreck from "../../assets/busWreck.webp";
+import dumperTurns from "../../assets/dumperTurns.webp";
+import dumperDented from "../../assets/dumperDented.webp";
+import dumperWreck from "../../assets/dumperWreck.webp";
+import motoTurns from "../../assets/motoTurns.webp";
+import motoDented from "../../assets/motoDented.webp";
+import motoWreck from "../../assets/motoWreck.webp";
+import motoRider from "../../assets/motoRider.webp";
+import motoCourier from "../../assets/motoCourier.webp";
 import flatCap from "../../assets/flatCap.webp";
 import bomber from "../../assets/bomber.webp";
 import mariniere from "../../assets/mariniere.webp";
@@ -29,6 +46,23 @@ import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
 import canalImage from "../../assets/canal.webp";
 export const imageData = {
+  voltaTurns,
+  voltaDented,
+  voltaWreck,
+  suvTurns,
+  suvDented,
+  suvWreck,
+  busTurns,
+  busDented,
+  busWreck,
+  dumperTurns,
+  dumperDented,
+  dumperWreck,
+  motoTurns,
+  motoDented,
+  motoWreck,
+  motoRider,
+  motoCourier,
   flatCap,
   bomber,
   mariniere,

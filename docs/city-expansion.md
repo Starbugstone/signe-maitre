@@ -93,22 +93,34 @@ For each vehicle paint, on a transparent or flat magenta (#ff00ff) background, o
 
 Ids: `volta` (electric saloon), `suv`, `bus`, `dumper` (dump truck, tipper body), `moto` (motorbike with a rider in the bailiff colours as a separate layer `rider.png`), `barge`, `riverboat`, `speedboat`, `launch`, `ringTrain` (one carriage plus a cab end, two-tone green like `assets/metro.webp`).
 
-Finished atlases follow the ambulance format: 64 headings, 192 × 192 px per frame, one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length in px at frame scale) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
+Finished atlases follow the ambulance format: 64 headings in an 8 × 8 sheet, clockwise from east, square frames (192 px for a car-sized body, larger for long ones; the json gives the size), one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length in px at frame scale) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
 
 ## Fleet contract (Fable publishes)
 
 `src/game/fleet.js` exports `fleet`, a map from id to:
 
 ```js
-{ id, name: { fr, en }, domain: "road" | "water" | "rail",
+{ id, label,                       // label is the interface-string key of the name: t(entry.label)
+  name: { fr, en }, domain: "road" | "water" | "rail",
   halfLength, halfWidth,           // world units; sedan is 10.95 × 4.8
-  mass, topSpeed, reverseSpeed, accel, brake, steer, grip,
+  mass, topSpeed, reverseSpeed, accel, reverseAccel, brake, steer, grip,
+  turn,                            // tightest turning radius: steering fades in below steer × turn,
+                                   // and traffic takes corners on max(8, turn)
+  pivot?,                          // a long body swings about a point this share of halfLength behind its centre
+  leans?,                          // a two-wheeler: driving keeps `vehicle.lean` in -1..1
   sound: "petrol" | "electric" | "diesel" | "moto" | "boat",
-  atlas: { intact, dented?, wreck? }, // artwork keys
-  traffic: { weight, lanes: ["avenue", "street", "alley"?] } }
+  atlas: { intact, dented, wreck, ridden?, courier?, riddenHeadings? } | null, // artwork keys; null = the sedan's run-time wrap
+  sprite: { frame, scale, cx, cy }, // atlas cell in px, px per world unit, ground centre in the cell
+  traffic: { weight, parked, lanes: ["avenue", "street", "alley"?], pace, stops? } }
 ```
 
-Vehicles in `cars` carry `model` (a fleet id). Driving, collision and rendering read the fleet entry instead of the sedan constants.
+It also exports `fleetOf(vehicle)` (the entry for a vehicle, the sedan for anything unknown), `pickModel(roadClass, random, parked?)` (a weighted draw of the models allowed on a class of road) and `routeClass(route)` (reads `route.class`, `"street"` when a route does not say).
+
+Vehicles in `cars` carry `model` (a fleet id), `label` (the name shown to the player: a string key or a nameplate such as "Biscotte") and their own `halfLength` and `halfWidth`, stamped from the fleet entry when they are made. `car(x, y, a, tint, model, route)` in `src/world/population.js` accepts a fleet id; any other string is kept as a sedan's nameplate. Driving, damage, boarding, sound and rendering read the fleet entry through `fleetOf`; collision reads the stamped half-extents. `src/art/fleet-art.js` exports `drawVehicle(vehicle)`, which the street renderer calls for every road vehicle.
+
+Car-class bodies keep the sedan's half-width (4.8): the lanes are 12 units apart and cars park 10 units off the lane line. The bus and the dump truck are 5.5 wide and run their loop slightly off the car lane (`laneInset` in `population.js`); a route builder for wide vehicles must keep 0.7 units between their flank and the parked row.
+
+Atlases are baked by `tools/art/bake-vehicle.py` from `tools/art/fleet-bake.json`. The frame size varies with the body (a 12 m bus does not fit 192 px at a useful scale); the `sprite` block and each `art-src/baked/<id>.json` say what was used.
 
 ## Verification
 

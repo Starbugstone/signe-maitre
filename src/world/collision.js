@@ -126,11 +126,14 @@ export function distanceToBody(v, x, y) {
     side = Math.abs(dy * c - dx * s) - (v.halfWidth ?? sedanHalfWidth);
   return Math.hypot(Math.max(0, forward), Math.max(0, side)) + Math.min(0, Math.max(forward, side));
 }
+// How much longer than the sedan a body is: the quick distance rejections were sized for it.
+export const bodyExtra = (v) => Math.max(0, (v.halfLength ?? sedanHalfLength) - sedanHalfLength);
 // How far a foot circle of radius r sinks into each nearby vehicle body.
 function carOverlaps(x, y, r) {
   const overlaps = new Map();
   for (const v of cars) {
-    if (Math.abs(v.x - x) > 22 || Math.abs(v.y - y) > 22) continue;
+    const near = 22 + bodyExtra(v);
+    if (Math.abs(v.x - x) > near || Math.abs(v.y - y) > near) continue;
     const depth = r - distanceToBody(v, x, y);
     if (depth > 0) overlaps.set(v, depth);
   }
@@ -192,7 +195,8 @@ export function strikeClear(x, y, tx, ty) {
     for (let i = 1; i < steps; i++) {
       const sx = x + ((tx - x) * i) / steps,
         sy = y + ((ty - y) * i) / steps;
-      if (Math.abs(v.x - sx) < 14 && Math.abs(v.y - sy) < 14 && distanceToBody(v, sx, sy) < 0) return false;
+      const near = 14 + bodyExtra(v);
+      if (Math.abs(v.x - sx) < near && Math.abs(v.y - sy) < near && distanceToBody(v, sx, sy) < 0) return false;
     }
   return true;
 }
