@@ -7,8 +7,9 @@ import { drawCar } from "../../src/art/vehicles.js";
 import { canvas, g } from "../../src/platform/canvas.js";
 import { blocked, move, vehicleBlocked } from "../../src/world/collision.js";
 import { town, X, Y } from "../../src/world/town.js";
-import { paintings } from "../../src/world/paintings.js";
+import { fromRiver, paintings, riverMarks } from "../../src/world/paintings.js";
 import { streetLayer } from "../../src/world/streets.js";
+import { streetProps } from "../../src/world/street-props.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
 
@@ -298,23 +299,186 @@ function checkPaintedRiver() {
   }
 }
 function paintedRiver() {
-  const isl = town.river.islands[0];
-  // Water inside the island's bounding box, outside the painted quay wall.
-  requireCheck(blocked(isl.left + 30, isl.top + 6, 2.6), "Walker stepped off the island's north-west quay");
-  requireCheck(blocked(isl.right - 30, isl.bottom - 6, 2.6), "Walker stepped off the island's south-east quay");
-  // The apron in front of Notre-Dame-du-Port is open; the cathedral itself is not.
+  const isl = town.river.islands[0],
+    cy = Y(town.riverRow);
+  // The bevelled ends of the island are water to a walker.
+  requireCheck(blocked(isl.left + 8, isl.top + 6, 2.6), "Walker stepped off the island's north-west quay");
+  requireCheck(blocked(isl.right - 8, isl.bottom - 6, 2.6), "Walker stepped off the island's south-east quay");
+  // Notre-Dame-du-Port fills the north apron; the parvis in front of its portals is open.
   const cathedral = town.monuments.find((m) => m.id === "notre-dame-port");
-  requireCheck(blocked(cathedral.x, isl.top + 5, 2.6), "Walker entered the cathedral");
-  requireCheck(!blocked(cathedral.x, isl.top + 24, 2.6), "Cathedral forecourt blocked");
-  actorLayers(cathedral.x, isl.top + 24, false);
-  // A stone bridge is open across its whole painted deck.
+  requireCheck(blocked(cathedral.x, cathedral.y, 2.6), "Walker entered the cathedral");
+  requireCheck(blocked(cathedral.x, isl.top + 30, 2.6), "Walker entered the cathedral's nave");
+  requireCheck(!blocked(cathedral.x, cy - 22.5, 2.6), "Cathedral parvis blocked");
+  actorLayers(cathedral.x, cy - 22.5, false);
+  // A stone bridge is open between its parapets.
   const y = (town.river.top + town.river.bottom) / 2;
-  requireCheck(!blocked(X(3) + 29, y, 2.6), "Walker blocked on the bridge pavement");
-  requireCheck(blocked(X(3) + 40, y, 2.6), "Walker left the bridge deck");
-  actorLayers(X(3) + 29, y, false);
+  requireCheck(!blocked(X(3) + 25, y, 2.6), "Walker blocked on the bridge pavement");
+  requireCheck(blocked(X(3) + 28, y, 2.6), "Walker climbed the bridge parapet");
+  actorLayers(X(3) + 25, y, false);
   // The quay promenades either side of the water.
-  actorLayers(X(7), town.river.top - 6, false);
-  actorLayers(X(7), town.river.bottom + 8, false);
+  actorLayers(X(7) - 30, town.river.top - 12, false);
+  actorLayers(X(7) - 30, town.river.bottom + 8, false);
+}
+
+// Île de la Ferre's quay walls as painted: walkers stay on the cap, hulls stay off the stone,
+// and the island's skyline stands in front of a boat in the north channel.
+function checkIslandWalls() {
+  const isl = river.islands[0],
+    cy = Y(town.riverRow);
+  // Nobody walks down the face of a wall: the island's south wall and the north bank's.
+  for (const x of [X(8) + 60, X(9) + 60, X(10) - 100]) {
+    requireCheck(!blocked(x, isl.bottom - 9, 2.6), "Island quay blocked above its wall");
+    requireCheck(blocked(x, isl.bottom - 2.5, 2.6), "Walker stood on the face of the island wall");
+    // The cathedral stands on the north wall; either side of it a promenade runs along the wall.
+    requireCheck(blocked(x, isl.top + 6, 2.6) === (x === X(9) + 60), "Island's north promenade at " + x);
+  }
+  for (const col of [0, 5, 7, 9]) {
+    requireCheck(!blocked(X(col) + 60, river.top - 11, 2.6), "Quay terrace blocked at column " + col);
+    requireCheck(blocked(X(col) + 60, river.top - 4, 2.6), "Walker stood on the face of the north quay wall at column " + col);
+  }
+  // The island street runs from bridge to bridge.
+  for (let x = X(8); x <= X(10); x += 29) requireCheck(!blocked(x, cy, 2.6) && !vehicleBlocked({ x, y: cy, a: 0 }), "Island street closed");
+  // A garden behind its railings and a tree trunk are solid; the path between them is not.
+  requireCheck(blocked(X(8) + 80, cy - 40, 2.6), "Walker entered the pavilion garden");
+  requireCheck(blocked(X(10) - 80, cy - 40, 2.6), "Walker entered the law courts");
+  const original = boatFleet.boats.splice(0);
+  try {
+    // Hulls: clear water in both channels, stone at the wall and at the bevelled point.
+    const launch = makeBoat("launch", { x: X(9), y: isl.top - 12, a: 0 });
+    requireCheck(hullOnWater(river, launch), "Launch blocked in the north channel");
+    requireCheck(!hullOnWater(river, launch, X(9), isl.top - 4), "Hull entered the island's north wall");
+    requireCheck(!hullOnWater(river, launch, X(9), isl.bottom + 4), "Hull entered the island's south wall");
+    requireCheck(!hullOnWater(river, launch, isl.left + 4, cy - 30, Math.PI / 2), "Hull entered the island's west point");
+    requireCheck(hullOnWater(river, launch, isl.left - 12, cy, Math.PI / 2), "Launch blocked off the west point");
+    // The painted wall begins where the navigable water ends: beside the hull the wall shows.
+    const wall = fromRiver("islandCathedral").y(riverMarks.islandCathedral.island[0][1]);
+    requireCheck(Math.abs(cy + wall - isl.top) < 2.5, "Painted north wall is not on the published island edge");
+    // Behind the spire the boat is covered; in the open channel it shows.
+    const spire = { x: X(9), y: isl.top - 12 };
+    const view = camera(spire.x, spire.y);
+    draw();
+    const sample = () => pixels(view, spire.x - 2, spire.y - 8, 4, 12),
+      beside = () => pixels(view, spire.x - 22, spire.y - 6, 8, 8);
+    const clearSpire = sample(),
+      clearWater = beside();
+    boatFleet.boats.push(launch);
+    draw();
+    boatFleet.boats.pop();
+    requireCheck(difference(clearSpire, sample()) < 8, "A boat in the north channel covers the cathedral spire");
+    requireCheck(difference(clearWater, beside()) > 40, "The boat behind the spire is missing beside it");
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+  }
+}
+
+// The three painted bridges: parapets stop walkers and cars, the stone piers stop hulls,
+// and bastions, ribs and parapets stand in front of whatever sails beneath.
+function checkBridgeParapets() {
+  const y = (river.top + river.bottom) / 2,
+    channel = (river.top + river.islands[0].top) / 2;
+  for (const [col, at] of [
+    [3, y],
+    [6, y],
+    [8, channel],
+    [10, channel],
+  ]) {
+    const half = paintings[town.cellKinds[town.riverRow][col]].walk;
+    for (const side of [-1, 1]) {
+      requireCheck(!blocked(X(col) + side * (half - 3), at, 2.6), "Walker blocked inside the parapet at column " + col);
+      requireCheck(blocked(X(col) + side * (half + 1.5), at, 2.6), "Walker crossed the parapet at column " + col);
+    }
+    for (const lane of [-6, 6])
+      requireCheck(!vehicleBlocked({ x: X(col) + lane, y: at, a: Math.PI / 2 }), "Traffic lane blocked on the bridge at column " + col);
+    requireCheck(vehicleBlocked({ x: X(col) + half, y: at, a: Math.PI / 2 }), "Car drove along the parapet at column " + col);
+  }
+  const original = boatFleet.boats.splice(0);
+  try {
+    const stone = town.cellKinds[town.riverRow].indexOf("riverBridge"),
+      x = X(stone),
+      cy = Y(town.riverRow);
+    const launch = makeBoat("launch", { x, y, a: 0 });
+    // Every pier base and the north abutment stop a hull; the arches between them are open.
+    const piers = paintings.riverBridge.piers;
+    requireCheck(piers.length === 5, "Stone bridge piers missing");
+    for (const pier of piers)
+      requireCheck(!hullOnWater(river, launch, x + pier.left + 6, cy + (pier.top + pier.bottom) / 2), "Hull entered a bridge pier");
+    for (let i = 0; i < piers.length - 1; i++) {
+      const arch = cy + (piers[i].bottom + piers[i + 1].top) / 2;
+      requireCheck(hullOnWater(river, launch, x, arch), "Arch " + i + " closed to a launch");
+      requireCheck(hullOnWater(river, makeBoat("barge", {}), x, arch, 0) || i === 3, "Arch " + i + " closed to a barge");
+    }
+    // A hull behind a bastion is covered by it; clear of the bridge it shows.
+    const bastion = { x: x + 45, y: cy + piers[2].top - 9 };
+    const view = camera(bastion.x, bastion.y);
+    draw();
+    const sample = () => pixels(view, bastion.x - 6, bastion.y - 6, 12, 10),
+      beside = () => pixels(view, x + 72, bastion.y - 5, 8, 8);
+    const clearBastion = sample(),
+      clearWater = beside();
+    boatFleet.boats.push(makeBoat("launch", { x: x + 58, y: bastion.y, a: 0 }));
+    draw();
+    boatFleet.boats.pop();
+    requireCheck(difference(clearBastion, sample()) < 8, "A boat behind the bastion covers it");
+    requireCheck(difference(clearWater, beside()) > 40, "The boat behind the bastion is missing beside it");
+    // Iron bridge: the ribs cover a hull, the pierced spandrels show it.
+    const iron = X(town.cellKinds[town.riverRow].indexOf("riverIronBridge"));
+    const rib = { x: iron - 59.5, y };
+    const ironView = camera(rib.x, rib.y);
+    draw();
+    const ribSample = () => pixels(ironView, rib.x - 1.5, rib.y - 5, 3, 8),
+      gap = () => pixels(ironView, iron - 44, rib.y - 5, 8, 8);
+    const clearRib = ribSample(),
+      clearGap = gap();
+    boatFleet.boats.push(makeBoat("launch", { x: iron - 48, y, a: 0 }));
+    draw();
+    boatFleet.boats.pop();
+    requireCheck(difference(clearRib, ribSample()) < 6, "A boat under the iron bridge covers its rib");
+    requireCheck(difference(clearGap, gap()) > 40, "The boat does not show through the open spandrel");
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+  }
+}
+
+// Hand-marked lanterns of the later paintings: a walker behind the post is covered by it, in
+// front stands clear, and the post itself is solid. A lantern hung over the iron bridge
+// covers whoever passes on its far side.
+function checkPaintedLanterns() {
+  const cy = Y(town.riverRow);
+  const lanterns = [];
+  for (const [col, key, pick] of [
+    [7, "river", 0],
+    [9, "islandCathedral", 4],
+    [10, "islandEast", 5],
+  ]) {
+    const m = fromRiver(key),
+      [lx, , foot] = riverMarks[key].lamps[pick];
+    lanterns.push([X(col) + m.x(lx), cy + m.y(foot)]);
+  }
+  // One per district painting that carries lanterns.
+  const seen = new Set();
+  for (let row = 0; row < town.rows; row++)
+    for (let col = 0; col < town.cols; col++) {
+      const key = town.cellKinds[row][col];
+      if (seen.has(key) || paintings[key].river) continue;
+      const lamp = streetProps(town, col, row).find((prop) => prop.item.painted && prop.item.radius && prop.item.key === key);
+      if (!lamp) continue;
+      seen.add(key);
+      lanterns.push([lamp.x, lamp.y]);
+    }
+  for (const [x, y] of lanterns) {
+    requireCheck(blocked(x, y - 0.5, 2.6), "Lantern post open to a walker at " + x.toFixed(0) + "," + y.toFixed(0));
+    requireCheck(vehicleBlocked({ x, y: y - 0.5, a: 0 }), "Lantern post open to a car at " + x.toFixed(0) + "," + y.toFixed(0));
+  }
+  for (const [x, y] of lanterns.slice(0, 6)) {
+    actorLayers(x, y - 4.2, true);
+    actorLayers(x, y + 4.4, false);
+  }
+  const m = fromRiver("riverIronBridge"),
+    [hx, top, , bracket] = riverMarks.riverIronBridge.hanging[4];
+  const iron = X(town.cellKinds[town.riverRow].indexOf("riverIronBridge"));
+  actorLayers(iron + m.x(hx) + 2.4, cy + m.y(bracket) - 3, true);
+  actorLayers(iron + m.x(hx) + 2.4, cy + m.y(bracket) + 12, false);
+  void top;
 }
 
 // A walker at a station door stands in front of the hall; the tower's rear gardens are solid.
@@ -327,12 +491,12 @@ function checkStationsAndGardens() {
   actorLayers(side.street.x + 12, side.street.y, false);
 }
 
-function checkDeckOverBoat(launch, deck, water) {
+function checkDeckOverBoat(boats, deck, water) {
   draw();
   const clearDeck = deck(), clearWater = water();
-  boatFleet.boats.push(launch);
+  boatFleet.boats.push(...[boats].flat());
   draw();
-  boatFleet.boats.pop();
+  boatFleet.boats.length = 0;
   requireCheck(difference(clearDeck, deck()) < 8, "Water traffic covers the deck or its street actors");
   requireCheck(difference(clearWater, water()) > 50, "The boat is missing beside the bridge");
 }
@@ -361,10 +525,12 @@ function bridgeOverBoats() {
         people.push(npc);
         cars.push(car);
         trails.push({ x: x + 17, y: y + 9, a: 0, t: 2 });
+        // A stone bridge's bastions and an iron bridge's ribs reach 61 units out from the road.
+        const clear = north ? halfWidth + 8 : 66;
         checkDeckOverBoat(
-          launch,
+          [launch, makeBoat("launch", { x: x + clear + 7, y, a: 0 })],
           () => pixels(view, x - 12, y - 14, 32, 22),
-          () => pixels(view, x + halfWidth + 8, y - 10, 14, 14),
+          () => pixels(view, x + clear, y - 10, 14, 14),
         );
         people.length = cars.length = trails.length = 0;
       }
@@ -447,6 +613,9 @@ const checks = {
   "monument-islands": checkMonumentIslands,
   "closed-arms": checkClosedArms,
   "painted-river": checkPaintedRiver,
+  "island-quay-walls": checkIslandWalls,
+  "bridge-parapets-and-piers": checkBridgeParapets,
+  "painted-lanterns": checkPaintedLanterns,
   "stations": checkStationsAndGardens,
 };
 

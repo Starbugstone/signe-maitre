@@ -129,10 +129,13 @@ function makeDefaultRoads(cols, rows, canalRow, riverSouthRow, bridgeCols) {
   return { nodes, edges };
 }
 
-function makeRiver({ top, bottom, islands = [], bridges = [], centreline = [], moorings = [], width }) {
+function makeRiver({ top, bottom, islands = [], bridges = [], piers = [], centreline = [], moorings = [], width }) {
   function onWater(x, y, r = 0) {
     if (x - r < 0 || x + r > width) return false;
     if (y - r < top || y + r > bottom) return false;
+    // Bridge masonry standing in the water.
+    for (const pier of piers)
+      if (x + r > pier.left && x - r < pier.right && y + r > pier.top && y - r < pier.bottom) return false;
     for (const isl of islands) {
       if (x + r < isl.left || x - r > isl.right || y + r < isl.top || y - r > isl.bottom) continue;
       const middle = (isl.top + isl.bottom) / 2;
@@ -155,7 +158,7 @@ function makeRiver({ top, bottom, islands = [], bridges = [], centreline = [], m
     }
     return true;
   }
-  return { top, bottom, islands, bridges, centreline, moorings, onWater };
+  return { top, bottom, islands, bridges, piers, centreline, moorings, onWater };
 }
 
 function rectOverlapsCell(rect, col, row, pad = 28) {
@@ -248,6 +251,7 @@ export function buildTown({
     top: riverTop,
     bottom: riverBottom,
     islands,
+    piers: singleBandCanal ? [] : (riverSpec.piers || []).map((pier) => ({ ...pier })),
     bridges: bridgeList,
     centreline,
     moorings,

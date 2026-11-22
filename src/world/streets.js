@@ -451,8 +451,10 @@ export function drawStreetProp({ x, y, item }) {
     for (const [px, py] of item.outline) ctx.lineTo(px, py);
     ctx.closePath();
     ctx.clip();
-    const plate = plates[item.key];
-    ctx.drawImage(plate, -CELL_W / 2, -CELL_H / 2, plate.width / plateScale, plate.height / plateScale);
+    // A river plate hangs from the Quai Nord kerb, the others from their cell's top edge.
+    const plate = plates[item.key],
+      plateTop = paintings[item.key]?.river ? riverPlate.top : -CELL_H / 2;
+    ctx.drawImage(plate, -CELL_W / 2, plateTop, plate.width / plateScale, plate.height / plateScale);
     sprite = { image, dx: left - item.x, dy: top - item.y };
     propSprites.set(item, sprite);
   }
@@ -465,14 +467,25 @@ export function drawStreetProp({ x, y, item }) {
   );
 }
 
+// Props whose silhouette reaches into the view; a tall one counts while only its top shows.
+const propReach = 60;
 export function visibleStreetProps(ox, oy) {
-  const area = town.visibleCells(ox, oy, game.vw, game.vh + 52);
+  const area = town.visibleCells(ox, oy, game.vw, game.vh + propReach);
   const result = [];
   for (let row = area.firstRow; row <= area.lastRow; row++)
     for (let col = area.firstCol; col <= area.lastCol; col++)
-      for (const prop of streetProps(town, col, row))
-        if (prop.x >= ox - 3 && prop.x <= ox + game.vw + 3 && prop.y >= oy && prop.y <= oy + game.vh + 52)
+      for (const prop of streetProps(town, col, row)) {
+        const item = prop.item;
+        item.rise ??= item.y - Math.min(...item.outline.map((point) => point[1]));
+        item.half ??= Math.max(...item.outline.map((point) => Math.abs(point[0] - item.x)));
+        if (
+          prop.x + item.half >= ox &&
+          prop.x - item.half <= ox + game.vw &&
+          prop.y >= oy &&
+          prop.y - item.rise <= oy + game.vh
+        )
           result.push(prop);
+      }
   return result;
 }
 
@@ -506,6 +519,7 @@ function streetLayer(ox, oy) {
     streetContext.setTransform(scale, 0, 0, scale, -cachedX * scale, -cachedY * scale);
     rect(streetContext, cachedX, cachedY, width, height, "#201c29");
     drawTown(cachedX, cachedY, streetContext, width, height);
+    overFresh = false;
   }
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -513,32 +527,58 @@ function streetLayer(ox, oy) {
   g.restore();
 }
 
-// Restore the painted decks and island where they occlude hulls, reflections and wakes.
-export function drawBridgeDecks(ox, oy) {
+// What stands in front of the river traffic: bridge decks, parapets, bastions, ironwork, the
+// island with its skyline and the quay lanterns. tools/art/bake-scenery.mjs bakes a mask of
+// them for every river plate; the street layer is drawn again through those masks, over
+// hulls, reflections and wakes.
+const over = document.createElement("canvas"),
+  overContext = over.getContext("2d");
+const masks = document.createElement("canvas"),
+  maskContext = masks.getContext("2d");
+let overFresh = false,
+  overEmpty = true;
+
+function buildOver() {
+  overFresh = true;
+  const scale = groundScale,
+    width = streets.width / scale,
+    height = streets.height / scale;
   const row = town.riverRow,
-    cy = Y(row);
-  const { firstCol, lastCol } = town.visibleCells(ox, oy, game.vw, game.vh, CELL_W / 2);
+    top = Y(row) + riverPlate.top;
+  overEmpty = row == null || cachedY + height < top || cachedY > top + riverPlate.height;
+  if (overEmpty) return;
+  for (const c of [over, masks])
+    if (c.width !== streets.width || c.height !== streets.height) {
+      c.width = streets.width;
+      c.height = streets.height;
+    }
+  maskContext.setTransform(1, 0, 0, 1, 0, 0);
+  maskContext.clearRect(0, 0, masks.width, masks.height);
+  maskContext.setTransform(scale, 0, 0, scale, -cachedX * scale, -cachedY * scale);
+  const { firstCol, lastCol } = town.visibleCells(cachedX, cachedY, width, height, CELL_W / 2);
+  for (let col = Math.max(0, firstCol); col <= Math.min(town.cols - 1, lastCol); col++) {
+    const mask = artwork[cellPlateKey(col, row) + "Over"];
+    if (mask) maskContext.drawImage(mask, X(col) - CELL_W / 2, top, CELL_W, riverPlate.height);
+    // Tour de Fer's rear gardens stand on the quay, in front of the water.
+    const gardens = paintings[cellPlateKey(col, town.riverSouthRow)]?.gardens;
+    if (gardens) {
+      maskContext.beginPath();
+      for (const garden of gardens) trace(maskContext, garden, X(col), Y(town.riverSouthRow));
+      maskContext.fill();
+    }
+  }
+  overContext.globalCompositeOperation = "copy";
+  overContext.drawImage(streets, 0, 0);
+  overContext.globalCompositeOperation = "destination-in";
+  overContext.drawImage(masks, 0, 0);
+}
+
+export function drawBridgeDecks(ox, oy) {
+  if (!overFresh) buildOver();
+  if (overEmpty) return;
   g.save();
-  g.beginPath();
-  for (let col = Math.max(0, firstCol - 1); col <= Math.min(town.cols - 1, lastCol + 1); col++) {
-    const painting = paintings[cellPlateKey(col, row)],
-      cx = X(col);
-    if (painting.deck) trace(g, painting.deck, cx, cy);
-    for (const deck of painting.decks || []) trace(g, deck, cx, cy);
-  }
-  // The island's quay wall, as painted; wound like the decks so that overlaps stay filled.
-  const west = town.cellKinds[row].indexOf("islandWest"),
-    east = town.cellKinds[row].indexOf("islandEast");
-  if (west >= 0 && east >= 0) {
-    const wall = [
-      ...paintings.islandWest.outline.map(([x, y]) => [X(west) + x, cy + y]),
-      ...paintings.islandEast.outline.map(([x, y]) => [X(east) + x, cy + y]),
-    ];
-    trace(g, wall.reverse());
-  }
-  g.clip("nonzero");
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.drawImage(streets, Math.round((cachedX - ox) * groundScale), Math.round((cachedY - oy) * groundScale));
+  g.drawImage(over, Math.round((cachedX - ox) * groundScale), Math.round((cachedY - oy) * groundScale));
   g.restore();
 }
 
