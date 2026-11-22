@@ -40,7 +40,7 @@ export default async function (d) {
   // Walk along the étude's street to the first spot that `arrived` accepts, around every
   // parked, crashed or abandoned vehicle: a breadth-first search over the street between
   // the two building lines. Moving traffic is left to stop for the walker, as it does.
-  async function walkAround(arrived, what) {
+  async function walkAround(arrived, what, required = true) {
     const cell = 3,
       top = pavement,
       bottom = pavement + 45;
@@ -76,6 +76,7 @@ export default async function (d) {
           queue.push([ni, nj]);
         }
       }
+      if (!goal && !required) return false;
       d.expect(!!goal, `there is a way on foot to ${what}`, { from: p });
       // Keep the corners of the path and walk from one to the next.
       const cells = [];
@@ -83,7 +84,7 @@ export default async function (d) {
       const corners = cells.filter((c, n) => n === cells.length - 1 || (n > 0 && (c[0] - cells[n - 1][0] !== cells[n + 1][0] - c[0] || c[1] - cells[n - 1][1] !== cells[n + 1][1] - c[1])));
       try {
         for (const corner of corners) await d.walkTo(at(...corner), { tol: 2.5, timeout: 30000 });
-        return;
+        return true;
       } catch (error) {
         d.note("path blocked, planning again", { what, error: error.message });
       }
@@ -110,11 +111,19 @@ export default async function (d) {
       parkedAt = car;
       // To the vehicle's door, from the pavement or the street side, whichever is open.
       // The spot must be nearer this vehicle than any other, or F takes the wrong wheel.
-      await walkAround((spot, cars) => {
+      // From the pavement if there is a way: traffic stops beside a walker in the street.
+      const door = (kerbSide) => (spot, cars) => {
         const now = cars.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14) || car;
         const mine = reach(now, spot);
-        return mine < 19 && cars.every((c) => c === now || reach(c, spot) > mine + 3);
-      }, `the ${model}`);
+        return mine < 19 && (!kerbSide || spot.y < now.y - 6) && cars.every((c) => c === now || reach(c, spot) > mine + 3);
+      };
+      if (!(await walkAround(door(true), `the ${model}`, false))) await walkAround(door(false), `the ${model}`);
+      // Let a passing car go by first, as a player would.
+      await d.waitFor(
+        "no traffic nearer than the vehicle",
+        ({ state }) => state.traffic.every((c) => reach({ ...c, model: c.model }, state.p) > reach(car, state.p) - 2),
+        20000,
+      ).catch(() => d.note("traffic still close", {}));
       d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
     });
     await d.step(`board-${model}`, async () => {
