@@ -465,11 +465,12 @@ function checkPaintedLanterns() {
       seen.add(key);
       lanterns.push([lamp.x, lamp.y]);
     }
+  requireCheck(seen.size >= 14, "Too few paintings carry their lanterns: " + [...seen]);
   for (const [x, y] of lanterns) {
     requireCheck(blocked(x, y - 0.5, 2.6), "Lantern post open to a walker at " + x.toFixed(0) + "," + y.toFixed(0));
     requireCheck(vehicleBlocked({ x, y: y - 0.5, a: 0 }), "Lantern post open to a car at " + x.toFixed(0) + "," + y.toFixed(0));
   }
-  for (const [i, [x, y]] of lanterns.slice(0, 6).entries()) {
+  for (const [i, [x, y]] of lanterns.entries()) {
     try {
       actorLayers(x, y - 4.2, true);
       actorLayers(x, y + 4.4, false);

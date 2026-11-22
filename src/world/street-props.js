@@ -143,8 +143,15 @@ for (const [key, painting] of Object.entries(paintings)) {
     const xs = outline.map((p) => p[0]);
     return { key, x: (Math.min(...xs) + Math.max(...xs)) / 2, y: foot, radius: 0, outline, tall: true };
   });
-  const map = painting.river ? fromRiver(key) : painting.lamps ? fromSource(painting.lampSource || key, { ring: !!painting.viaduct }) : null;
-  for (const lamp of (painting.river ? riverMarks[key].lamps : painting.lamps) || []) items.push(lanternProp(key, map, lamp));
+  if (painting.river) {
+    for (const lamp of riverMarks[key].lamps || []) items.push(lanternProp(key, fromRiver(key), lamp));
+  } else if (painting.lamps) {
+    // A ring-row plate is registered on its viaduct painting, or on two of them.
+    const { source = key, east } = painting.viaduct || {},
+      ring = !!painting.viaduct;
+    for (const lamp of painting.lamps) items.push(lanternProp(key, fromSource(source, { ring }), lamp));
+    for (const lamp of painting.eastLamps || []) items.push(lanternProp(key, fromSource(east, { ring }), lamp));
+  }
   if (items.length) props[key] = items;
 }
 

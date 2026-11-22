@@ -362,6 +362,44 @@ export const paintings = {
   }
 }
 
+// Street lanterns of the district paintings, hand-marked [x, finial, foot] in source pixels
+// and checked with tools/art/review-lamps.mjs. The paintings share one framing, so most
+// carry the same eight lanterns on the pavements of the north-south street.
+const kerbLamps = { a: [291, 397], b: [590, 694], c: [837, 953], d: [145, 245] };
+const lampRow = (rows, west = 600, east = 900) =>
+  [...rows].flatMap((row) => {
+    const [top, foot] = kerbLamps[row];
+    const shift = row === "d" ? 28 : 0;
+    return [west + shift, east - shift].filter((x) => x != null && !Number.isNaN(x)).map((x) => [x, top, foot]);
+  });
+for (const key of ["haussmann", "haussmannCafe", "marketHall", "park", "opera", "basilica"]) paintings[key].lamps = lampRow("abcd");
+// The metro stairs take the north-east corner of the boulevard, a gate pier the law courts'.
+paintings.boulevard.lamps = [...lampRow("bcd"), [600, 291, 397]];
+paintings.palaisJustice.lamps = [...lampRow("bcd"), [900, 291, 397]];
+paintings.towerBase.lamps = [...lampRow("bcd"), [611, 258, 338], [887, 258, 338]];
+// The closed north side of the T-junction has one lantern either side of its frontage.
+paintings.teeNorth.lamps = [...lampRow("bc"), [556, 290, 412], [1106, 290, 412]];
+paintings.starArch.lamps = [
+  [637, 4, 110], [866, 4, 110], [597, 132, 250], [906, 132, 250], [506, 598, 712], [997, 598, 712], [585, 748, 866], [917, 748, 866],
+  [450, 222, 376], [1050, 262, 390], [394, 870, 990], [1104, 870, 990],
+];
+// Three-lantern standards around Place de la Contrainte; the plain roundabout keeps them.
+paintings.obeliskSquare.lamps = [[627, 30, 194], [877, 30, 194], [597, 725, 882], [900, 725, 882], [441, 272, 410], [1030, 272, 410]];
+paintings.rondPoint.lamps = paintings.obeliskSquare.lamps;
+// Ring rows: a lantern at the top of the cross street, one under the viaduct and one south
+// of the junction, either side. `lamps` are marked on `viaduct.source`, `eastLamps` on
+// `viaduct.east`. A station hall stands where the north-east pair would be.
+{
+  const west = [[640, 54, 152], [550, 338, 424], [626, 600, 714]],
+    east = [[865, 54, 154], [946, 342, 424], [874, 600, 712]];
+  const cornerWest = [[639, 50, 152], [550, 338, 424], [626, 604, 714]],
+    cornerEast = [[866, 55, 152], [946, 348, 422], [881, 611, 712]];
+  paintings.ringNorth.lamps = [...west, ...east];
+  paintings.ringStation.lamps = [...west, east[2]];
+  Object.assign(paintings.ringNorthB, { lamps: cornerWest, eastLamps: cornerEast });
+  Object.assign(paintings.ringStationB, { lamps: cornerWest, eastLamps: [cornerEast[2]] });
+}
+
 // Sacré-Créancier's stairs come down to a broad forecourt; its west arm narrows to a ruelle
 // only beyond it.
 paintings.basilica.forecourt = { w: 100 };
