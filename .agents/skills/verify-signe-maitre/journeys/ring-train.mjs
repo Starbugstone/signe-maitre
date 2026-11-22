@@ -12,7 +12,8 @@ export default async function (d) {
     Math.hypot(s.street.x - start.p.x, s.street.y - start.p.y) < Math.hypot(best.street.x - start.p.x, best.street.y - start.p.y) ? s : best,
   );
   const firstIndex = stations.indexOf(first);
-  const next = stations[(firstIndex + 1) % stations.length];
+  // The stop the player asks for, read from the hint the moment the train moves.
+  let next = stations[(firstIndex + 1) % stations.length];
 
   await d.step("walk-to-station", async () => {
     await d.walkTo(first.street, { tol: 5 });
@@ -22,10 +23,16 @@ export default async function (d) {
 
   await d.step("climb-to-platform", async () => {
     await d.press("car");
+    // A train already standing with open doors takes the player aboard at once.
     const { state, hud } = await d.waitFor("on the platform",
-      ({ state, hud }) => state.transit?.phase === "platform" && hud.hint.includes(d.t("platformHint").split(" · ")[0]), 4000);
-    d.expect(state.transit.station === firstIndex, "the player waits on the platform of " + first.id, state.transit);
-    d.expect(hud.hint.includes(d.t("platformHint").split(" · ")[0]), "the hint says the player is on the platform", hud.hint);
+      ({ state, hud }) =>
+        (state.transit?.phase === "platform" && hud.hint.includes(d.t("platformHint").split(" · ")[0])) ||
+        (state.transit?.phase === "riding" && state.transit.boardedAt === firstIndex), 4000);
+    const station = state.transit.phase === "platform" ? state.transit.station : state.transit.boardedAt;
+    d.expect(station === firstIndex, "the player climbs to the platform of " + first.id, state.transit);
+    if (state.transit.phase === "platform")
+      d.expect(hud.hint.includes(d.t("platformHint").split(" · ")[0]), "the hint says the player is on the platform", hud.hint);
+    else d.note("a train was already at the platform; boarded at once", state.transit);
   });
 
   let set;
@@ -37,39 +44,43 @@ export default async function (d) {
     d.expect(hud.hint.includes(d.t("doorsOpenHint")), "the hint offers to get off while the doors are open", hud.hint);
   });
 
+  // Every poll from departure on records the rider's heading, so a slow capture cannot miss the corner.
+  let departure = null,
+    widest = 0,
+    shot = false;
+  const watch = ({ state }) => {
+    if (state.transit?.phase !== "riding" || departure === null) return;
+    const angle = turn(state.p.a, departure);
+    widest = Math.max(widest, angle);
+    if (!shot && angle > 0.6) {
+      shot = true;
+      d.shot("mid-corner").catch(() => {});
+    }
+  };
+
   await d.step("train-departs", async () => {
     const { state, hud } = await d.waitFor("moving",
       ({ state, hud }) => state.ring.trains[set].station === -1 && state.ring.trains[set].v > 5 && hud.hint.includes(d.t("nextStopHint")), 20000);
-    d.expect(hud.hint.includes(d.t("nextStopHint") + " " + next.name) && !hud.hint.includes(d.t("doorsOpenHint")), "the hint names the next stop once moving", hud.hint);
+    departure = state.p.a;
+    // Ask for the stop straight away, before a slow screenshot lets the train pass it.
+    await d.press("car");
+    next = stations.find((s) => hud.hint.includes(d.t("nextStopHint") + " " + s.name)) ?? next;
+    d.expect(next.id !== first.id && !hud.hint.includes(d.t("doorsOpenHint")), "the hint names the next stop once moving", hud.hint);
     const rider = state.ring.trains[set].cars[1];
     d.expect(Math.hypot(rider.x - state.p.x, rider.y - state.p.y) < 0.5, "the player rides in the second carriage", { rider, p: state.p });
     d.expect(Math.abs(state.cam.y - (state.p.y - state.ring.deckLift)) < 40, "the camera follows the raised carriage", { cam: state.cam, p: state.p });
   });
 
   await d.step("request-next-stop", async () => {
-    await d.press("car");
     const { state, hud } = await d.waitFor("stop requested",
-      ({ state, hud }) => state.transit?.alightAt != null && hud.hint.includes(d.t("alightingHint")), 3000);
+      (seen) => (watch(seen), seen.state.transit?.alightAt != null && seen.hud.hint.includes(d.t("alightingHint"))), 3000);
     d.expect(stations[state.transit.alightAt].id === next.id, "the request is for the next stop, " + next.id, state.transit);
-    d.expect(hud.hint.includes(d.t("alightingHint")), "the hint confirms the stop", hud.hint);
+    d.expect(hud.hint.includes(d.t("alightingHint") + " " + next.name), "the hint confirms the stop", hud.hint);
   });
 
   await d.step("ride-through-corner", async () => {
-    const before = (await d.state()).p.a;
-    let shot = false;
-    const { state } = await d.waitFor(
-      "a quarter turn",
-      ({ state }) => {
-        const angle = turn(state.p.a, before);
-        if (!shot && angle > 0.6) {
-          shot = true;
-          d.shot("mid-corner").catch(() => {});
-        }
-        return angle > 1.4 || state.transit === null;
-      },
-      60000,
-    );
-    d.expect(turn(state.p.a, before) > 1.4, "the carriage turns through a corner of the ring", { before, after: state.p.a });
+    await d.waitFor("a quarter turn", (seen) => (watch(seen), widest > 1.4 || seen.state.transit === null), 60000);
+    d.expect(widest > 1.4, "the carriage turns through a corner of the ring", { departure, widest });
   });
 
   await d.step("alight", async () => {
