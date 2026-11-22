@@ -37,8 +37,25 @@ function settle(boat) {
   boat.speed = boat.slideX = boat.slideY = boat.yaw = 0;
 }
 
-export function boardableBoat(boats, moorings, person) {
-  return boats.find((boat) => boat.mooring && moorings.some((m) => m.id === boat.mooring && dist(m.quay, person) <= 11));
+export function boardableBoat(boats, river, person) {
+  if (river.onWater(person.x, person.y, 0)) return;
+  let nearest, reach = 19;
+  for (const boat of boats) {
+    if (boat.incoming || (!boat.mooring && Math.hypot(boat.slideX, boat.slideY) > 7.5)) continue;
+    const berth = river.moorings.find((m) => m.id === boat.mooring);
+    if (berth && dist(berth.quay, person) <= 11) return boat;
+
+    // Use the same rounded keel as water collision, so either end of a long hull is reachable.
+    const dx = person.x - boat.x, dy = person.y - boat.y;
+    const cos = Math.cos(boat.a), sin = Math.sin(boat.a);
+    const keel = boat.halfLength - boat.halfWidth;
+    const along = clamp(dx * cos + dy * sin, -keel, keel);
+    const gap = Math.hypot(dx - along * cos, dy - along * sin) - boat.halfWidth;
+    if (gap >= reach) continue;
+    nearest = boat;
+    reach = gap;
+  }
+  return nearest;
 }
 
 export function dockingMooring(boats, moorings, boat, clear = () => true) {
@@ -63,6 +80,7 @@ export function takeBoat(boat) {
   const theft = !boat.claimed;
   boat.claimed = true;
   boat.mooring = null;
+  delete boat.traffic;
   return theft;
 }
 
@@ -162,7 +180,7 @@ function berthFleet(river, office) {
 
 // Lay out continuous starboard lanes at startup. At each cross-section prefer
 // the centreline offset, but scout nearby water for island and pier clearances.
-function makeLane(river, moored, sign) {
+function makeLane(river, moored, sign, quayX) {
   const hull = makeBoat("barge", {});
   // Two units wider than the widest hull: a lane that grazes a pier or a wall holds up
   // whichever boat samples that stone a little differently from the scout.
@@ -183,10 +201,14 @@ function makeLane(river, moored, sign) {
     // The published centreline goes south of the island. Mirror its detour for westbound traffic.
     const channel = sign > 0 ? mid : river.top + river.bottom - mid;
     const preferred = channel + sign * (hull.halfWidth + laneGap);
+    // Swing towards the quay, running as close as safe clearance allows along the apron.
+    const blend = quayX === undefined ? 0 : clamp((400 - Math.abs(x - quayX)) / 310, 0, 1);
+    const quayWeight = blend * blend * (3 - 2 * blend);
+    const aim = preferred + (river.top - preferred) * quayWeight;
     const column = new Map();
     for (let y = Math.ceil((river.top + hull.halfWidth) / 2) * 2; y <= river.bottom - hull.halfWidth; y += 2) {
       if (!river.onWater(x, y, hull.halfWidth)) continue;
-      const weight = ((y - preferred) / 12) ** 2;
+      const weight = ((y - aim) / 12) ** 2 * (1 + 7 * quayWeight);
       let parent = null, cost = Infinity;
       for (let offset = i ? -12 : 0; offset <= (i ? 12 : 0); offset += 2) {
         const p = i ? previous.get(y + offset) : { x: x - 16, y, cost: 0 };
@@ -239,14 +261,18 @@ function narrowPassages(east, west) {
 
 export function createBoatFleet(river, office) {
   const boats = berthFleet(river, office);
-  const east = makeLane(river, boats, 1), west = makeLane(river, boats, -1);
+  const openQuays = river.moorings.filter((m) => !boats.some((b) => b.mooring === m.id));
+  const westQuay = openQuays.find((m) => m.quay.y < river.top);
+  // The lower apron is west of the anchor, where pedestrians can reach the water's edge.
+  const quayX = westQuay ? westQuay.x - 70 : undefined;
+  const east = makeLane(river, boats, 1), west = makeLane(river, boats, -1, quayX);
   const gates = narrowPassages(east, west);
   for (const [i, fraction] of [0.16, 0.4, 0.64, 0.87].entries()) {
     const sign = i % 2 ? -1 : 1, lane = sign > 0 ? east : west;
     if (!lane.length) continue;
     const x = lane[0].x + fraction * (lane.at(-1).x - lane[0].x);
     const boat = makeBoat(i < 2 ? "barge" : "riverboat", {
-      ...lanePose(lane, x, sign), traffic: { lane, sign, hornDelay: 0 },
+      ...lanePose(lane, x, sign), traffic: { lane, sign, quayX: sign < 0 ? quayX : undefined, hornDelay: 0 },
     });
     const gate = gates.find((g) => x + boat.halfLength > g.left && x - boat.halfLength < g.right);
     if (contactAt(boat, boat.x, boat.y, boat.a, boats) || (gate?.direction && gate.direction !== sign)) {
@@ -279,7 +305,7 @@ function reserve(gate, boat) {
 }
 
 function trafficStep(river, boat, fleet, dt, horn) {
-  const { lane, sign } = boat.traffic;
+  const { lane, sign, quayX } = boat.traffic;
   const end = sign > 0 ? lane.at(-1).x : lane[0].x;
   if (boat.incoming) {
     boat.incoming = Math.max(0.001, boat.incoming - dt);
@@ -293,7 +319,8 @@ function trafficStep(river, boat, fleet, dt, horn) {
   }
 
   const cruise = boatTypes[boat.model].topSpeed * 0.78;
-  let target = cruise;
+  const pace = quayX !== undefined && Math.abs(boat.x - quayX) < 65 ? 6 : cruise;
+  let target = pace;
   const gate = fleet.gates.find((g) => sign > 0 ? boat.x - boat.halfLength < g.right : boat.x + boat.halfLength > g.left);
   if (gate) {
     const distance = aheadOfGate(boat, gate);
@@ -313,7 +340,7 @@ function trafficStep(river, boat, fleet, dt, horn) {
     target = Math.min(target, Math.max(0, sign * other.slideX + (gap - 8) * 0.55));
   }
   boat.traffic.hornDelay = Math.max(0, boat.traffic.hornDelay - dt);
-  if ((close || target < cruise * 0.6) && !boat.traffic.hornDelay) {
+  if ((close || target < pace * 0.6) && !boat.traffic.hornDelay) {
     boat.traffic.hornDelay = 4;
     horn(boat);
   }
@@ -358,8 +385,9 @@ export function updateBoats(river, fleet, dt, ride, throttle, rudder, horn = () 
   if (dt <= 0) return;
   for (const gate of fleet.gates) {
     for (const boat of gate.inside) {
-      const cleared = boat.traffic.sign > 0 ? boat.x - boat.halfLength >= gate.right : boat.x + boat.halfLength <= gate.left;
-      if (cleared || boat.incoming) gate.inside.delete(boat);
+      const sign = boat.traffic?.sign;
+      const cleared = sign > 0 ? boat.x - boat.halfLength >= gate.right : boat.x + boat.halfLength <= gate.left;
+      if (cleared || !sign || boat.incoming) gate.inside.delete(boat);
     }
     if (!gate.inside.size) gate.direction = 0;
   }

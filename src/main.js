@@ -16,6 +16,7 @@ import { prepareTown } from "./world/streets.js";
 import { update } from "./game/simulation.js";
 import { CELL_H, CELL_W, TAU, X, Y } from "./world/town.js";
 import { draw } from "./ui/renderer.js";
+import { selectTrip } from "./ui/travel.js";
 import { imageData } from "./art/assets.js";
 
 let konamiProgress = 0;
@@ -70,6 +71,12 @@ function toggleMap() {
 }
 $("#reportBtn").onclick = reportIncident;
 $("#mapBtn").onclick = toggleMap;
+for (const button of document.querySelectorAll("[data-trip]")) {
+  button.onclick = () => {
+    selectTrip(button.dataset.trip, interior?.returnTo ?? p);
+    toggleMap();
+  };
+}
 function showHelp() {
   box("help", "helpText", [["back"]]);
 }
@@ -270,7 +277,6 @@ function updateGamepad(dt) {
 }
 
 refreshLanguage();
-say("start", 6, "clerk");
 Promise.all(
   Object.entries(imageData).map(async ([key, src]) => {
     const img = new Image();
@@ -283,6 +289,7 @@ Promise.all(
   artwork.konamiHero = prepareHero(true);
   prepareTown();
   game.artReady = true;
+  say("start", 12, "clerk");
 });
 let prev = 0;
 function loop(ms) {

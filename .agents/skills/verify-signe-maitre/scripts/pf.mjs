@@ -120,6 +120,7 @@ const veh = (v) => v && {
   halted: (v.route?.stopFor || 0) > 0, routeId: v.route?.id, showpiece: v.showpiece,
   roadClass: v.route?.segments?.[v.route.segIndex]?.roadClass,
   ...(v.domain === "water" && {
+    domain: v.domain,
     vx: +v.slideX.toFixed(2), vy: +v.slideY.toFixed(2), yaw: +v.yaw.toFixed(3),
     bumps: v.bumps, lastImpact: +v.lastImpact.toFixed(2), mooring: v.mooring, traffic: !!v.traffic,
   }),
@@ -402,6 +403,9 @@ function driver({ page, out, mode, device, lang, words }) {
               type: text("#routeType"), title: text("#routeTitle"), brief: text("#routeBrief"),
               place: text("#routePlace"), action: text("#routeAction"), distance: text("#routeDistance"),
             },
+        travel: q("#travelCard")?.hidden !== false ? null : {
+          type: text("#travelType"), title: text("#travelTitle"), step: text("#travelStep"), distance: text("#travelDistance"),
+        },
         report: !q("#reportBtn").hidden,
         map: text("#mapBtn"),
         dialog: panel.open

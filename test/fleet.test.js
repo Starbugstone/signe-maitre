@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fleet, fleetOf, pickModel } from "../src/game/fleet.js";
+import { fleet, fleetOf, pickModel, trafficPercent } from "../src/game/fleet.js";
 import { sedanHalfLength, sedanHalfWidth } from "../src/world/vehicle-shape.js";
 
 const bake = JSON.parse(readFileSync(new URL("../tools/art/fleet-bake.json", import.meta.url), "utf8")).vehicles;
@@ -14,7 +14,7 @@ test("every fleet entry carries the contract's fields", () => {
     for (const field of ["halfLength", "halfWidth", "mass", "topSpeed", "reverseSpeed", "accel", "brake", "steer", "grip", "turn"])
       assert.ok(entry[field] > 0, `${id}.${field}`);
     assert.ok(["petrol", "electric", "diesel", "moto", "boat"].includes(entry.sound), id + " sound");
-    assert.ok(entry.traffic.weight >= 0 && entry.traffic.lanes.length, id + " traffic");
+    assert.ok(trafficPercent[id].moving >= 0 && trafficPercent[id].parked >= 0 && entry.traffic.lanes.length, id + " traffic");
   }
 });
 
@@ -58,6 +58,8 @@ test("the body sizes follow the paintings' real measurements", () => {
 });
 
 test("traffic draws its models by weight and by the class of road", () => {
+  for (const column of ["moving", "parked"])
+    assert.equal(Object.values(trafficPercent).reduce((sum, share) => sum + share[column], 0), 100);
   let seed = 9;
   const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   const count = (roadClass, parked) => {

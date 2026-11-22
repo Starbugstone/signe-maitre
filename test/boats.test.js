@@ -62,10 +62,10 @@ test("the nearest office mooring has the launch and can be boarded again after s
   const { boats } = createBoatFleet(water, office);
   const home = [...water.moorings].sort((a, b) =>
     Math.hypot(a.quay.x - office.x, a.quay.y - office.y) - Math.hypot(b.quay.x - office.x, b.quay.y - office.y))[0];
-  const launch = boardableBoat(boats, water.moorings, home.quay);
+  const launch = boardableBoat(boats, water, home.quay);
   assert.equal(launch.model, "launch");
   assert.equal(takeBoat(launch), false);
-  assert.equal(boardableBoat(boats, water.moorings, home.quay), undefined);
+  assert.equal(boardableBoat(boats, water, home.quay), undefined);
   launch.slideX = 8;
   assert.equal(dockingMooring(boats, water.moorings, launch), null);
   launch.slideX = 3;
@@ -73,7 +73,7 @@ test("the nearest office mooring has the launch and can be boarded again after s
   assert.equal(dockingMooring(boats, water.moorings, launch), home);
   assert.deepEqual(dockBoat(launch, home), { ...home.quay, a: launch.a });
   assert.equal(launch.slideX, 0);
-  assert.equal(boardableBoat(boats, water.moorings, home.quay), launch);
+  assert.equal(boardableBoat(boats, water, home.quay), launch);
   const empty = water.moorings.find((m) => !boats.some((b) => b.mooring === m.id));
   assert.ok(empty, "destination berth reserved for arriving boats");
   takeBoat(launch);
@@ -82,8 +82,32 @@ test("the nearest office mooring has the launch and can be boarded again after s
   assert.equal(dockingMooring(boats, water.moorings, launch), empty);
   assert.deepEqual(dockBoat(launch, empty), { ...empty.quay, a: launch.a });
   const barge = boats.find((b) => b.model === "barge" && b.mooring);
+  const besideBow = { x: barge.x + 65, y: water.top - 8 };
+  assert.equal(boardableBoat(boats, water, besideBow), barge);
   assert.equal(takeBoat(barge), true);
   assert.equal(takeBoat(barge), false);
+});
+
+test("a slow traffic boat can be taken from a quay and releases its traffic reservation", () => {
+  const water = testRiver();
+  const boat = makeBoat("barge", { x: 500, y: 17, a: Math.PI, traffic: { sign: -1 }, slideX: -6 });
+  const person = { x: 560, y: -5 };
+  assert.equal(boardableBoat([boat], water, person), boat);
+  assert.equal(boardableBoat([boat], water, { ...person, y: 5 }), undefined);
+  assert.equal(boardableBoat([boat], water, { ...person, y: -19 }), undefined);
+  boat.slideX = -9;
+  assert.equal(boardableBoat([boat], water, person), undefined);
+  boat.slideX = 0;
+  boat.incoming = 1;
+  assert.equal(boardableBoat([boat], water, person), undefined);
+  delete boat.incoming;
+
+  const gate = { left: 470, right: 530, direction: -1, inside: new Set([boat]) };
+  assert.equal(takeBoat(boat), true);
+  updateBoats(water, { boats: [boat], gates: [gate] }, dt, boat, 0, 0);
+  assert.equal(boat.traffic, undefined);
+  assert.equal(gate.direction, 0);
+  assert.equal(gate.inside.size, 0);
 });
 
 test("traffic runs both ways without overlap on la Ferre and waits at a single-lane arch", () => {

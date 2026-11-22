@@ -8,8 +8,7 @@ import { goal } from "../game/cases.js";
 export { findRoute };
 
 let routeCache;
-function directions(origin = p) {
-  const end = goal();
+function directions(origin = p, end = goal()) {
   if (!end) return null;
   const onFoot = !game.ride;
   const vehicleHalfWidth = game.ride?.halfWidth ?? sedanHalfWidth;

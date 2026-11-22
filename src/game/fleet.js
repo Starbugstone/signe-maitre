@@ -19,6 +19,19 @@ import { sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
 // The sedan steers at full rate from 18 units/s: steer × turn.
 const car = { domain: "road", halfWidth: sedanHalfWidth, reverseAccel: 85, turn: 18 / 2.65 };
 const midnightRed = { intact: "voltaRedTurns", dented: "voltaRedDented", wreck: "voltaRedWreck" };
+
+// Percent of ordinary spawns on avenues and streets. Alleys use the same draw
+// after removing models that cannot fit. The ambulance and seized fleet are placed separately.
+export const trafficPercent = {
+  sedan:     { moving: 46, parked: 52 },
+  ambulance: { moving:  0, parked:  0 },
+  volta:     { moving: 13, parked: 14 },
+  suv:       { moving: 15, parked: 16 },
+  bus:       { moving:  7, parked:  0 },
+  dumper:    { moving:  7, parked:  0 },
+  moto:      { moving: 12, parked: 18 },
+};
+
 export const fleet = {
   sedan: {
     ...car,
@@ -33,7 +46,7 @@ export const fleet = {
     grip: 1,
     sound: "petrol",
     atlas: null,
-    traffic: { weight: 46, parked: 52, lanes: ["avenue", "street"], pace: 1 },
+    traffic: { lanes: ["avenue", "street"], pace: 1 },
   },
   ambulance: {
     ...car,
@@ -50,7 +63,7 @@ export const fleet = {
     sound: "petrol",
     atlas: { intact: "ambulanceTurns", dented: "ambulanceDented", wreck: "ambulanceWreck" },
     sprite: { frame: 192, scale: 5.65, cx: 96, cy: 126 },
-    traffic: { weight: 0, parked: 0, lanes: ["avenue", "street"], pace: 1 },
+    traffic: { lanes: ["avenue", "street"], pace: 1 },
   },
   volta: {
     ...car,
@@ -69,7 +82,7 @@ export const fleet = {
     // Pearl white, or midnight red where the street's paint would be rose or olive.
     tints: { rose: midnightRed, olive: midnightRed },
     sprite: { frame: 160, scale: 5, cx: 80, cy: 102 },
-    traffic: { weight: 13, parked: 14, lanes: ["avenue", "street"], pace: 1.1 },
+    traffic: { lanes: ["avenue", "street"], pace: 1.1 },
   },
   suv: {
     ...car,
@@ -86,7 +99,7 @@ export const fleet = {
     sound: "petrol",
     atlas: { intact: "suvTurns", dented: "suvDented", wreck: "suvWreck" },
     sprite: { frame: 160, scale: 5, cx: 80, cy: 104 },
-    traffic: { weight: 15, parked: 16, lanes: ["avenue", "street"], pace: 0.95 },
+    traffic: { lanes: ["avenue", "street"], pace: 0.95 },
   },
   bus: {
     ...car,
@@ -105,7 +118,7 @@ export const fleet = {
     sound: "diesel",
     atlas: { intact: "busTurns", dented: "busDented", wreck: "busWreck" },
     sprite: { frame: 264, scale: 4.2, cx: 132, cy: 164 },
-    traffic: { weight: 7, parked: 0, lanes: ["avenue", "street"], pace: 0.8, stops: true },
+    traffic: { lanes: ["avenue", "street"], pace: 0.8, stops: true },
   },
   dumper: {
     ...car,
@@ -124,11 +137,11 @@ export const fleet = {
     sound: "diesel",
     atlas: { intact: "dumperTurns", dented: "dumperDented", wreck: "dumperWreck" },
     sprite: { frame: 200, scale: 4.2, cx: 100, cy: 130 },
-    traffic: { weight: 7, parked: 0, lanes: ["avenue", "street"], pace: 0.75 },
+    traffic: { lanes: ["avenue", "street"], pace: 0.75 },
   },
   moto: {
     ...car,
-    name: { fr: "Pétrolette", en: "Motorbike" },
+    name: { fr: "Pétrolette", en: "Pétrolette" },
     // Drawn a third larger than the cars' scale, like the people: the rider is in plain view.
     halfLength: 7,
     halfWidth: 2.3,
@@ -146,7 +159,7 @@ export const fleet = {
     // The ridden pictures are a painted sheet of 16 headings: the bailiff, and a courier in blue.
     atlas: { intact: "motoTurns", dented: "motoDented", wreck: "motoWreck", ridden: "motoRider", courier: "motoCourier", riddenHeadings: 16 },
     sprite: { frame: 128, scale: 6, cx: 64, cy: 92 },
-    traffic: { weight: 12, parked: 18, lanes: ["avenue", "street", "alley"], pace: 1.25 },
+    traffic: { lanes: ["avenue", "street", "alley"], pace: 1.25 },
   },
 };
 // `label` is the key of the model's name in the interface strings.
@@ -159,17 +172,12 @@ export function fleetOf(vehicle) {
 // A weighted draw of the models allowed on a class of road. `random` is a 0..1 source,
 // so a seeded stream keeps a district's traffic the same on every visit.
 export function pickModel(roadClass = "street", random = Math.random, parked = false) {
-  const share = (entry) =>
-    entry.domain === "road" && entry.traffic.lanes.includes(roadClass)
-      ? parked
-        ? entry.traffic.parked
-        : entry.traffic.weight
-      : 0;
-  const entries = Object.values(fleet);
-  let roll = random() * entries.reduce((sum, entry) => sum + share(entry), 0);
-  for (const entry of entries) {
-    roll -= share(entry);
-    if (roll < 0) return entry.id;
+  const column = parked ? "parked" : "moving";
+  const options = Object.entries(trafficPercent).filter(([id]) => fleet[id].traffic.lanes.includes(roadClass));
+  let roll = random() * options.reduce((sum, [, share]) => sum + share[column], 0);
+  for (const [id, share] of options) {
+    roll -= share[column];
+    if (roll < 0) return id;
   }
   return "sedan";
 }

@@ -169,13 +169,15 @@ export default async function (d) {
         ({ state }) => state.traffic.every((c) => reach({ ...c, model: c.model }, state.p) > reach(car, state.p) - 2),
         20000,
       ).catch(() => d.note("traffic still close", {}));
-      await d.waitFor("the hint offers the wheel", ({ hud }) => hud.hint.includes(d.t("enterHint")), 6000);
+      await d.waitFor("the hint offers " + model, ({ hud }) =>
+        hud.hint.includes(d.t(model === "moto" ? "motoEnter" : "enterHint")) && hud.hint.includes(d.t("fleet:" + model)), 6000);
     });
     await d.step(`board-${model}`, async () => {
       await d.press("car");
       const { state, hud } = await d.waitFor(`riding the ${model}`, ({ state, hud }) => state.ride?.model === model && hud.stats.includes("km/h"));
       d.note(`${model} at the kerb`, state.ride);
       d.expect(hud.ticker.includes(d.t("fleet:" + model)), "the ticker names the model", hud.ticker);
+      d.expect(hud.stats.includes(d.t("fleet:" + model)), "the speed and condition name the model", hud.stats);
       seen.set(model, state.ride);
     });
     await d.step(`drive-${model}`, async () => {

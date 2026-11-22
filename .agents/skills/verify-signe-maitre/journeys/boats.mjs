@@ -120,7 +120,7 @@ export default async (d) => {
     d.expect(gap(result.state.sedan, initial.sedan) < 0.1, "The office sedan stayed parked");
     d.expect((await d.hud()).ticker === d.t("boatMoored"), "The ticker confirms that the launch is moored");
   });
-  await d.step("take the moored barge", async () => {
+  await d.step("take the moored barge from beside its hull", async () => {
     const barge = initial.boats.find((b) => b.model === "barge" && b.mooring);
     const berth = initial.river.moorings.find((m) => m.id === barge.mooring);
     // Break up the north promenade at bridge crossings. Scale the time allowance to
@@ -131,7 +131,12 @@ export default async (d) => {
     };
     for (const b of initial.river.bridges.filter((b) => b.x > home.x && b.x < berth.x))
       await walkPromenade(b.x + 44);
-    await walkPromenade(berth.quay.x);
+    await walkPromenade(berth.quay.x - barge.halfLength * 0.7);
+    d.expect(gap((await d.state()).p, berth.quay) > 35, "The player is beside the long hull, away from the anchor");
+    await d.waitFor("the hull offers boarding", ({ hud }) =>
+      hud.hint.includes(d.t("boatEnter")) && hud.hint.includes(d.t("barge")));
+    if (d.device !== "desktop")
+      d.expect(await d.page.locator('[data-key="car"]').innerText() === d.t("touchBoat"), "The touch action reads Boat");
     await d.press("car");
     const result = await d.waitFor("barge theft", ({ state }) => state.ride?.model === "barge" && state.heat > 0);
     d.expect(result.state.heat < 1, "Taking the barge raises heat by less than a level", result.state.heat);

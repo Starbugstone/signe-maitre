@@ -2,8 +2,7 @@ import { dist, game, p } from "../core/state.js";
 import { g } from "../platform/canvas.js";
 
 // Look a little way around the next turn while keeping the guide on the street route.
-export function drawRouteArrow(path) {
-  const lead = game.ride ? 26 : 17;
+export function routeBearing(path) {
   let ahead = game.ride ? 52 : 40;
   let aim = p;
   for (const node of path.slice(1)) {
@@ -16,7 +15,11 @@ export function drawRouteArrow(path) {
     ahead -= length;
     aim = node;
   }
-  const angle = Math.atan2(aim.y - p.y, aim.x - p.x);
+  return Math.atan2(aim.y - p.y, aim.x - p.x);
+}
+
+export function drawRouteArrow(path, angle = routeBearing(path)) {
+  const lead = game.ride ? 26 : 17;
   const position = { x: p.x + Math.cos(angle) * lead, y: p.y - 3 + Math.sin(angle) * lead };
   g.save();
   g.translate(position.x, position.y);

@@ -76,6 +76,7 @@ h1 {
   text-align: right;
   color: #ffda7c;
 }
+#rideStats:not(:empty) { margin-inline-start: .7em; }
 #tools {
   position: absolute;
   right: 16px;
@@ -293,7 +294,7 @@ canvas {
     padding: 4px 8px;
   }
 }
-#routeCard {
+:is(#routeCard, #travelCard) {
   position: absolute;
   top: 90px;
   left: 16px;
@@ -317,8 +318,8 @@ canvas {
   align-items: baseline;
 }
 .fileMeta small { font: inherit; }
-#routeDistance { color: #ffdc79; text-transform: none; letter-spacing: 0; }
-#routeTitle, #fileList strong {
+:is(#routeDistance, #travelDistance) { color: #ffdc79; text-transform: none; letter-spacing: 0; }
+#routeTitle, #travelTitle, #fileList strong {
   display: block;
   color: #fff0cf;
   font: bold 20px/1.2 Georgia, serif;
@@ -328,7 +329,7 @@ canvas {
   color: #e2d8c7;
 }
 #routeBrief { display: block; margin-top: 2px; }
-#routeStep {
+:is(#routeStep, #travelStep) {
   border-top: 1px solid #705a48;
   margin-top: 6px;
   padding-top: 5px;
@@ -346,7 +347,7 @@ canvas {
   align-items: center;
   gap: clamp(16px, 3vw, 40px);
 }
-#routeCard[hidden], #mapSheet[hidden] { display: none; }
+#routeCard[hidden], #travelCard[hidden], #mapSheet[hidden] { display: none; }
 body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { display: none; }
 #mapColumn {
   height: 100%;
@@ -362,6 +363,14 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 #mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.7; margin: 12px 10px; }
 #mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
 #mapKey span { display: block; }
+#tripOptions { margin-top: 5px; font: 12px/1.4 monospace; }
+#tripPrompt { color: #efdcbd; margin-bottom: 3px; }
+#tripOptions button { padding: 5px 6px; pointer-events: auto; }
+#tripOptions button[aria-pressed="true"] { border-color: #ffdf62; color: #ffdf62; }
+#tripOptions button:disabled { opacity: .45; }
+#tripOptions [data-trip="bike"] b { color: #f2bd70; }
+#tripOptions [data-trip="mooring"] b { color: #a1e3de; }
+#tripOptions [data-trip="station"] b { color: #f3e3bf; }
 #casebook {
   max-height: 100%;
   min-height: 0;
@@ -398,15 +407,15 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 #filesNote { font-size: 12px; margin: 12px 0 0; color: #d4bda1; }
 #filesNote:empty { display: none; }
 @media (max-width: 650px) {
-  #routeCard {
+  :is(#routeCard, #travelCard) {
     top: 82px;
     left: 8px;
     width: min(258px, 84vw);
     padding: 5px 8px;
   }
-  #routeTitle { font-size: 17px; }
-  #routeBrief, #routeStep { font-size: 12px; }
-  #routeStep { margin-top: 4px; padding-top: 3px; }
+  #routeTitle, #travelTitle { font-size: 17px; }
+  #routeBrief, #routeStep, #travelStep { font-size: 12px; }
+  #routeStep, #travelStep { margin-top: 4px; padding-top: 3px; }
 }
 @media (max-width: 650px) and (orientation: portrait) {
   #mapSheet {
@@ -421,7 +430,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   #mapSheet { inset: 83px 14px 12px; gap: 14px; }
   #casebook { padding: 8px 10px; }
   #fileList li { margin-top: 5px; padding-top: 5px; }
-  #routeCard { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
+  :is(#routeCard, #travelCard) { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
 }
 
 @media (max-width: 650px) and (orientation: portrait) {
@@ -436,7 +445,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     pointer-events: none;
   }
   #streetHeader > * { position: static; }
-  #brand { flex-shrink: 0; }
+  #rideStats:not(:empty) { display: block; margin-inline-start: 0; }
   #tools { justify-content: flex-end; flex-wrap: wrap; }
   #tools button { pointer-events: auto; }
   #streetMessages {
