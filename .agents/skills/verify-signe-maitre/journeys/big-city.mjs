@@ -173,15 +173,18 @@ async function driveRouteTo(
     }
     prev = s.ride;
 
-    // Yield briefly when moving traffic is directly ahead; if a car is dead-stopped nose-to-nose, back up and clear it.
+    // Yield to moving traffic and leave room to back away from a long parked body.
     const cos = Math.cos(s.p.a),
       sin = Math.sin(s.p.a);
-    const carAhead = s.traffic.find((c) => {
+    const carAhead = [...s.traffic, ...s.parked].find((c) => {
       const dx = c.x - s.ride.x,
         dy = c.y - s.ride.y;
       const fwd = dx * cos + dy * sin,
         side = -dx * sin + dy * cos;
-      return fwd > 8 && fwd < 28 && Math.abs(side) < 9.5;
+      const along = Math.abs(Math.cos(c.a - s.ride.a)) * c.halfLength +
+        Math.abs(Math.sin(c.a - s.ride.a)) * c.halfWidth;
+      const gap = fwd - along - s.ride.halfLength;
+      return fwd > 8 && gap < 14 && Math.abs(side) < 9.5;
     });
     if (carAhead) {
       if (carAhead.speed > 1.5 && trafficWaitTicks < 8) {
@@ -326,7 +329,12 @@ export default async function (d) {
     const approach = segments.findIndex((seg) => seg.roundaboutEntry?.id === rb.id);
     const waypoints = segments.slice(approach, approach + 4).flatMap((seg) => {
       const steps = Math.ceil(seg.length / 5);
-      return Array.from({ length: steps }, (_, i) => evalSegment(seg, (i * seg.length) / steps));
+      return Array.from({ length: steps }, (_, i) => {
+        const point = evalSegment(seg, (i * seg.length) / steps);
+        // Leave space from the seized vehicles until the path fans into the roundabout.
+        if (seg.type === "line") point.y += 2 * Math.min(1, (steps - i) / 8);
+        return point;
+      });
     });
     waypoints.push(exit);
     let sawNorth = false,
