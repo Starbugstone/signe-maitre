@@ -89,7 +89,7 @@ function drawCarriage(car, lift, state) {
   g.restore();
 }
 
-// Station roundels at the stair feet, sorted with street actors.
+// Station roundels at the side-leg stair feet, sorted with street actors.
 function drawStationSign(st) {
   const { x, y } = st.street;
   g.fillStyle = "#15112570";
@@ -117,13 +117,14 @@ function drawStationSign(st) {
   g.textAlign = "left";
 }
 
-// Street-level pieces of the ring for the depth-sorted actor list.
+// Street-level pieces of the ring for the depth-sorted actor list. On the north and south legs
+// the painted station hall marks the stair foot; on the side legs a roundel does.
 export function ringActors(ox, oy) {
   const { ring } = ringLine();
   const out = [];
   const inView = (q, above = 0) => q.x > ox - 12 && q.x < ox + game.vw + 12 && q.y > oy - 4 && q.y - above < oy + game.vh + 4;
   for (const st of ring.stations)
-    if (inView(st.street, 25)) out.push({ y: st.street.y, x: st.street.x, draw: () => drawStationSign(st) });
+    if (st.vertical && inView(st.street, 25)) out.push({ y: st.street.y, x: st.street.x, draw: () => drawStationSign(st) });
   return out;
 }
 

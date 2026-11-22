@@ -1,3 +1,4 @@
+import { boatFleet, boardableBoat, dockBoat, dockingMooring, river, takeBoat } from "./boats.js";
 import { ambulance, inService, interruptRescue } from "./rescue.js";
 import { cars, dist, game, held, p } from "../core/state.js";
 import { blocked, footBlocked } from "../world/collision.js";
@@ -61,13 +62,47 @@ function nearestCar() {
   }
   return nearest;
 }
+function nearestBoat() {
+  return boardableBoat(boatFleet.boats, river.moorings, p);
+}
+
+function berthInReach() {
+  return dockingMooring(boatFleet.boats, river.moorings, game.ride,
+    ({ x, y }) => !footBlocked(x, y, 2.6));
+}
+
+function leaveBoat() {
+  const berth = berthInReach();
+  if (!berth) {
+    say("boatDockFirst");
+    return;
+  }
+  Object.assign(p, dockBoat(game.ride, berth));
+  game.ride = null;
+  held.delete("horn");
+  say("boatMoored");
+}
+
 function board() {
   if (game.viewMap || panel.open) return;
   if (game.ride) {
-    exitCar();
+    if (game.ride.domain === "water") leaveBoat();
+    else exitCar();
     return;
   }
-  let c = nearestCar();
+  const boat = nearestBoat();
+  if (boat) {
+    const theft = takeBoat(boat);
+    if (theft) game.heat = Math.min(3, game.heat + 0.45);
+    game.ride = boat;
+    p.x = boat.x;
+    p.y = boat.y;
+    p.a = boat.a;
+    beep(170);
+    say(theft ? "boatTaken" : "boatBoarded", 4, boat.model);
+    return;
+  }
+  const c = nearestCar();
   // At a ring station's stair foot, the car key climbs to the platform unless a car is closer.
   const station = nearStation();
   if (station && (!c || dist(p, station.street) <= dist(p, c))) {
@@ -101,4 +136,4 @@ function board() {
   else say(c === sedan ? "sedan" : "keysIn", 4, c === sedan ? "" : c.model);
 }
 
-export { board, exitCar, nearestCar };
+export { berthInReach, board, exitCar, nearestBoat, nearestCar };

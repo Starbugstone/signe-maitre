@@ -89,7 +89,9 @@ export function prepareRing(source) {
       const s = mod(Number.isFinite(st.s) ? st.s : project(st.stop), length),
         pose = poseAt(s, 4);
       const across = -Math.sin(pose.a) * (st.street.x - pose.x) + Math.cos(pose.a) * (st.street.y - pose.y);
-      return { ...st, s, side: across < 0 ? -1 : 1 };
+      // A station on a side leg, where the track runs north-south.
+      const vertical = Math.abs(Math.sin(pose.a)) > 0.7;
+      return { ...st, s, side: across < 0 ? -1 : 1, vertical };
     })
     .sort((a, b) => a.s - b.s);
   if (!stations.length) throw new Error("The ring needs a station");

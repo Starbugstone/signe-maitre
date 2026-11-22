@@ -31,7 +31,7 @@ function makeTyreLoop() {
   }
   return buffer;
 }
-function makeHornLoop() {
+function makeHornLoop(ship = false) {
   const rate = game.audio.sampleRate;
   const buffer = game.audio.createBuffer(1, rate, rate);
   const samples = buffer.getChannelData(0);
@@ -42,8 +42,8 @@ function makeHornLoop() {
     0.06 * Math.sin(5 * phase);
   for (let i = 0; i < samples.length; i++) {
     const t = (TAU * i) / rate;
-    const low = reed(382 * t + 0.026 * Math.sin(5 * t));
-    const high = reed(483 * t + 0.023 * Math.sin(7 * t));
+    const low = reed((ship ? 126 : 382) * t + 0.026 * Math.sin(5 * t));
+    const high = reed((ship ? 158 : 483) * t + 0.023 * Math.sin(7 * t));
     samples[i] = (0.56 * low + 0.44 * high) * (0.96 + 0.04 * Math.sin(6 * t));
   }
   return buffer;
@@ -68,6 +68,30 @@ function makeSirenLoop() {
   }
   return buffer;
 }
+function signalClip(mode) {
+  if (!signalClips.has(mode)) signalClips.set(mode, mode === "siren" ? makeSirenLoop() : makeHornLoop(mode === "ship"));
+  return signalClips.get(mode);
+}
+
+export function shipHornSound(volume) {
+  if (!game.sound || !gameMix || game.audio.state !== "running") return;
+  const now = game.audio.currentTime;
+  const source = game.audio.createBufferSource(), gain = game.audio.createGain();
+  source.buffer = signalClip("ship");
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.16 * volume, now + 0.07);
+  gain.gain.setValueAtTime(0.16 * volume, now + 0.35);
+  gain.gain.linearRampToValueAtTime(0, now + 0.66);
+  source.connect(gain);
+  gain.connect(gameMix);
+  source.onended = () => {
+    source.disconnect();
+    gain.disconnect();
+  };
+  source.start(now);
+  source.stop(now + 0.66);
+}
+
 function vehicleSignalSound(mode) {
   if (!gameMix) return;
   if (!game.sound) mode = null;
@@ -81,10 +105,9 @@ function vehicleSignalSound(mode) {
   }
   if (!mode) return;
 
-  if (!signalClips.has(mode)) signalClips.set(mode, mode === "horn" ? makeHornLoop() : makeSirenLoop());
   const source = game.audio.createBufferSource();
   const gain = game.audio.createGain();
-  source.buffer = signalClips.get(mode);
+  source.buffer = signalClip(mode);
   source.loop = true;
   gain.gain.value = 0;
   source.connect(gain);
@@ -128,11 +151,12 @@ function motorSound() {
   if (!engineGain) return;
   const running = game.sound && game.ride && game.ride.condition !== 0 && !game.viewMap && !panel.open,
     now = game.audio.currentTime;
-  const throttle = Math.max(0, throttleInput());
+  const boat = running && game.ride.domain === "water";
+  const throttle = boat ? Math.abs(throttleInput()) : Math.max(0, throttleInput());
   engineGain.gain.setTargetAtTime(running ? 0.069 + 0.041 * throttle : 0, now, 0.07);
   const roll = running ? Math.hypot(game.ride.slideX, game.ride.slideY) : 0;
   let friction = 0;
-  if (held.has("action") && roll > 7) {
+  if (!boat && held.has("action") && roll > 7) {
     const sideSlip = Math.abs(
       game.ride.slideY * Math.cos(game.ride.a) - game.ride.slideX * Math.sin(game.ride.a),
     );
@@ -143,6 +167,11 @@ function motorSound() {
   }
   skidGain.gain.setTargetAtTime(friction, now, friction ? 0.024 : 0.033);
   if (!running) return;
+  if (boat) {
+    engineOsc.frequency.setTargetAtTime(27 + 20 * throttle + roll * 0.16, now, 0.075);
+    engineFilter.frequency.setTargetAtTime(104 + 90 * throttle + roll * 0.43, now, 0.1);
+    return;
+  }
   const speed = Math.abs(game.ride.speed),
     gear = Math.min(3, Math.floor(speed / 49));
   engineOsc.frequency.setTargetAtTime(35 + (speed - gear * 43) * 0.72 + 9 * throttle, now, 0.075);

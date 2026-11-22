@@ -1,6 +1,7 @@
 // Registration of the market painting, repeated iron spans, and the Petite Ceinture ring viaduct piers.
 import { CELL_H, CELL_W, X, Y } from "./layout.js";
 import { kerbX, kerbY, plateRegistration } from "./street-props.js";
+import { fromSource, paintings } from "./paintings.js";
 
 export const railScaleY = (CELL_H / 2 - kerbY) / 429;
 export const railTop = 161,
@@ -18,7 +19,11 @@ export function marketColumnX(pixel) {
   if (pixel <= right) return ((pixel - centre) * kerbX) / (right - centre);
   return kerbX + ((pixel - right) * (CELL_W / 2 - kerbX)) / (1500 - right);
 }
-const marketBases = marketPiers.map((x) => [marketColumnX(x - 21), marketColumnX(x + 21)]);
+// The easternmost pier of every painted span stands at the edge of the seam lane. Its base
+// stops short of the lane's centre line so that the lane stays open to a walker or a motorbike.
+const laneSide = CELL_W / 2 - 3.5;
+const clearLane = ([west, east]) => [west, Math.min(east, laneSide)];
+const marketBases = marketPiers.map((x) => clearLane([marketColumnX(x - 21), marketColumnX(x + 21)]));
 const spanBases = Array.from({ length: 6 }, (_, i) => {
   const x = (i - 2.5) * bayWidth;
   return [Math.max(-CELL_W / 2, x - (20 * bayWidth) / 296), Math.min(CELL_W / 2, x + (22 * bayWidth) / 296)];
@@ -41,14 +46,82 @@ const sections = [
 ];
 const marketSection = { bases: marketBases };
 
+// Pier bases of a baked viaduct painting, from its measured pier centre lines.
+const paintedSections = new Map();
+function paintedSection(key) {
+  if (!paintedSections.has(key)) {
+    const { source, east, piers, eastPiers = [] } = paintings[key].viaduct;
+    const west = fromSource(source, { ring: true }).x,
+      far = east ? fromSource(east, { ring: true }).x : west;
+    paintedSections.set(key, {
+      bases: [...piers.map((x) => [west(x - 21), west(x + 21)]), ...eastPiers.map((x) => [far(x - 21), far(x + 21)])].map(
+        clearLane,
+      ),
+    });
+  }
+  return paintedSections.get(key);
+}
+const cellKey = (layout, row, col) => layout.cellKinds?.[row]?.[col] ?? layout.blocks[row][col];
+export const paintedViaduct = (layout, row, col) => paintings[cellKey(layout, row, col)]?.viaduct;
+
 export function viaductSection(layout, row, col) {
-  const blocks = layout.blocks[row];
-  if (blocks[col] === "market") return marketSection;
+  const viaduct = paintedViaduct(layout, row, col);
+  if (viaduct?.market) return marketSection;
+  if (viaduct) return paintedSection(cellKey(layout, row, col));
+  // Iron spans over any other painting land on the outer pier of a neighbouring viaduct painting.
   const minCol = layout.ring?.minCol ?? 0;
   const maxCol = layout.ring?.maxCol ?? layout.cols - 1;
-  const westMarket = col > minCol && blocks[col - 1] === "market";
-  const eastMarket = col < maxCol && blocks[col + 1] === "market";
-  return sections[Number(westMarket)][Number(eastMarket)];
+  const westViaduct = col > minCol && !!paintedViaduct(layout, row, col - 1);
+  const eastViaduct = col < maxCol && !!paintedViaduct(layout, row, col + 1);
+  return sections[Number(westViaduct)][Number(eastViaduct)];
+}
+
+// Where the side legs come down to the street. West: a cantilever bracket on a masonry foot
+// east of the track, at the back of the north pavement and on the south kerb of each cross
+// street. East: an iron portal astride the track, its two feet on the south pavement.
+export const sideSupports = {
+  west: { dx: 24, feet: [-28.4, 18.5], half: 4.5 },
+  east: { dx: [-9.1, 9.4], feet: [24], half: 3.4 },
+};
+
+// The four curves have no street of their own to stand on: each gets two supports from the
+// painted pieces. A column (a pier cut from the north-leg painting) stands where the track still
+// runs nearly east-west, an iron portal where it has turned towards the side leg. `at` is the
+// angle round the curve from the end that meets the north or south leg, in degrees. A column
+// stands on the leg's own pier line at the back of the pavement (`onLeg`); `shift` moves a
+// portal's feet north or south of the track centre line onto open ground, within the deck.
+// Quadrants: 0 north-east, 1 south-east, 2 south-west, 3 north-west.
+export const cornerSupports = [
+  // North corners: the back of the north pavement beside the cross street, then the south
+  // pavement of the street the curve crosses.
+  { quadrant: 0, at: 15, kind: "column", onLeg: true },
+  { quadrant: 0, at: 50.4, kind: "portal", shift: 0 },
+  { quadrant: 3, at: 15, kind: "column", onLeg: true },
+  { quadrant: 3, at: 50.4, kind: "portal", shift: 0 },
+  // South corners: the back of the south leg's pavement, then the garage forecourt (west)
+  // or yard (east) the curve sweeps over.
+  { quadrant: 1, at: 15, kind: "column", onLeg: true },
+  { quadrant: 1, at: 45, kind: "portal", shift: 0 },
+  { quadrant: 2, at: 15, kind: "column", onLeg: true },
+  { quadrant: 2, at: 45, kind: "portal", shift: 0 },
+];
+export const cornerSupportFeet = {
+  column: { dx: [0], half: 4 },
+  portal: { dx: [-9.1, 9.4], half: 3.4 },
+};
+
+// The ground point of a corner support and the heading of the track above it.
+export function cornerSupportAt(ring, { quadrant, at, onLeg = false, shift = 0 }) {
+  const { left, right, top, bottom, cornerR: R } = ring;
+  const east = quadrant === 0 || quadrant === 1,
+    north = quadrant === 0 || quadrant === 3;
+  const cx = east ? right - R : left + R,
+    cy = north ? top + R : bottom - R;
+  const a = (at * Math.PI) / 180;
+  return {
+    x: cx + (east ? 1 : -1) * R * Math.sin(a),
+    y: onLeg ? (north ? top : bottom) : cy + (north ? -1 : 1) * R * Math.cos(a) + shift,
+  };
 }
 
 // Compute every physical ground-level pier for the closed Petite Ceinture ring viaduct.
@@ -89,56 +162,66 @@ export function buildRingPiers(layout) {
     }
   }
 
-  // Vertical legs (west leg at x = left, east leg at x = right).
-  const blockedY = (py) => {
-    // Keep every east-west street clear with headroom.
-    for (let r = 0; r < layout.rows; r++) if (Math.abs(py - Y(r)) < 34) return true;
-    // Keep open river water completely clear for boats (rail bridges span water from quay abutments).
-    if (river && py > river.top - 5 && py < river.bottom + 5) return true;
-    // Keep ring station street stairs clear.
-    for (const st of ring.stations || []) if (Math.hypot(0, py - st.street.y) < 16) return false;
-    return false;
-  };
-
+  // Side legs: painted supports at each cross street, and the rail-bridge abutments on the
+  // two quays. Nothing stands in the river.
+  const station = (x, y) => (ring.stations || []).some((st) => Math.hypot(x - st.street.x, y - st.street.y) < 9);
   for (const [side, vx] of [
     ["west", left],
     ["east", right],
   ]) {
-    const startY = top + cornerR + 18;
-    const endY = bottom - cornerR - 18;
-    // Place regular piers between streets (approx 57u apart) plus river bank abutments.
-    const ys = [];
-    for (let r = northRow; r < southRow; r++) {
-      const mid = (Y(r) + Y(r + 1)) / 2;
-      for (const offset of [-32, 32]) {
-        const py = mid + offset;
-        if (py >= startY && py <= endY && !blockedY(py)) ys.push(py);
-      }
+    const support = sideSupports[side];
+    for (let row = northRow + 1; row < southRow; row++) {
+      if (row === layout.riverRow) continue;
+      for (const dy of support.feet)
+        for (const dx of [support.dx].flat()) {
+          const x = vx + dx,
+            y = Y(row) + dy;
+          if (y < top + cornerR || y > bottom - cornerR + 40 || station(x, y - 2)) continue;
+          piers.push({
+            left: x - support.half,
+            right: x + support.half,
+            top: y - 3.5,
+            bottom: y,
+            x,
+            y,
+            orientation: "vertical",
+            side,
+            row,
+          });
+        }
     }
-    // Add sturdy rail-bridge abutments on the north and south banks of la Ferre.
-    if (river) {
-      for (const py of [river.top - 10, river.bottom + 10]) {
-        if (py >= startY && py <= endY) ys.push(py);
-      }
-    }
-    // Deduplicate nearby piers and skip station stair footprints.
-    ys.sort((a, b) => a - b);
-    const chosen = [];
-    for (const py of ys) {
-      if (chosen.length && py - chosen.at(-1) < 22) continue;
-      if ((ring.stations || []).some((st) => Math.hypot(vx - st.street.x, py - st.street.y) < 18)) continue;
-      chosen.push(py);
+    if (river)
+      for (const y of [river.top - 10, river.bottom + 10])
+        piers.push({
+          left: vx - 3.6,
+          right: vx + 3.6,
+          top: y - 2.6,
+          bottom: y + 2.6,
+          x: vx,
+          y,
+          orientation: "vertical",
+          side,
+          abutment: true,
+        });
+  }
+
+  // Corner supports: one box per foot.
+  for (const support of cornerSupports) {
+    const { x, y } = cornerSupportAt(ring, support);
+    const feet = cornerSupportFeet[support.kind];
+    for (const dx of feet.dx)
       piers.push({
-        left: vx - 3.6,
-        right: vx + 3.6,
-        top: py - 2.6,
-        bottom: py + 2.6,
-        x: vx,
-        y: py,
-        orientation: "vertical",
-        side,
+        left: x + dx - feet.half,
+        right: x + dx + feet.half,
+        top: y - 3.5,
+        bottom: y,
+        x: x + dx,
+        y,
+        orientation: "corner",
+        kind: support.kind,
+        quadrant: support.quadrant,
+        centre: x,
       });
-    }
   }
 
   return piers;

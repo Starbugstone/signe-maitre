@@ -7,16 +7,19 @@ import { $, g, hud, label, rect } from "../platform/canvas.js";
 import { CELL_H, CELL_W, H, TAU, W, X, Y, jobs, town } from "../world/town.js";
 import { directions } from "../world/navigation.js";
 import { goal, nextFile } from "../game/cases.js";
-import { drawOverheadMonuments, drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
+import { drawBridgeDecks, drawOverheadMonuments, drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
 import { drawAmbulance, drawCrew } from "../art/emergency.js";
 import { drawCar } from "../art/vehicles.js";
 import { dude } from "../art/pedestrians.js";
 import { visibleRails } from "../world/rail.js";
+import { drawOverTrain } from "../world/ring-art.js";
 import { arrivalMarker, drawRouteArrow } from "./waypoint.js";
 import { atObjective, routeHUD, showMapSheet } from "./guidance.js";
-import { nearestCar } from "../game/boarding.js";
+import { drawBoats, drawMooring } from "../art/boats.js";
+import { river } from "../game/boats.js";
+import { berthInReach, nearestBoat, nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
 import { drawRingMap, drawRingTrains, ringActors } from "../art/train.js";
 import { nearStation, stationName, transitHint } from "../game/transit.js";
@@ -152,8 +155,13 @@ function map(left, top, w, h, full, origin = p) {
     }
   }
 
+  for (const m of river.moorings) {
+    const r = full ? 1.15 : 0.47;
+    rect(g, x + m.quay.x * scale - r, y + m.quay.y * scale - r, 2 * r, 2 * r, "#a1e3de");
+  }
+
   // Active navigation route.
-  const nav = directions(origin);
+  const nav = game.ride?.domain === "water" ? null : directions(origin);
   if (nav) {
     g.beginPath();
     g.moveTo(x + origin.x * scale, y + origin.y * scale);
@@ -253,6 +261,7 @@ function draw() {
   streetLayer(ox, oy);
   g.save();
   g.translate(-ox, -oy);
+  if (drawBoats(ox, oy)) drawBridgeDecks(ox, oy);
   for (const trail of trails) {
     g.save();
     g.translate(trail.x, trail.y);
@@ -263,7 +272,10 @@ function draw() {
     g.restore();
   }
   const visible = (o) => Math.abs(o.x - cx) < game.vw / 2 + 30 && Math.abs(o.y - cy) < game.vh / 2 + 28;
-  const end = goal();
+  for (const m of river.moorings) if (visible(m.quay)) drawMooring(m);
+  const ridingBoat = game.ride?.domain === "water";
+  const speed = ridingBoat ? Math.hypot(game.ride.slideX, game.ride.slideY) : Math.abs(game.ride?.speed ?? 0);
+  const end = ridingBoat ? null : goal();
   if (end && visible(end)) {
     g.save();
     g.strokeStyle = "#ffe080";
@@ -306,6 +318,7 @@ function draw() {
   drawOverheadMonuments(g, ox, oy);
   // La Petite Ceinture's trains ride above everything else on the deck.
   drawRingTrains(ox, oy, actors);
+  drawOverTrain(ox, oy);
   if (end && !game.viewMap) {
     if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
     if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
@@ -333,7 +346,7 @@ function draw() {
     mh = (mw * H) / W;
   routeHUD(end);
   if (game.viewMap) {
-    drawFullMap(end, p);
+    drawFullMap(goal(), p);
   } else {
     $("#mapSheet").hidden = true;
     map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
@@ -353,10 +366,11 @@ function draw() {
       Math.ceil(game.heat) +
       "/3" +
       (game.ride
-        ? "　" +
-          Math.round(Math.abs(game.ride.speed) * 0.53) +
-          "\u00a0km/h\u00a0\u00a0·\u00a0\u00a0" +
-          t("vehicle") +
+        ? // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
+          "　" +
+          Math.round(speed * (ridingBoat ? 0.405 : 0.53)) +
+          "\u00a0" + (ridingBoat ? t("knots") : "km/h") + "\u00a0\u00a0·\u00a0\u00a0" +
+          t(ridingBoat ? game.ride.model : "vehicle") +
           "\u00a0" +
           game.ride.condition +
           "%"
@@ -364,25 +378,25 @@ function draw() {
   );
   const j = jobs.find((j) => dist(j, p) < 36);
   const nearJob = j ? t("jobKey") + " · " + t(j.name) : "";
-  const station = nearStation(),
-    car = station && nearestCar();
-  let hint = game.viewMap
-    ? t("mapHint")
-    : game.transit
-      ? transitHint(t)
-      : station && (!car || dist(p, station.street) <= dist(p, car))
-        ? t("stationHint") + " · " + stationName(station)
-        : game.ride
-      ? nearJob || t("outHint")
-      : nearestCar()
-        ? t("enterHint") + (nearJob ? "　/　" + nearJob : "")
-        : nearJob || t("footHint");
-  if (!game.viewMap && !game.transit && recoveryCar())
-    hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
-  if (!game.ride && !game.transit && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
-    hint = t("medicKeys");
+  const nearbyBoat = !game.ride && !game.transit && !game.viewMap && nearestBoat();
+  const car = !game.ride && !game.transit && !game.viewMap && !nearbyBoat ? nearestCar() : null;
+  // At a ring station's stair foot the car key climbs to the platform unless a car is closer.
+  const station = !game.ride && !game.transit && !game.viewMap && !nearbyBoat && nearStation();
+  let hint = nearJob || t("footHint");
+  if (game.viewMap) hint = t("mapHint");
+  else if (game.transit) hint = transitHint(t);
+  else if (ridingBoat) hint = t(berthInReach() ? "boatDisembark" : "boatFindDock");
+  else if (nearbyBoat) hint = t("boatEnter") + " · " + t(nearbyBoat.model);
+  else if (station && (!car || dist(p, station.street) <= dist(p, car)))
+    hint = t("stationHint") + " · " + stationName(station);
+  else if (recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
+  else if (game.ride) hint = nearJob || t("outHint");
+  else if (car?.medical && car.condition > 0) hint = t("medicKeys");
+  else if (car) hint = t("enterHint") + (nearJob ? "　/　" + nearJob : "");
   $("#reportBtn").hidden = !!game.transit || !nearbyPatient();
   hud("#hint", hint);
+  $("[data-key=action]").hidden = ridingBoat;
+  hud("[data-key=car]", t(ridingBoat || nearbyBoat ? "touchBoat" : "touchCar"));
   hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
 }
 

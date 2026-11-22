@@ -267,9 +267,9 @@ test("roundabouts block the island, open the ring, route around the island and c
   for (const arc of ringArcs) assert.ok(arc.deltaA < 0, `roundabout arc must be anticlockwise, got ${arc.deltaA}`);
 });
 
-test("Tour de Fer lets roads pass beneath while its four corner piers block actors", () => {
+test("Tour de Fer lets roads pass beneath while its fenced rear gardens block actors", () => {
   const tower = town.monuments.find((m) => m.id === "tour-fer");
-  assert.ok(tower?.passUnder && tower.piers?.length === 4);
+  assert.ok(tower?.passUnder && tower.piers?.length === 2);
   for (let d = -50; d <= 50; d += 10) {
     assert.equal(blockedIn(town, tower.x + d, tower.y, 2.6), false);
     assert.equal(blockedIn(town, tower.x, tower.y + d, 2.6), false);
@@ -425,24 +425,18 @@ test("ring viaduct piers block walkers at pier bases while leaving street underp
   assert.equal(blockedIn(town, horizPier.x, horizPier.y - 1, 2.6), true);
   assert.equal(blockedIn(town, vertPier.x, vertPier.y, 2.6), true);
 
-  // Market joins along the ring rows (row 1 and row 11) keep a walkable path beside the painted pier.
-  let east = 0,
-    west = 0;
+  // Every seam between two ring-row paintings is a lane a walker can follow under the deck,
+  // with the painted pier of the western span standing at its edge.
+  let lanes = 0;
   for (const row of [town.ring.northRow, town.ring.southRow]) {
     for (let col = town.ring.minCol + 1; col <= town.ring.maxCol; col++) {
-      const left = town.blocks[row][col - 1] === "market",
-        right = town.blocks[row][col] === "market";
-      if (left === right) continue;
-      if (left) west++;
-      else east++;
       const seam = (X(col - 1) + X(col)) / 2;
-      const marketPier = seam + (left ? -6 : 16.8);
-      for (const r of [2.6, 3]) {
-        assert.equal(blockedIn(town, seam, Y(row) - 30, r), left);
-        assert.equal(blockedIn(town, seam + (left ? 2.6 : -2.6), Y(row) - 30, r), false);
-        assert.equal(blockedIn(town, marketPier, Y(row) - 30, r), true);
-      }
+      for (const r of [2.6, 3]) assert.equal(blockedIn(town, seam, Y(row) - 30, r), false, `seam ${col},${row}`);
+      const pier = town.ring.piers.find((q) => q.row === row && q.col === col - 1 && q.right > seam - 6);
+      if (!pier) continue;
+      assert.equal(blockedIn(town, pier.x - 1, pier.y - 1, 2.6), true, `pier beside seam ${col},${row}`);
+      lanes++;
     }
   }
-  assert.ok(east && west);
+  assert.ok(lanes >= 20, "expected a painted pier beside most ring seams, saw " + lanes);
 });

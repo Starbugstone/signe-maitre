@@ -203,3 +203,35 @@ test("boarding: the car key leaves the platform, or steps off at once while the 
   let ride = { phase: "riding", set: 0, car: 1, boardedAt: 0, alightAt: null };
   for (let u = 0; u < tt.period; u += 0.2) assert.equal(rideStep(tt, ride, u).ride, ride);
 });
+
+test("every ring corner stands on its own supports, no span longer than a side leg's", () => {
+  const { left, right, top, bottom, cornerR: R } = town.ring;
+  // Supports by their place along the track: piers of the north and south legs, the brackets
+  // and portals of the side legs, and the corner columns and portals.
+  const along = (pier) => {
+    if (pier.orientation === "horizontal") return ring.project({ x: pier.x, y: pier.y < (top + bottom) / 2 ? top : bottom });
+    if (pier.orientation === "vertical") return ring.project({ x: pier.x < (left + right) / 2 ? left : right, y: pier.y });
+    return ring.project({ x: pier.centre, y: pier.y });
+  };
+  const supports = town.ring.piers.map(along);
+  // The ends of each curve: where the north or south leg leaves the straight, and the side leg.
+  const curves = [
+    [{ x: right - R, y: top }, { x: right, y: top + R }],
+    [{ x: right, y: bottom - R }, { x: right - R, y: bottom }],
+    [{ x: left + R, y: bottom }, { x: left, y: bottom - R }],
+    [{ x: left, y: top + R }, { x: left + R, y: top }],
+  ];
+  const spans = [];
+  for (const [start, end] of curves) {
+    const s0 = ring.project(start),
+      length = gap(s0, ring.project(end));
+    // Supports measured from the start of the curve, within a side-leg span either side.
+    const around = supports.map((s) => gap(s0 - 300, s) - 300).filter((d) => d > -300 && d < length + 300);
+    const marks = [...new Set(around.map((d) => +d.toFixed(1)))].sort((a, b) => a - b);
+    assert.ok(marks.filter((d) => d > 0 && d < length).length >= 2, "two supports under the curve");
+    for (let i = 1; i < marks.length; i++)
+      if (marks[i] > 0 && marks[i - 1] < length) spans.push(marks[i] - marks[i - 1]);
+  }
+  // The east leg's portals stand 228 units apart; nothing round a corner is longer.
+  assert.ok(Math.max(...spans) <= 240, "longest corner span " + Math.max(...spans).toFixed(0));
+});

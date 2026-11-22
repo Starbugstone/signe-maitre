@@ -2,15 +2,22 @@
 import "../../src/main.js";
 import { cars, done, fx, game, p, people, trails } from "../../src/core/state.js";
 import { dude } from "../../src/art/pedestrians.js";
+import { boatFleet, hullOnWater, makeBoat, river } from "../../src/game/boats.js";
 import { drawCar } from "../../src/art/vehicles.js";
 import { canvas, g } from "../../src/platform/canvas.js";
 import { blocked, move, vehicleBlocked } from "../../src/world/collision.js";
 import { town, X, Y } from "../../src/world/town.js";
+import { paintings } from "../../src/world/paintings.js";
 import { streetLayer } from "../../src/world/streets.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
+import { cornerSupportAt, cornerSupports } from "../../src/world/viaduct.js";
 import { ringLine } from "../../src/game/transit.js";
 import { trainsetAt } from "../../src/game/ring-route.js";
+
+// Walking frames are timed by the clock. Hold it still, so that two renders of one pose match.
+const stillClock = performance.now();
+performance.now = () => stillClock;
 
 function requireCheck(ok, message) {
   if (!ok) throw new Error(message);
@@ -108,36 +115,27 @@ function gateVehicle() {
   game.ride = null;
 }
 
+// Every seam between two ring-row paintings is a lane under the deck. A walker enters it from
+// the street beside the painted pier, and the deck covers them once they are beneath it.
 function checkJoins() {
   let joins = 0;
   for (const row of [town.ring.northRow, town.ring.southRow])
-    for (let col = town.ring.minCol + 1; col <= town.ring.maxCol; col++) {
-      const west = town.blocks[row][col - 1] === "market",
-        east = town.blocks[row][col] === "market";
-      if (west === east) continue;
+    for (let col = town.ring.minCol + 2; col <= town.ring.maxCol - 1; col++) {
       const seam = (X(col - 1) + X(col)) / 2,
-        side = west ? 1 : -1,
-        y = Y(row);
-      const x = seam + side * 2.6,
-        view = camera(x, y - 32);
+        y = Y(row),
+        x = seam + 2.6;
       const walker = { x, y: y - 40 };
       for (let i = 0; i < 96; i++) move(walker, 0, 0.25, 2.6);
       requireCheck(walker.y >= y - 17, "Blocked entering the street at " + col + "," + row);
       for (let i = 0; i < 96; i++) move(walker, 0, -0.25, 2.6);
-      requireCheck(walker.y <= y - 39, "Blocked entering the alley at " + col + "," + row);
-      draw();
-      const sample = () => pixels(view, seam + (west ? 0.4 : -2.4), y - 38, 2, 7);
-      const actual = sample();
-      streetLayer(view.left, view.top);
-      const covered = difference(actual, sample());
-      draw();
-      requireCheck(
-        covered < 8,
-        "Stray half-pier on the " + (west ? "east" : "west") + " side of the alley at " + col + "," + row,
-      );
+      requireCheck(walker.y <= y - 39, "Blocked entering the lane at " + col + "," + row);
       joins++;
     }
-  requireCheck(joins > 0, "No market joins were exercised");
+  requireCheck(joins > 20, "Too few ring seams were exercised");
+  const seam = (X(4) + X(5)) / 2;
+  // Head under the girder, feet still showing below it.
+  actorLayers(seam + 2.6, Y(town.ring.northRow) - 51, true);
+  actorLayers(seam + 2.6, Y(town.ring.northRow) - 30, false);
 }
 
 function checkRoundaboutIsland() {
@@ -205,10 +203,11 @@ function checkTourDeFerUnderpass() {
     requireCheck(blocked(px, py, 2.6), "Tour de Fer pier did not block walker");
     requireCheck(vehicleBlocked({ x: px, y: py, a: 0 }), "Tour de Fer pier did not block vehicle");
   }
-  // Verify the overhead iron tower deck/lattice covers an actor passing directly beneath the upper deck.
-  const ux = tower.x,
-    uy = tower.y - 24;
-  const view = camera(tower.x, tower.y - 16);
+  // The near legs sweep over the east-west street: their ironwork is drawn over whoever
+  // passes beneath, and clear of them a walker stands in front of everything.
+  const ux = tower.x + paintings.towerBase.legs[0],
+    uy = tower.y;
+  const view = camera(ux, uy);
   Object.assign(p, { x: ux, y: uy, a: 0, moving: false });
   draw();
   const sample = () => pixels(view, ux - 3, uy - 13, 6, 9);
@@ -222,22 +221,242 @@ function checkTourDeFerUnderpass() {
   g.restore();
   const covered = difference(actual, sample());
   p.x = -100;
-  requireCheck(covered > 30, "Tour de Fer overhead ironwork did not cover actor passing beneath: " + covered);
+  requireCheck(covered > 30, "Tour de Fer ironwork did not cover actor passing beneath: " + covered);
+  actorLayers(tower.x, tower.y, false);
 }
 
 function checkRingVerticalPier() {
-  const pier = town.ring.piers.find((q) => q.orientation === "vertical" && q.side === "west");
-  requireCheck(pier, "Expected vertical west ring viaduct pier");
-  requireCheck(blocked(pier.x, pier.y, 2.6), "Vertical ring pier did not block walker");
-  requireCheck(vehicleBlocked({ x: pier.x, y: pier.y, a: 0 }), "Vertical ring pier did not block vehicle");
-  // On the east-west street passing beneath the west ring leg, walkers & cars pass unobstructed
-  // while the overhead vertical viaduct deck covers actors passing directly beneath it.
-  requireCheck(!blocked(pier.x, Y(3), 2.6), "Walker blocked under west ring viaduct street span");
-  requireCheck(!vehicleBlocked({ x: pier.x, y: Y(3), a: 0 }), "Vehicle blocked under west ring viaduct street span");
-  // At the edge of the overhead vertical viaduct deck, the viaduct partially occludes the actor;
-  // stepping clear of the deck width reveals the actor completely unobstructed.
-  actorLayers(pier.x + 7, Y(3), true);
-  actorLayers(pier.x + 16, Y(3), false);
+  const { left, right } = town.ring;
+  const pier = town.ring.piers.find((q) => q.orientation === "vertical" && q.side === "west" && q.row === 3 && q.y > Y(3));
+  requireCheck(pier, "Expected a bracket foot on the south kerb of the west leg");
+  requireCheck(blocked(pier.x, pier.y - 1, 2.6), "Bracket foot did not block walker");
+  requireCheck(vehicleBlocked({ x: pier.x, y: pier.y - 1, a: 0 }), "Bracket foot did not block vehicle");
+  // A cross street runs clear beneath each side leg (row 3 in the west, row 5 in the east).
+  for (const [x, y] of [
+    [left, Y(3)],
+    [right, Y(5)],
+  ]) {
+    requireCheck(!blocked(x, y, 2.6), "Walker blocked under the ring's side leg");
+    requireCheck(!vehicleBlocked({ x, y, a: 0 }), "Vehicle blocked under the ring's side leg");
+  }
+  // The deck covers whoever is at its edge; the bracket's column covers whoever is behind
+  // it; beyond the supports the street is open to the sky.
+  actorLayers(left + 7.5, Y(3), true);
+  actorLayers(pier.x + 3.6, pier.y - 9, true);
+  actorLayers(left + 38, Y(3), false);
+  // East: the deck's edge between two streets, and the near leg of the portal.
+  actorLayers(right - 7.5, Y(4) + 70, true);
+  actorLayers(right + 10, Y(5) + 6, true);
+  actorLayers(right - 30, Y(5), false);
+}
+
+// Each of the four 150-unit curves stands on a painted column and an iron portal. Their feet
+// stop a walker and a car; the street the north curves cross stays open beneath the deck; the
+// column covers whoever is behind it and the portal leaves whoever is in front of it clear.
+function checkRingCorners() {
+  const { top, bottom } = town.ring;
+  for (const support of cornerSupports) {
+    const { x, y } = cornerSupportAt(town.ring, support);
+    const feet = town.ring.piers.filter((q) => q.orientation === "corner" && Math.abs(q.centre - x) < 0.01 && q.y === y);
+    requireCheck(feet.length === (support.kind === "portal" ? 2 : 1), "Corner support feet missing at " + x + "," + y);
+    for (const foot of feet) {
+      requireCheck(blocked(foot.x, foot.y - 1, 2.6), "Corner support foot did not block walker at " + foot.x);
+      requireCheck(vehicleBlocked({ x: foot.x, y: foot.y - 1, a: 0 }), "Corner support foot did not block vehicle at " + foot.x);
+    }
+    const north = support.quadrant === 0 || support.quadrant === 3;
+    const where = (check) => {
+      try {
+        check();
+      } catch (error) {
+        throw new Error(`Corner ${support.quadrant} ${support.kind}: ${error.message}`);
+      }
+    };
+    if (support.kind === "column") {
+      // The column's shaft rises from the back of the pavement to the deck and hides the
+      // half of a walker behind it.
+      requireCheck(Math.abs(y - (north ? top : bottom)) < 0.01, "Corner column off the pavement line");
+      where(() => actorLayers(x + 3, y - 9, true));
+    } else {
+      // Behind the leg on the inside of the curve, clear of the deck passing overhead.
+      const east = support.quadrant === 0 || support.quadrant === 1;
+      where(() => actorLayers(x + (east ? -9.1 : 9.4), y - 6, true));
+      where(() => actorLayers(x, y + 10, false));
+    }
+  }
+  // The row-1 street runs clear under both north curves.
+  for (const x of [282, 4500 - 282]) {
+    requireCheck(!blocked(x, Y(1), 2.6), "Walker blocked under a north ring corner");
+    requireCheck(!vehicleBlocked({ x, y: Y(1), a: 0 }), "Vehicle blocked under a north ring corner");
+  }
+}
+
+// Arc des Saisies, the obelisk and the lamp standard rise from their islands: behind them a
+// walker on the ring road is covered, in front they stand clear.
+function checkMonumentIslands() {
+  // Each walker stands far enough behind for the head to show above the silhouette while the
+  // body is covered; in front of the island they stand clear.
+  for (const [id, dx, behind] of [
+    ["c3r3", 0, 34],
+    ["c6r5", 0, 49],
+    ["c13r2", 0, 32],
+  ]) {
+    const rb = town.roadNodeById.get(id);
+    requireCheck(blocked(rb.x, rb.y, 2.6), "Island centre open at " + id);
+    requireCheck(!blocked(rb.x + dx, rb.y - behind, 2.6), "Ring road blocked behind the monument at " + id);
+    actorLayers(rb.x + dx, rb.y - behind, true);
+    actorLayers(rb.x + dx, rb.y + 27, false);
+  }
+  // The painted kerb of a plain roundabout is wider than its traffic circle.
+  const plain = town.roadNodeById.get("c13r2");
+  requireCheck(blocked(plain.x + 16, plain.y, 1), "Walker entered the planted island");
+}
+
+// A street the road graph does not have is built over: nobody walks or drives into the frontage.
+function checkClosedArms() {
+  for (const [col, row, dx, dy] of [
+    [14, 3, 60, 0],
+    [14, 3, 0, -60],
+    [1, 4, -60, 0],
+    [5, 2, 0, -60],
+    [7, 9, 0, 60],
+  ]) {
+    const x = X(col) + dx,
+      y = Y(row) + dy;
+    requireCheck(blocked(x, y, 2.6), "Walker entered the closed arm at " + col + "," + row);
+    requireCheck(vehicleBlocked({ x, y, a: dx ? 0 : Math.PI / 2 }), "Vehicle entered the closed arm at " + col + "," + row);
+  }
+  // The dead end itself stays open up to the junction.
+  requireCheck(!blocked(X(14) - 40, Y(3), 2.6), "Dead-end street closed");
+  actorLayers(X(14), Y(3), false);
+}
+
+// Île de la Ferre and the quays as painted.
+function checkPaintedRiver() {
+  // Moored and passing boats bob on the clock; the quay checks compare still frames.
+  const original = boatFleet.boats.splice(0);
+  try {
+    paintedRiver();
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+  }
+}
+function paintedRiver() {
+  const isl = town.river.islands[0];
+  // Water inside the island's bounding box, outside the painted quay wall.
+  requireCheck(blocked(isl.left + 30, isl.top + 6, 2.6), "Walker stepped off the island's north-west quay");
+  requireCheck(blocked(isl.right - 30, isl.bottom - 6, 2.6), "Walker stepped off the island's south-east quay");
+  // The apron in front of Notre-Dame-du-Port is open; the cathedral itself is not.
+  const cathedral = town.monuments.find((m) => m.id === "notre-dame-port");
+  requireCheck(blocked(cathedral.x, isl.top + 5, 2.6), "Walker entered the cathedral");
+  requireCheck(!blocked(cathedral.x, isl.top + 24, 2.6), "Cathedral forecourt blocked");
+  actorLayers(cathedral.x, isl.top + 24, false);
+  // A stone bridge is open across its whole painted deck.
+  const y = (town.river.top + town.river.bottom) / 2;
+  requireCheck(!blocked(X(3) + 29, y, 2.6), "Walker blocked on the bridge pavement");
+  requireCheck(blocked(X(3) + 40, y, 2.6), "Walker left the bridge deck");
+  actorLayers(X(3) + 29, y, false);
+  // The quay promenades either side of the water.
+  actorLayers(X(7), town.river.top - 6, false);
+  actorLayers(X(7), town.river.bottom + 8, false);
+}
+
+// A walker at a station door stands in front of the hall; the tower's rear gardens are solid.
+function checkStationsAndGardens() {
+  const station = town.ring.stations.find((st) => st.id === "porte-etoile");
+  requireCheck(!blocked(station.street.x, station.street.y, 2.6), "Station door blocked");
+  actorLayers(station.street.x, station.street.y, false);
+  const side = town.ring.stations.find((st) => st.id === "viaduc-ouest");
+  requireCheck(!blocked(side.street.x, side.street.y, 2.6), "Side station stair foot blocked");
+  actorLayers(side.street.x + 12, side.street.y, false);
+}
+
+function checkDeckOverBoat(launch, deck, water) {
+  draw();
+  const clearDeck = deck(), clearWater = water();
+  boatFleet.boats.push(launch);
+  draw();
+  boatFleet.boats.pop();
+  requireCheck(difference(clearDeck, deck()) < 8, "Water traffic covers the deck or its street actors");
+  requireCheck(difference(clearWater, water()) > 50, "The boat is missing beside the bridge");
+}
+
+function bridgeOverBoats() {
+  const original = boatFleet.boats.splice(0);
+  try {
+    for (const { x, halfWidth } of river.bridges) {
+      const north = river.islands.find((isl) => x >= isl.left && x <= isl.right);
+      const channels = north
+        ? [(river.top + north.top) / 2, (north.bottom + river.bottom) / 2]
+        : [(river.top + river.bottom) / 2];
+      for (const y of channels) {
+        const view = camera(x, y);
+        const launch = makeBoat("launch", { x: x + halfWidth, y, a: 0 });
+        const car = { x, y, a: Math.PI / 2, tint: "olive", condition: 100, speed: 0 };
+        const npc = { x: x + 10, y, a: 0, moving: true, gait: 2, look: "worker" };
+        for (const offset of [-halfWidth, 0, halfWidth])
+          requireCheck(hullOnWater(river, launch, x + offset, y), "Launch blocked in a road bridge span");
+        requireCheck(!vehicleBlocked(car), "Car cannot cross the bridge above the water");
+        for (const walker of [p, npc]) {
+          Object.assign(walker, { x: walker === p ? x - 9 : x + 10, y: y + 13, a: -Math.PI / 2 });
+          for (let i = 0; i < 120; i++) move(walker, 0, -0.25, 2.6);
+          requireCheck(walker.y <= y - 13, "Walker cannot cross the bridge above the water");
+        }
+        people.push(npc);
+        cars.push(car);
+        trails.push({ x: x + 17, y: y + 9, a: 0, t: 2 });
+        checkDeckOverBoat(
+          launch,
+          () => pixels(view, x - 12, y - 14, 32, 22),
+          () => pixels(view, x + halfWidth + 8, y - 10, 14, 14),
+        );
+        people.length = cars.length = trails.length = 0;
+      }
+    }
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+    p.x = p.y = -100;
+    people.length = cars.length = trails.length = 0;
+  }
+}
+
+function checkRailBridgesOverBoats() {
+  const original = boatFleet.boats.splice(0);
+  const { left, right, piers } = town.ring;
+  try {
+    for (const x of [left, right]) {
+      const y = (river.top + river.bottom) / 2;
+      const view = camera(x, y);
+      const launch = makeBoat("launch", { x, y, a: 0 });
+      for (const offset of [-22, 0, 22])
+        requireCheck(hullOnWater(river, launch, x + offset, y), "Launch blocked by a rail bridge");
+      const banks = piers.filter((pier) => pier.x === x &&
+        (Math.abs(pier.y - river.top) < 12 || Math.abs(pier.y - river.bottom) < 12));
+      requireCheck(banks.length === 2 && banks.every((pier) => !river.onWater(pier.x, pier.y, 0)),
+        "Rail bridge supports must sit on the quays");
+      checkDeckOverBoat(
+        launch,
+        () => pixels(view, x - 5, y - 14, 10, 22),
+        () => pixels(view, x + 9, y - 10, 13, 14),
+      );
+    }
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+  }
+}
+
+function checkRiverMoorings() {
+  for (const mooring of river.moorings) {
+    const { quay, x, y } = mooring;
+    const boat = makeBoat("launch", mooring);
+    requireCheck(hullOnWater(river, boat), "Berth blocked at " + mooring.id);
+    requireCheck(!blocked(quay.x, quay.y, 2.6), "Boarding point blocked at " + mooring.id);
+    requireCheck(blocked(x, y, 2.6) && vehicleBlocked({ x, y, a: 0 }), "Land traffic admitted into the berth");
+    actorLayers(quay.x, quay.y, false);
+  }
+  for (const boat of boatFleet.boats.filter((b) => b.mooring)) {
+    const room = river.bridges.every((b) => Math.abs(boat.x - b.x) > boat.halfLength + b.halfWidth);
+    requireCheck(room, "A bridge obscures a moored " + boat.model);
+  }
 }
 
 const checks = {
@@ -246,7 +465,10 @@ const checks = {
   "market-lamp-behind": () => actorLayers(X(2) + 39, Y(1) - 24.8, true),
   "market-lamp-in-front": () => actorLayers(X(2) + 39, Y(1) - 16, false),
   "garage-vehicles": gateVehicle,
-  "market-railway-joins": checkJoins,
+  "ring-seam-lanes": checkJoins,
+  "bridge-deck-over-boats": bridgeOverBoats,
+  "rail-bridges-over-boats": checkRailBridgesOverBoats,
+  "river-moorings": checkRiverMoorings,
   "garage-crossing": () => {
     const v = { x: X(1) - 23, y: Y(1) - 23, a: -Math.PI * 0.65 };
     requireCheck(vehicleBlocked(v), "Angled bumper entered the corner");
@@ -264,9 +486,14 @@ const checks = {
   "marais-alley": checkMaraisAlley,
   "river-bridge-and-island": checkRiverBridgeAndIsland,
   "tour-de-fer-underpass": checkTourDeFerUnderpass,
-  "ring-vertical-pier": checkRingVerticalPier,
-  // A walker behind the ring deck is hidden by the deck and a train standing at the
-  // platform; one on the street in front of it stays fully visible.
+  "ring-side-legs": checkRingVerticalPier,
+  "ring-corners": checkRingCorners,
+  "monument-islands": checkMonumentIslands,
+  "closed-arms": checkClosedArms,
+  "painted-river": checkPaintedRiver,
+  "stations": checkStationsAndGardens,
+  // A walker behind the station's painted canopy is partly hidden while a train stands at the
+  // platform; one at the hall door on the street in front of it stays fully visible.
   "ring-train-depth": () => {
     const { ring, tt } = ringLine();
     // A station on the north leg, where the deck runs east-west in front of the buildings.
@@ -276,8 +503,8 @@ const checks = {
     while (trainsetAt(tt, 0, t).station !== index) t += 0.1;
     game.time = t + 2;
     try {
-      // The lower edge of the deck and platform crosses the middle of the sampled body.
-      actorLayers(station.stop.x - 15, station.stop.y - 27, true);
+      // The lower edge of the painted canopy, redrawn over the train, crosses the sampled body.
+      actorLayers(station.stop.x - 15, station.stop.y - 18, true);
       actorLayers(station.stop.x - 15, station.stop.y + 8, false);
     } finally {
       game.time = 0;

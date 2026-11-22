@@ -134,10 +134,24 @@ function makeRiver({ top, bottom, islands = [], bridges = [], centreline = [], m
     if (x - r < 0 || x + r > width) return false;
     if (y - r < top || y + r > bottom) return false;
     for (const isl of islands) {
-      const cx = Math.max(isl.left, Math.min(x, isl.right));
-      const cy = Math.max(isl.top, Math.min(y, isl.bottom));
-      const d = Math.hypot(x - cx, y - cy);
-      if (r > 0 ? d < r : x >= isl.left && x <= isl.right && y >= isl.top && y <= isl.bottom) return false;
+      if (x + r < isl.left || x - r > isl.right || y + r < isl.top || y - r > isl.bottom) continue;
+      const middle = (isl.top + isl.bottom) / 2;
+      const bevel = (isl.prow || 0) * Math.abs(y - middle) / (middle - isl.top);
+      if (y >= isl.top && y <= isl.bottom && x >= isl.left + bevel && x <= isl.right - bevel) return false;
+      if (!r) continue;
+
+      // Check the distance to the closest straight or bevelled wall segment.
+      const prow = isl.prow || 0;
+      const points = [
+        [isl.left + prow, isl.top], [isl.right - prow, isl.top], [isl.right, middle],
+        [isl.right - prow, isl.bottom], [isl.left + prow, isl.bottom], [isl.left, middle],
+      ];
+      for (let i = 0; i < points.length; i++) {
+        const [ax, ay] = points[i], [bx, by] = points[(i + 1) % points.length];
+        const dx = bx - ax, dy = by - ay;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+        if ((x - ax - t * dx) ** 2 + (y - ay - t * dy) ** 2 < r * r) return false;
+      }
     }
     return true;
   }
@@ -177,6 +191,8 @@ export function buildTown({
   roads: roadsSpec,
   ring: ringSpec,
   monuments = [],
+  solids = [],
+  bridgeDeck,
   parks = [],
   railways = [],
   addresses = [],
@@ -491,7 +507,7 @@ export function buildTown({
         minY < river.bottom &&
         maxY > river.top &&
         bridgeCols.has(Math.round((na.x - X(0)) / CELL_W));
-      const hw = alley ? e.halfWidth : isBridge ? 22 : streetHW;
+      const hw = alley ? e.halfWidth : isBridge ? (bridgeDeck?.(Math.round((na.x - X(0)) / CELL_W)) ?? 22) : streetHW;
       const topPad = alley ? e.halfWidth : northPavement;
       const botPad = alley ? e.halfWidth : southPavement;
       openRectsAll.push({
@@ -576,8 +592,8 @@ export function buildTown({
     for (const isl of islands) {
       // Walkable south quay apron and north quay apron connected to the island central street.
       openRectsAll.push({
-        left: isl.left + 8,
-        right: isl.right - 8,
+        left: isl.left + (isl.prow ?? 8),
+        right: isl.right - (isl.prow ?? 8),
         top: isl.top + 2,
         bottom: isl.bottom - 2,
         alley: false,
@@ -615,6 +631,7 @@ export function buildTown({
     const polys = m.piers ? m.piers : m.footprint ? [m.footprint] : [];
     for (const poly of polys) solidPolysAll.push({ poly, bounds: polyBounds(poly), monument: m });
   }
+  for (const poly of solids) solidPolysAll.push({ poly, bounds: polyBounds(poly) });
 
   // 6. Index per cell for fast O(1) collision & rendering lookups.
   const cells = new Array(rows * cols);
