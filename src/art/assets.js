@@ -28,10 +28,14 @@ import garageImage from "../../assets/garage.webp";
 import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
 import canalImage from "../../assets/canal.webp";
+import bargeTurns from "../../assets/bargeTurns.webp";
+import riverboatTurns from "../../assets/riverboatTurns.webp";
 import speedboatTurns from "../../assets/speedboatTurns.webp";
 import launchTurns from "../../assets/launchTurns.webp";
 // Atlas registration uses the baker's hull length and waterline anchor in frame pixels.
 export const boatFrames = {
+  barge: { bodyLengthPx: 464, anchorX: 256, anchorY: 280 },
+  riverboat: { bodyLengthPx: 414, anchorX: 224, anchorY: 250 },
   speedboat: { bodyLengthPx: 167, anchorX: 96, anchorY: 112 },
   launch: { bodyLengthPx: 200, anchorX: 112, anchorY: 130 },
 };
@@ -67,6 +71,8 @@ export const imageData = {
   docks: docksImage,
   square: squareImage,
   canal: canalImage,
+  bargeTurns,
+  riverboatTurns,
   speedboatTurns,
   launchTurns,
 };
