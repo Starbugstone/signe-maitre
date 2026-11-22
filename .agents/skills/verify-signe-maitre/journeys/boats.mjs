@@ -92,7 +92,10 @@ export default async (d) => {
     await poweredUntil(d, ["up", "right"], (b) => b.y > initial.river.top + 42 && b.a > 0.7, 24);
     await poweredUntil(d, ["up", "left"], (b) => b.a < -1.12, 30);
     const hit = await poweredUntil(d, ["up"], (b) => b.bumps > first.bumps, 24);
-    d.expect(hit.ride.y <= initial.river.top + hit.ride.halfLength + 2, "The bow struck the north quay", hit.ride);
+    // A diagonal bow can reach farther than its centre line, and the hull recoils
+    // before the next input sample reads the impact.
+    const reach = Math.hypot(hit.ride.halfLength, hit.ride.halfWidth) + 4;
+    d.expect(hit.ride.y <= initial.river.top + reach, "The bow struck the north quay", hit.ride);
     d.expect(hit.ride.lastImpact >= 3 && hit.ride.condition > 0, "The quay deflects the hull and keeps the helm usable", hit.ride);
   });
   await d.step("return to the anchor", async () => {
