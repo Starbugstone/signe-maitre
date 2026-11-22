@@ -1,16 +1,33 @@
 import { cars, game, p, people, rand } from "../core/state.js";
 import { footBlocked, vehicleBlocked } from "./collision.js";
-import { town, canalRow, CELL_W, TAU, X, Y } from "./town.js";
+import { town, office, CELL_W, TAU, X, Y } from "./town.js";
+import { buildTrafficLoop, evalSegment } from "./routes.js";
+
 function car(x, y, a, tint, model, route) {
   const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
   cars.push(v);
   return v;
 }
-// Parked against the kerb bollards. Any closer to the kerb and the posts hold it fast;
-// its offside rubs 0.6 units into the westbound lane, so traffic pulls round it.
-export const sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "Étude 2000");
-sedan.home = { x: sedan.x, y: sedan.y, a: 0 };
-export const target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
+
+// Find a clear kerb parking spot for the company sedan right beside the étude.
+function findSedanSpot() {
+  const y = Y(office.row) - 14;
+  const preferred = p.x + 10;
+  for (let offset = 0; offset < 70; offset++) {
+    for (const x of offset ? [preferred + offset, preferred - offset] : [preferred]) {
+      if (!vehicleBlocked({ x, y, a: 0 })) return { x, y, a: 0 };
+    }
+  }
+  return { x: preferred, y, a: 0 };
+}
+
+const sedanSpot = findSedanSpot();
+export const sedan = car(sedanSpot.x, sedanSpot.y, sedanSpot.a, "cream", "Étude 2000");
+sedan.home = { ...sedanSpot };
+
+// Overdue Moutarde GT parked on North Grand Boulevard (row 2, col 5).
+export const target = car(X(5) + 95, Y(2) - 10, Math.PI, "gold", "Moutarde GT");
+
 const colors = ["blue", "olive", "rose", "silver"];
 const civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
 const fighterLooks = [
@@ -78,60 +95,91 @@ export function person(x, y, kind = "local", axis = "x", random = rand) {
   people.push(n);
   return n;
 }
+
+const loopCache = new Map();
+function cachedLoop(col, row) {
+  const key = col + "," + row;
+  if (!loopCache.has(key)) loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: 4.8 }));
+  return loopCache.get(key);
+}
+
 function populate(col, row, key) {
+  const meta = town.cellMeta(col, row);
+  // Open river water cells have no street pedestrians or cars (Sol populates river boats).
+  if (meta.isRiverRow && !meta.isIsland) return;
+
   let seed = (Math.imul(col + 11, 73856093) ^ Math.imul(row + 7, 19349663)) >>> 0;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1)) {
-    const kerbX = X(col) + 112, y = Y(row) - 16;
-    // Find the nearest gap in the posts along this kerb.
-    for (let offset = 0; offset < CELL_W / 2; offset++) {
-      const x = [kerbX + offset, kerbX - offset].find(x => !vehicleBlocked({ x, y, a: Math.PI }));
+
+  // Parked cars along wide east-west streets (never in alleys, river, roundabouts or at the office kerb).
+  if (
+    col < town.cols - 1 &&
+    meta.wideArms.e &&
+    meta.node?.kind !== "roundabout" &&
+    (col + row) % 2 &&
+    !(col === office.col && row === office.row) &&
+    !(col === 5 && row === 2)
+  ) {
+    const kerbX = X(col) + 112,
+      y = Y(row) - 16;
+    for (let offset = 0; offset < CELL_W / 2 - 48; offset++) {
+      const x = [kerbX + offset, kerbX - offset].find(
+        (cand) => Math.abs(cand - X(col)) > 58 && !vehicleBlocked({ x: cand, y, a: Math.PI }),
+      );
       if (x !== undefined) {
         car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
         break;
       }
     }
   }
-  const horizontal = person(
-    X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43),
-    Y(row) - 24,
-    col % 4 === 0 ? "tough" : "local",
-    "x",
-    random,
-  );
-  const vertical = person(
-    X(col) + (row === canalRow ? 15 : 20),
-    Y(row) + (row === town.rows - 1 ? -1 : 1) * (32 + random() * 39),
-    "local",
-    "y",
-    random,
-  );
-  horizontal.homeCell = vertical.homeCell = key;
+
+  // Residents walking streets, quays, island parvis, and alleys.
+  if (meta.hasWideRoad) {
+    const hx = X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43);
+    const hy = Y(row) - 24;
+    if (!footBlocked(hx, hy, 3)) {
+      person(hx, hy, col % 4 === 0 ? "tough" : "local", "x", random).homeCell = key;
+    }
+    const vx = X(col) + (row === town.canalRow ? 15 : 20);
+    const vy = Y(row) + (row === town.rows - 1 ? -1 : 1) * (32 + random() * 39);
+    if (!footBlocked(vx, vy, 3)) {
+      person(vx, vy, "local", "y", random).homeCell = key;
+    }
+  } else if (meta.node) {
+    // Pure alley hub (e.g. heart of Marais): pedestrians stroll the cobblestone ruelles.
+    const ax = meta.node.x,
+      ay = meta.node.y;
+    if (!footBlocked(ax, ay, 3)) {
+      person(ax, ay, "local", random() < 0.5 ? "x" : "y", random).homeCell = key;
+    }
+  }
+
+  // Moving city traffic on compiled road-graph loops (never entering alleys, using roundabouts anticlockwise).
   if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
-  const left = X(col) + 6,
-    right = X(col + 1) - 6,
-    top = Y(row) + 6,
-    bottom = Y(row + 1) - 6;
-  const points = [
-    { x: left, y: top },
-    { x: right, y: top },
-    { x: right, y: bottom },
-    { x: left, y: bottom },
-  ];
-  const q = Math.floor(random() * 4),
-    a = points[q],
-    to = (q + 1) % 4,
-    b = points[to],
-    f = 0.12 + random() * 0.65;
-  car(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, Math.atan2(b.y - a.y, b.x - a.x), colors[q], "Citadine", {
-    points,
-    to,
+  const loop = cachedLoop(col, row);
+  if (!loop) return;
+
+  // Pick a starting straight segment on the loop so the car spawns clear of junctions, roundabouts and parked cars.
+  const straights = loop.segments
+    .map((seg, idx) => ({ seg, idx }))
+    .filter(({ seg }) => seg.type === "line" && seg.length > 60 && !seg.isAlley);
+  if (!straights.length) return;
+  const pick = straights[Math.floor(random() * straights.length)];
+  const s = 18 + random() * (pick.seg.length - 36);
+  const pose = evalSegment(pick.seg, s);
+  if (vehicleBlocked({ ...pose })) return;
+  const q = Math.floor(random() * 4);
+  car(pose.x, pose.y, pose.a, colors[q], "Citadine", {
+    segments: loop.segments,
+    segIndex: pick.idx,
+    s,
     pace: 24 + q * 6,
   }).homeCell = key;
 }
+
 // Only the neighbourhood around the CJ is simulated. Archived residents retain
 // their exact identities, damage and patrol progress. Removed patients stay removed.
 const sleeping = new Map();
@@ -139,6 +187,7 @@ let loaded = new Set(),
   lastBlock = "",
   lastWidth = 0,
   lastHeight = 0;
+
 export function streamPopulation(x, y, w = 300, h = 220) {
   const { col, row } = town.cellAt(x, y),
     key = col + "," + row;
@@ -179,4 +228,6 @@ export function streamPopulation(x, y, w = 300, h = 220) {
   }
   loaded = next;
 }
+
+// Keep the familiar local disputant beside the étude for incident & ambulance testing.
 person(p.x - 24, p.y, "tough").rest = 2.2;
