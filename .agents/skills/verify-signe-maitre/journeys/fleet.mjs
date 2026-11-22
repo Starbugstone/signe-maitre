@@ -25,24 +25,58 @@ export default async function (d) {
     pavement = home.y;
   const seen = new Map();
 
-  // From wherever the last vehicle was left, cross the kerb where nothing is parked.
-  async function toPavement() {
-    const { parked, p } = await d.state();
-    if (Math.abs(p.y - pavement) <= 3) return;
-    const kerb = parked.filter((c) => Math.abs(c.y - pavement) < 14);
-    const clear = (x) => kerb.every((c) => Math.abs(c.x - x) > halfLengths[c.model] + 9) && junctions.every((j) => Math.abs(j - x) > 34);
-    const crossings = [];
-    for (let step = 0; step < 160; step += 8) for (const x of step ? [p.x + step, p.x - step] : [p.x]) if (clear(x)) crossings.push(x);
-    // A wreck or a car waiting for the walker can close one crossing; try the next.
-    for (const x of crossings.slice(0, 6)) {
+  // Walk along the étude's street to the first spot that `arrived` accepts, around every
+  // parked, crashed or abandoned vehicle: a breadth-first search over the street between
+  // the two building lines. Moving traffic is left to stop for the walker, as it does.
+  async function walkAround(arrived, what) {
+    const cell = 3,
+      top = pavement,
+      bottom = pavement + 45;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { parked, p } = await d.state();
+      // The player gets out within a few units of the vehicle he left: free to step away.
+      const solid = (x, y) =>
+        Math.hypot(x - p.x, y - p.y) > 9 &&
+        parked.some((c) => {
+          const dx = x - c.x,
+            dy = y - c.y,
+            cos = Math.cos(c.a),
+            sin = Math.sin(c.a);
+          return Math.abs(dx * cos + dy * sin) < halfLengths[c.model] + 3.4 && Math.abs(dy * cos - dx * sin) < (c.model === "moto" ? 2.3 : 4.8) + 3.4;
+        });
+      const key = (i, j) => i + "," + j,
+        at = (i, j) => ({ x: p.x + i * cell, y: Math.min(bottom, Math.max(top, p.y)) + j * cell });
+      const seen = new Map([[key(0, 0), null]]),
+        queue = [[0, 0]];
+      let goal = null;
+      while (queue.length && !goal) {
+        const [i, j] = queue.shift();
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = i + di,
+            nj = j + dj,
+            spot = at(ni, nj);
+          if (seen.has(key(ni, nj)) || Math.abs(ni) > 260 || spot.y < top - 0.1 || spot.y > bottom + 0.1 || solid(spot.x, spot.y)) continue;
+          seen.set(key(ni, nj), [i, j]);
+          if (arrived(spot, parked)) {
+            goal = [ni, nj];
+            break;
+          }
+          queue.push([ni, nj]);
+        }
+      }
+      d.expect(!!goal, `there is a way on foot to ${what}`, { from: p });
+      // Keep the corners of the path and walk from one to the next.
+      const cells = [];
+      for (let step = goal; step; step = seen.get(key(...step))) cells.unshift(step);
+      const corners = cells.filter((c, n) => n === cells.length - 1 || (n > 0 && (c[0] - cells[n - 1][0] !== cells[n + 1][0] - c[0] || c[1] - cells[n - 1][1] !== cells[n + 1][1] - c[1])));
       try {
-        await d.walkTo({ x, y: pavement }, { tol: 3, timeout: 20000 });
+        for (const corner of corners) await d.walkTo(at(...corner), { tol: 2.5, timeout: 30000 });
         return;
       } catch (error) {
-        d.note("crossing blocked", { x, error: error.message });
+        d.note("path blocked, planning again", { what, error: error.message });
       }
     }
-    d.expect(false, "the player gets back to the north pavement", crossings);
+    d.expect(false, `the player reaches ${what}`);
   }
 
   // One tap on the wheel toward a heading: no longer than the turn needs, then straight on.
@@ -62,9 +96,11 @@ export default async function (d) {
       const car = parked.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14);
       d.expect(!!car, `a seized ${model} stands at the étude's kerb`, parked.filter((c) => c.model !== "sedan"));
       parkedAt = car;
-      // Back to the pavement first, then along it to the vehicle's door.
-      await toPavement();
-      await d.walkTo({ x: car.x, y: pavement }, { tol: 5, timeout: 90000 });
+      // To the vehicle's door, from the pavement or the street side, whichever is open.
+      await walkAround((spot, cars) => {
+        const now = cars.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14) || car;
+        return Math.abs(spot.x - now.x) < halfLengths[model] && Math.abs(spot.y - now.y) < 15;
+      }, `the ${model}`);
       d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
     });
     await d.step(`board-${model}`, async () => {
@@ -156,8 +192,7 @@ export default async function (d) {
   }
 
   await d.step("walk-back-to-etude", async () => {
-    await toPavement();
-    await d.walkTo({ x: home.x, y: pavement }, { tol: 6, timeout: 120000 });
+    await walkAround((spot) => Math.abs(spot.x - home.x) < 8 && Math.abs(spot.y - pavement) < 4, "the étude");
   });
   await d.step("traffic-mix", async () => {
     // Back at the étude, watch what drives by.

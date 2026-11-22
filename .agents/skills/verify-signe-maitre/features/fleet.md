@@ -29,7 +29,7 @@ Preconditions: `--build probe`. `state().parked` lists parked vehicles with `mod
 
 ## Gotchas
 
-- The journey steers by heading and rams the nearest wall, so the exact crash site varies with traffic. A vehicle left on the pavement can block `walkTo`; rerun once before suspecting the game.
+- The journey steers by heading and rams the nearest wall, so the exact crash site varies with traffic. Between vehicles it plans its walk around every parked or crashed vehicle from `state().parked`; moving traffic can still hold it up, so rerun once before suspecting the game.
 - The bus and dump truck lose about 1% per wall impact at kerb-side speeds. The journey only asks them for any damage.
 - A wreck cannot be boarded; the hint offers roadside assistance instead.
 - Engine sounds need a manual listen with sound on.
