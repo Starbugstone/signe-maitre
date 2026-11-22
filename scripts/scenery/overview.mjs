@@ -36,36 +36,41 @@ try {
       await probe.close();
       return t;
     })();
-    const zoom = 1.95;
-    const page = await open({ width: Math.round(info.width * zoom), height: 360 });
+    const zoom = 1.95,
+      across = 3;
+    // Three columns of strips: one viewport as wide as the city holds too many plates at once.
+    const page = await open({ width: Math.round((info.width / across) * zoom), height: 360 });
     const t = await page.evaluate(() => tour.town());
-    const strips = [];
-    for (let top = 0; top < t.height; top += t.vh) {
-      const y = Math.min(top, t.height - t.vh) + t.vh / 2;
-      strips.push({ top: Math.min(top, t.height - t.vh), url: await page.evaluate((y) => tour.shot(1e9, y), y) });
-    }
-    const stitched = await page.evaluate(
-      async ({ strips, t }) => {
-        const first = await createImageBitmap(await (await fetch(strips[0].url)).blob());
-        const scale = first.width / t.vw;
-        const c = document.createElement("canvas");
-        c.width = first.width;
-        c.height = Math.round(t.height * scale);
-        const ctx = c.getContext("2d");
-        for (const s of strips) {
-          const img = await createImageBitmap(await (await fetch(s.url)).blob());
-          ctx.drawImage(img, 0, Math.round(s.top * scale));
-        }
-        const half = document.createElement("canvas");
-        half.width = Math.round(c.width / 2);
-        half.height = Math.round(c.height / 2);
-        const h = half.getContext("2d");
-        h.imageSmoothingQuality = "high";
-        h.drawImage(c, 0, 0, half.width, half.height);
-        return { full: c.toDataURL("image/png"), half: half.toDataURL("image/jpeg", 0.9) };
-      },
-      { strips, t },
-    );
+    // Each tile goes straight from the game canvas onto one big canvas in the page.
+    for (let i = 0; i < across; i++)
+      for (let top = 0; top < t.height; top += t.vh) {
+        const y = Math.min(top, t.height - t.vh),
+          x = Math.min(i * t.vw, t.width - t.vw);
+        await page.evaluate(
+          ([x, y, t]) => {
+            tour.shot(x + t.vw / 2, y + t.vh / 2);
+            const game = document.querySelector("#game"),
+              scale = game.width / t.vw;
+            if (!window.stitched) {
+              window.stitched = document.createElement("canvas");
+              window.stitched.width = Math.round(t.width * scale);
+              window.stitched.height = Math.round(t.height * scale);
+            }
+            window.stitched.getContext("2d").drawImage(game, Math.round(x * scale), Math.round(y * scale));
+          },
+          [x, y, t],
+        );
+      }
+    const stitched = await page.evaluate(() => {
+      const c = window.stitched;
+      const half = document.createElement("canvas");
+      half.width = Math.round(c.width / 2);
+      half.height = Math.round(c.height / 2);
+      const h = half.getContext("2d");
+      h.imageSmoothingQuality = "high";
+      h.drawImage(c, 0, 0, half.width, half.height);
+      return { full: c.toDataURL("image/png"), half: half.toDataURL("image/jpeg", 0.9) };
+    });
     await save("city-overview.png", stitched.full);
     await save("city-overview-half.jpg", stitched.half);
     await page.close();
