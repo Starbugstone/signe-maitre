@@ -12,6 +12,10 @@ import { streetLayer } from "../../src/world/streets.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
 
+// Walking frames are timed by the clock. Hold it still, so that two renders of one pose match.
+const stillClock = performance.now();
+performance.now = () => stillClock;
+
 function requireCheck(ok, message) {
   if (!ok) throw new Error(message);
 }
@@ -246,11 +250,12 @@ function checkRingVerticalPier() {
 // Arc des Saisies, the obelisk and the lamp standard rise from their islands: behind them a
 // walker on the ring road is covered, in front they stand clear.
 function checkMonumentIslands() {
-  // Each walker stands at the silhouette's edge: partly covered behind it, clear in front.
+  // Each walker stands far enough behind for the head to show above the silhouette while the
+  // body is covered; in front of the island they stand clear.
   for (const [id, dx, behind] of [
-    ["c3r3", 14, 27],
-    ["c6r5", 2.6, 25],
-    ["c13r2", 6.5, 25],
+    ["c3r3", 0, 34],
+    ["c6r5", 0, 49],
+    ["c13r2", 0, 32],
   ]) {
     const rb = town.roadNodeById.get(id);
     requireCheck(blocked(rb.x, rb.y, 2.6), "Island centre open at " + id);
@@ -284,6 +289,15 @@ function checkClosedArms() {
 
 // Île de la Ferre and the quays as painted.
 function checkPaintedRiver() {
+  // Moored and passing boats bob on the clock; the quay checks compare still frames.
+  const original = boatFleet.boats.splice(0);
+  try {
+    paintedRiver();
+  } finally {
+    boatFleet.boats.splice(0, boatFleet.boats.length, ...original);
+  }
+}
+function paintedRiver() {
   const isl = town.river.islands[0];
   // Water inside the island's bounding box, outside the painted quay wall.
   requireCheck(blocked(isl.left + 30, isl.top + 6, 2.6), "Walker stepped off the island's north-west quay");
@@ -299,8 +313,8 @@ function checkPaintedRiver() {
   requireCheck(blocked(X(3) + 40, y, 2.6), "Walker left the bridge deck");
   actorLayers(X(3) + 29, y, false);
   // The quay promenades either side of the water.
-  actorLayers(X(5), town.river.top - 6, false);
-  actorLayers(X(5), town.river.bottom + 8, false);
+  actorLayers(X(7), town.river.top - 6, false);
+  actorLayers(X(7), town.river.bottom + 8, false);
 }
 
 // A walker at a station door stands in front of the hall; the tower's rear gardens are solid.
