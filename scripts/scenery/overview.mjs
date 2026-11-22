@@ -126,6 +126,13 @@ try {
     await page.close();
     console.log("Wrote", frames.length, "painting frames and", sheets.length, "contact sheets");
   }
+  // Named places: node scripts/scenery/overview.mjs out spots '{"name":[x,y],...}'
+  if (only === "spots") {
+    const page = await open({ width: 1280, height: 760 });
+    for (const [name, [x, y]] of Object.entries(JSON.parse(process.argv[4] || "{}")))
+      await save(`spot-${name}.png`, await page.evaluate(([x, y]) => tour.shot(x, y), [x, y]));
+    await page.close();
+  }
 } finally {
   await browser.close();
   await rm(dir, { recursive: true, force: true });
