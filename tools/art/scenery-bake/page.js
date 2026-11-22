@@ -204,6 +204,22 @@
     );
     return grade(plate, "alley");
   };
+  // A seam strip lies over the join of two paintings. Its long edges fade out over 5 units,
+  // so that the lane's back walls melt into the facades they cover.
+  function softEdges(strip, vertical, soft = 5 * P) {
+    const ctx = strip.getContext("2d"),
+      size = vertical ? strip.width : strip.height;
+    const fade = ctx.createLinearGradient(0, 0, vertical ? size : 0, vertical ? 0 : size);
+    fade.addColorStop(0, "#0000");
+    fade.addColorStop(soft / size, "#000");
+    fade.addColorStop(1 - soft / size, "#000");
+    fade.addColorStop(1, "#0000");
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, strip.width, strip.height);
+    ctx.globalCompositeOperation = "source-over";
+    return strip;
+  }
   // Seam strips at their painted scale, lane centred.
   recipes.alleyStripV = async () => {
     const [left, centre, right] = entry("alleyStripV").kerbs.x;
@@ -216,7 +232,7 @@
       [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
       [0, CH],
     );
-    return grade(strip, "alley");
+    return softEdges(grade(strip, "alley"), true);
   };
   recipes.alleyStripH = async () => {
     const [top, centre, bottom] = entry("alleyStripH").kerbs.y;
@@ -229,7 +245,7 @@
       [0, CW],
       [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
     );
-    return grade(strip, "alley");
+    return softEdges(grade(strip, "alley"), false);
   };
 
   // Horizontal ring viaduct. Railheads and pier feet land on town.ring (deck 40 above the feet).

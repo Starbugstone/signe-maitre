@@ -188,6 +188,32 @@ function blit(ctx, plate, left, top, w, h, dx, dy, dw = w, dh = h) {
   );
 }
 
+// The same copy with its cut edges faded out over `soft` units, so that a pasted frontage
+// melts into the painting around it. `edges` names the faded sides: l, r, t, b.
+const scrap = document.createElement("canvas"),
+  scrapContext = scrap.getContext("2d");
+function blitSoft(ctx, plate, left, top, w, h, dx, dy, edges, soft = 5) {
+  const pw = Math.round(w * plateScale),
+    ph = Math.round(h * plateScale),
+    f = soft * plateScale;
+  scrap.width = pw;
+  scrap.height = ph;
+  scrapContext.drawImage(plate, (left + CELL_W / 2) * plateScale, (top + CELL_H / 2) * plateScale, pw, ph, 0, 0, pw, ph);
+  scrapContext.globalCompositeOperation = "destination-in";
+  for (const edge of edges) {
+    const across = edge === "l" || edge === "r",
+      far = edge === "r" || edge === "b";
+    const size = across ? pw : ph;
+    const fade = scrapContext.createLinearGradient(0, 0, across ? pw : 0, across ? 0 : ph);
+    fade.addColorStop(far ? 1 - f / size : 0, far ? "#000" : "#0000");
+    fade.addColorStop(far ? 1 : f / size, far ? "#0000" : "#000");
+    scrapContext.fillStyle = fade;
+    scrapContext.fillRect(0, 0, pw, ph);
+  }
+  scrapContext.globalCompositeOperation = "source-over";
+  ctx.drawImage(scrap, dx, dy, w, h);
+}
+
 // A painting shows four road arms. Where the road graph has none, the block closes over the
 // arm with a stretch of the painting's own frontage: the kerb and pavement run on unbroken.
 const capHalf = 25.6;
@@ -203,15 +229,17 @@ function drawArmCaps(ctx, col, row) {
   // North and south: a slice from the middle of a neighbouring block, moved along the street.
   const slice = (col + row) % 2 ? 74 : -74;
   if (!arms.n && shows("n") && row !== town.riverSouthRow)
-    blit(ctx, plate, 74 - capHalf, -CELL_H / 2, 2 * capHalf, CELL_H / 2 - 16.3, cx - capHalf, cy - CELL_H / 2);
+    blitSoft(ctx, plate, 74 - capHalf - 3, -CELL_H / 2, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy - CELL_H / 2, "lr");
   if (!arms.s && shows("s"))
-    blit(ctx, plate, slice - capHalf, 16.3, 2 * capHalf, CELL_H / 2 - 16.3, cx - capHalf, cy + 16.3);
+    blitSoft(ctx, plate, slice - capHalf - 3, 16.3, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy + 16.3, "lr");
   // East and west: the block to the south, with its pavement on the cross street, moved up
   // across the roadway. Its roof stands in front of the shopfronts behind, as roofs do.
   const from = painting.capFrom ?? 46,
     depth = CELL_H / 2 - from;
-  if (!arms.e && shows("e")) blit(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth);
-  if (!arms.w && shows("w")) blit(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth);
+  if (!arms.e && shows("e"))
+    blitSoft(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbl");
+  if (!arms.w && shows("w"))
+    blitSoft(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbr");
 }
 
 // Painted ruelle strips. Both repeat along their length, one cell per repeat.

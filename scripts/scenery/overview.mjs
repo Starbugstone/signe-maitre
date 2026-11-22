@@ -48,7 +48,6 @@ try {
           x = Math.min(i * t.vw, t.width - t.vw);
         await page.evaluate(
           ([x, y, t]) => {
-            tour.shot(x + t.vw / 2, y + t.vh / 2);
             const game = document.querySelector("#game"),
               scale = game.width / t.vw;
             if (!window.stitched) {
@@ -56,7 +55,29 @@ try {
               window.stitched.width = Math.round(t.width * scale);
               window.stitched.height = Math.round(t.height * scale);
             }
-            window.stitched.getContext("2d").drawImage(game, Math.round(x * scale), Math.round(y * scale));
+            const ctx = window.stitched.getContext("2d");
+            tour.shot(x + t.vw / 2, y + t.vh / 2);
+            ctx.drawImage(game, Math.round(x * scale), Math.round(y * scale));
+            // The game draws its minimap in the lower right corner of every frame. That corner
+            // of the tile comes from a second frame, taken with the camera moved off it.
+            const corner = { w: 60, h: 50 };
+            const clamp = (v, max) => Math.max(0, Math.min(max, v));
+            const x2 = x + 80 <= t.width - t.vw ? x + 80 : clamp(x - 80, t.width - t.vw),
+              y2 = y + 60 <= t.height - t.vh ? y + 60 : clamp(y - 60, t.height - t.vh);
+            tour.shot(x2 + t.vw / 2, y2 + t.vh / 2);
+            const left = x + t.vw - corner.w,
+              top = y + t.vh - corner.h;
+            ctx.drawImage(
+              game,
+              Math.round((left - x2) * scale),
+              Math.round((top - y2) * scale),
+              Math.round(corner.w * scale),
+              Math.round(corner.h * scale),
+              Math.round(left * scale),
+              Math.round(top * scale),
+              Math.round(corner.w * scale),
+              Math.round(corner.h * scale),
+            );
           },
           [x, y, t],
         );
