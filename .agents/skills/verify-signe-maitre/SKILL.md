@@ -26,7 +26,7 @@ Every `pf run` starts its own headless Chromium. Each journey gets a fresh brows
 Two builds can be driven.
 
 - **`--build shipped`** is the default. It drives `index.html` exactly as committed and refuses to start if `index.html` no longer matches a fresh build of `src/`. Journeys can only read what a player sees.
-- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians, moving traffic and parked vehicles (each with its fleet `model`). Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
+- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. Road vehicle snapshots include fleet model ids, nameplates and dimensions. The probe also reports parked cars and bus stops. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians, moving traffic, boats and moorings. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
 
 Use `--url <address>` to drive a deployed copy, such as `https://starbugstone.github.io/signe-maitre/`. In that mode, only journeys marked `needs: "hud"` can run. Others are reported as skipped.
 
@@ -44,7 +44,7 @@ pf run <journey...> [--build shipped|probe] [--url URL]
        [--video] [--mute] [--headed] [--keep-going] [--run-id ID]
 ```
 
-- `desktop` is 1280×760 with a keyboard. `phone` is a 740×360 landscape touch screen at 2× scale, and `phone-portrait` is 390×844. On phones, the driver presses the on-screen pad and buttons (`[data-key=up|down|left|right|run|car|job|action]` and `#touchSignal` for **Horn** or **Siren**, which only appears in a car) with real Chrome DevTools Protocol (CDP) touch events, including multi-touch for Run plus a direction. It taps `#mapBtn`, `#reportBtn` and `#quip` for Map, Report and Quip.
+- `desktop` is 1280×760 with a keyboard. `phone` is a 740×360 landscape touch screen at 2× scale, and `phone-portrait` is 390×844. On phones, the driver presses the on-screen pad and buttons (`[data-key=up|down|left|right|run|car|job|action]` and `#touchSignal` for **Horn**, **Siren** or **Ship horn** while driving) with real Chrome DevTools Protocol (CDP) touch events, including multi-touch for Run plus a direction. It taps `#mapBtn`, `#reportBtn` and `#quip` for Map, Report and Quip.
 - `--lang` sets the browser locale. A fresh game follows the locale, as it does for a real player.
 - Journeys live in `journeys/*.mjs`. You can also pass a path to your own `.mjs` file, for example in the scratchpad. A journey exports `meta = { feature, needs: "hud" | "probe" }` and `default async (d) => {}`.
 

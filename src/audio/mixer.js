@@ -17,7 +17,7 @@ const engines = {
   electric: { wave: "triangle", idle: 150, rise: 4.1, span: Infinity, drop: 0, gears: 0, kick: 55, level: 0.003, push: 0.021, hum: 0.00011, cutoff: 520, open: 6.5, bite: 260, chug: 0, pulse: 0 },
   diesel: { wave: "sawtooth", idle: 23, rise: 0.56, span: 30, drop: 27, gears: 3, kick: 6, level: 0.105, push: 0.05, hum: 0, cutoff: 115, open: 0.7, bite: 55, chug: 0.5, pulse: 9 },
   moto: { wave: "square", idle: 58, rise: 1.5, span: 47, drop: 39, gears: 4, kick: 16, level: 0.034, push: 0.03, hum: 0, cutoff: 360, open: 2.3, bite: 330, chug: 0.42, pulse: 19 },
-  boat: { wave: "sawtooth", idle: 30, rise: 0.5, span: Infinity, drop: 0, gears: 0, kick: 8, level: 0.08, push: 0.04, hum: 0, cutoff: 150, open: 0.8, bite: 60, chug: 0.4, pulse: 7 },
+  boat: { wave: "sawtooth", idle: 27, rise: 0.16, span: Infinity, drop: 0, gears: 0, kick: 20, level: 0.069, push: 0.041, hum: 0, cutoff: 104, open: 0.43, bite: 90, chug: 0, pulse: 0 },
 };
 let signalVoice;
 const crashClips = new Map();
@@ -46,7 +46,7 @@ function makeTyreLoop() {
   }
   return buffer;
 }
-function makeHornLoop() {
+function makeHornLoop(ship = false) {
   const rate = game.audio.sampleRate;
   const buffer = game.audio.createBuffer(1, rate, rate);
   const samples = buffer.getChannelData(0);
@@ -57,8 +57,8 @@ function makeHornLoop() {
     0.06 * Math.sin(5 * phase);
   for (let i = 0; i < samples.length; i++) {
     const t = (TAU * i) / rate;
-    const low = reed(382 * t + 0.026 * Math.sin(5 * t));
-    const high = reed(483 * t + 0.023 * Math.sin(7 * t));
+    const low = reed((ship ? 126 : 382) * t + 0.026 * Math.sin(5 * t));
+    const high = reed((ship ? 158 : 483) * t + 0.023 * Math.sin(7 * t));
     samples[i] = (0.56 * low + 0.44 * high) * (0.96 + 0.04 * Math.sin(6 * t));
   }
   return buffer;
@@ -83,6 +83,30 @@ function makeSirenLoop() {
   }
   return buffer;
 }
+function signalClip(mode) {
+  if (!signalClips.has(mode)) signalClips.set(mode, mode === "siren" ? makeSirenLoop() : makeHornLoop(mode === "ship"));
+  return signalClips.get(mode);
+}
+
+export function shipHornSound(volume) {
+  if (!game.sound || !gameMix || game.audio.state !== "running") return;
+  const now = game.audio.currentTime;
+  const source = game.audio.createBufferSource(), gain = game.audio.createGain();
+  source.buffer = signalClip("ship");
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.16 * volume, now + 0.07);
+  gain.gain.setValueAtTime(0.16 * volume, now + 0.35);
+  gain.gain.linearRampToValueAtTime(0, now + 0.66);
+  source.connect(gain);
+  gain.connect(gameMix);
+  source.onended = () => {
+    source.disconnect();
+    gain.disconnect();
+  };
+  source.start(now);
+  source.stop(now + 0.66);
+}
+
 function vehicleSignalSound(mode) {
   if (!gameMix) return;
   if (!game.sound) mode = null;
@@ -96,10 +120,9 @@ function vehicleSignalSound(mode) {
   }
   if (!mode) return;
 
-  if (!signalClips.has(mode)) signalClips.set(mode, mode === "horn" ? makeHornLoop() : makeSirenLoop());
   const source = game.audio.createBufferSource();
   const gain = game.audio.createGain();
-  source.buffer = signalClips.get(mode);
+  source.buffer = signalClip(mode);
   source.loop = true;
   gain.gain.value = 0;
   source.connect(gain);
@@ -152,15 +175,16 @@ function motorSound() {
   if (!engineGain) return;
   const running = game.sound && game.ride && game.ride.condition !== 0 && !game.viewMap && !panel.open,
     now = game.audio.currentTime;
-  const throttle = Math.max(0, throttleInput());
-  const voice = engines[fleetOf(game.ride).sound] || engines.petrol;
-  const revs = running ? Math.abs(game.ride.speed) : 0;
+  const boat = running && game.ride.domain === "water";
+  const throttle = boat ? Math.abs(throttleInput()) : Math.max(0, throttleInput());
+  const voice = engines[boat ? "boat" : fleetOf(game.ride).sound];
+  const roll = running ? Math.hypot(game.ride.slideX, game.ride.slideY) : 0;
+  const revs = !running ? 0 : boat ? roll : Math.abs(game.ride.speed);
   const level = running ? voice.level + voice.push * throttle + voice.hum * revs : 0;
   engineGain.gain.setTargetAtTime(level, now, 0.07);
   chugDepth.gain.setTargetAtTime(level * voice.chug * clamp(1.2 - revs / 110, 0.25, 1), now, 0.07);
-  const roll = running ? Math.hypot(game.ride.slideX, game.ride.slideY) : 0;
   let friction = 0;
-  if (held.has("action") && roll > 7) {
+  if (!boat && held.has("action") && roll > 7) {
     const sideSlip = Math.abs(
       game.ride.slideY * Math.cos(game.ride.a) - game.ride.slideX * Math.sin(game.ride.a),
     );

@@ -1,9 +1,7 @@
 import { plates, plateScale } from "./streets.js";
-import { trainPosition } from "./layout.js";
-import { CELL_H, CELL_W, X, Y, town } from "./town.js";
+import { CELL_H, CELL_W, TAU, X, Y, town } from "./town.js";
 import { artwork, game } from "../core/state.js";
-import { g } from "../platform/canvas.js";
-
+import { g, rect } from "../platform/canvas.js";
 import {
   railTop,
   deckBottom,
@@ -15,6 +13,17 @@ import {
   marketColumnX,
   viaductSection,
 } from "./viaduct.js";
+import { paintedViaduct } from "./viaduct.js";
+import { drawOverTrain, drawSideDeck, sideSupportSprites, spanForeground } from "./ring-art.js";
+
+// Single train rendering hook for the Petite Ceinture ring railway.
+// Opus (ring-train branch) replaces this function to draw and simulate trains along `town.ring`.
+export function drawRingTrains(ctx, ring, ox, oy) {
+  void ctx;
+  void ring;
+  void ox;
+  void oy;
+}
 
 // The market artist painted one full open span between these two pier centre lines.
 // Extract its silhouette once, keeping the roadway visible through the ironwork.
@@ -58,7 +67,6 @@ function viaductBay() {
   ctx.closePath();
   ctx.clip();
   ctx.drawImage(artwork.market, 0, 0);
-  // The road seen through the truss in the original painting is background, not metal.
   clearTrussOpenings(
     ctx,
     (x) => x,
@@ -66,6 +74,7 @@ function viaductBay() {
   );
   return bay;
 }
+
 function clearTrussOpenings(ctx, sourceX, sourceY) {
   ctx.globalCompositeOperation = "destination-out";
   for (let x = 666; x < 830; x += 24) {
@@ -89,8 +98,6 @@ function clearTrussOpenings(ctx, sourceX, sourceY) {
   }
 }
 
-// Only the silhouette needs repainting on a market block. The street and façades
-// visible between the columns are already in the cached ground layer.
 let marketRail;
 function marketForeground() {
   if (marketRail) return marketRail;
@@ -116,6 +123,7 @@ function marketForeground() {
   clearTrussOpenings(ctx, px, py);
   return marketRail;
 }
+
 const streetSpans = new Map();
 function streetSpan(section) {
   if (streetSpans.has(section)) return streetSpans.get(section);
@@ -126,8 +134,6 @@ function streetSpan(section) {
   strip.width = w * 5;
   strip.height = h;
   const ctx = strip.getContext("2d");
-  // Keep the shafts and their arch ends at the original scale. Only extend
-  // the open truss to reach the real pier beyond a painting boundary.
   const arch = 68;
   for (let i = 0; i < 5; i++) {
     const x = i * w;
@@ -146,15 +152,29 @@ function streetSpan(section) {
   streetSpans.set(section, strip);
   return strip;
 }
-function drawRailLayer(row, firstCol, lastCol, overhead, ox) {
+
+// Draw one horizontal ring leg (row 1 or row 11, cols minCol..maxCol): the piers with the
+// street they stand on (`overhead` false), or the deck over everyone beneath it.
+function drawHorizontalLeg(row, firstCol, lastCol, overhead) {
+  const ring = town.ring;
+  const minC = Math.max(firstCol, ring.minCol),
+    maxC = Math.min(lastCol, ring.maxCol);
+  if (minC > maxC) return;
   const top = Y(row) - CELL_H / 2,
     start = overhead ? railTop : deckBottom,
     end = overhead ? deckBottom : foot,
     y = top + start * railScaleY,
     height = (end - start) * railScaleY;
-  for (let col = firstCol; col <= lastCol; col++) {
+
+  g.save();
+  // The straight run ends where the corner decks take over.
+  g.beginPath();
+  g.rect(ring.left + ring.cornerR - 2, top, ring.right - ring.left - 2 * ring.cornerR + 4, CELL_H);
+  g.clip();
+  for (let col = minC; col <= maxC; col++) {
     const x = X(col) - CELL_W / 2;
-    if (town.blocks[row][col] === "market") {
+    const viaduct = paintedViaduct(town, row, col);
+    if (viaduct?.market) {
       const rail = marketForeground();
       g.drawImage(
         rail,
@@ -167,27 +187,61 @@ function drawRailLayer(row, firstCol, lastCol, overhead, ox) {
         CELL_W + 0.02,
         height,
       );
+    } else if (viaduct) {
+      // A baked span: its own deck and piers, with a station's canopies above the deck.
+      const span = spanForeground(town.cellKinds[row][col]);
+      const from = overhead ? span.origin : span.deck,
+        to = overhead ? span.deck : span.foot;
+      g.drawImage(
+        span.image,
+        0,
+        (from - span.origin) * plateScale,
+        span.image.width,
+        (to - from) * plateScale,
+        x,
+        Y(row) + from,
+        CELL_W + 0.02,
+        to - from,
+      );
     } else {
       const strip = streetSpan(viaductSection(town, row, col));
       g.drawImage(strip, 0, start - railTop, strip.width, end - start, x, y, CELL_W + 0.02, height);
     }
   }
-  if (!overhead) return;
-  const { head, carLength, gap, count } = trainPosition(town.lines.get(row), town.width, game.time);
-  const h = (carLength * artwork.metro.height) / artwork.metro.width;
-  for (let i = 0; i < count; i++) {
-    const x = head - carLength - i * (carLength + gap);
-    if (x + carLength >= ox && x <= ox + game.vw) g.drawImage(artwork.metro, x, y + 1.5 - h, carLength, h);
-  }
+  g.restore();
 }
+
 export function visibleRails(ox, oy) {
-  const { firstRow, lastRow, firstCol, lastCol } = town.visibleCells(ox, oy - 18, game.vw, game.vh + 36);
+  const ring = town.ring;
+  if (!ring) return [];
+  const { firstCol, lastCol } = town.visibleCells(ox, oy - 24, game.vw, game.vh + 64);
   const rails = [];
-  for (let row = firstRow; row <= lastRow; row++) {
+
+  // 1. Horizontal Petite Ceinture legs (row 1 and row 11).
+  for (const row of [ring.northRow, ring.southRow]) {
+    if (row == null) continue;
     const y = Y(row) + pierDepth;
-    if (!town.lines.has(row) || y < oy || Y(row) - CELL_H / 2 + railTop * railScaleY - 18 > oy + game.vh)
-      continue;
-    rails.push({ y, draw: (overhead) => drawRailLayer(row, firstCol, lastCol, overhead, ox) });
+    if (y < oy - 12 || Y(row) - CELL_H / 2 + railTop * railScaleY - 22 > oy + game.vh) continue;
+    rails.push({
+      y,
+      draw: (overhead) => drawHorizontalLeg(row, firstCol, lastCol, overhead),
+    });
   }
+
+  // 2. The painted supports of the side legs, each sorted with the street at its foot.
+  rails.push(...sideSupportSprites(ox, oy));
+
+  // 3. Overhead: the side-leg and corner decks, then Opus's single ring train drawing hook,
+  // then whatever stands over a train (rail-bridge bracing, platform canopies).
+  rails.push({
+    y: -1e9,
+    draw: (overhead) => {
+      if (!overhead) return;
+      drawSideDeck(ox, oy);
+      drawRingTrains(g, ring, ox, oy);
+      drawOverTrain(ox, oy);
+    },
+  });
+
   return rails;
 }

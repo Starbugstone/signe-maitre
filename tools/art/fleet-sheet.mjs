@@ -34,7 +34,7 @@ import { drawVehicle } from "./src/art/fleet-art.js";
 import { drawAmbulance } from "./src/art/emergency.js";
 import { fleet } from "./src/game/fleet.js";
 import { prepareTown, streetLayer } from "./src/world/streets.js";
-import { X, Y } from "./src/world/town.js";
+import { office, X, Y } from "./src/world/town.js";
 const TAU = Math.PI * 2;
 window.boot = async () => {
   await Promise.all(Object.entries(imageData).map(async ([key, src]) => {
@@ -76,7 +76,8 @@ window.lineup = ({ zoom, condition }) => {
   const sheet = document.createElement("canvas");
   sheet.width = Math.round(vw * zoom); sheet.height = Math.round(vh * zoom) * rows;
   // The same stretch of the étude's street behind every row.
-  const ox = X(1) + 32, oy = Y(1) - vh / 2;
+  const kerbY = Y(office.row);
+  const ox = X(office.col) + 32, oy = kerbY - vh / 2;
   game.vw = vw; game.vh = vh; game.time = 3; game.ride = null;
   for (let r = 0; r < rows; r++) {
     canvas.width = sheet.width; canvas.height = Math.round(vh * zoom);
@@ -88,7 +89,7 @@ window.lineup = ({ zoom, condition }) => {
     for (const [i, model] of models.entries()) {
       const spec = fleet[model], span = Math.abs(Math.cos(a)) * spec.halfLength + Math.abs(Math.sin(a)) * spec.halfWidth + 3;
       x += span;
-      draw(body(model, x, Y(1) + (i % 2 ? 8 : -8), a, condition, model === "moto" && r % 2 ? { route: {} } : {}));
+      draw(body(model, x, kerbY + (i % 2 ? 8 : -8), a, condition, model === "moto" && r % 2 ? { route: {} } : {}));
       x += span;
     }
     sheet.getContext("2d").drawImage(canvas, 0, r * canvas.height);

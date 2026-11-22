@@ -101,7 +101,9 @@ async function probeEntry() {
   // Read-only observer. It returns copies, so a journey can look at the game but never set it.
   return `
 import "./src/main.js";
-import { game, p, done, people, cars } from "./src/core/state.js";
+import { game, p, done, held, people, cars } from "./src/core/state.js";
+import { boatFleet, river } from "./src/game/boats.js";
+import { berthInReach } from "./src/game/boarding.js";
 import { interior } from "./src/scenes/interiors.js";
 import { goal } from "./src/game/cases.js";
 import { directions } from "./src/world/navigation.js";
@@ -110,7 +112,16 @@ import { jobs } from "./src/world/town.js";
 import { target, sedan } from "./src/world/population.js";
 import { panel } from "./src/platform/canvas.js";
 const xy = (o) => o && { x: +o.x.toFixed(2), y: +o.y.toFixed(2) };
-const veh = (v) => v && { ...xy(v), a: +v.a.toFixed(3), model: v.model, label: v.label, halted: (v.route?.stopFor || 0) > 0, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical };
+const veh = (v) => v && {
+  ...xy(v), a: +v.a.toFixed(4), model: v.model, label: v.label, speed: +(v.speed || 0).toFixed(2),
+  condition: v.condition, medical: !!v.medical, halfLength: v.halfLength, halfWidth: v.halfWidth,
+  halted: (v.route?.stopFor || 0) > 0, routeId: v.route?.id, showpiece: v.showpiece,
+  roadClass: v.route?.segments?.[v.route.segIndex]?.roadClass,
+  ...(v.domain === "water" && {
+    vx: +v.slideX.toFixed(2), vy: +v.slideY.toFixed(2), yaw: +v.yaw.toFixed(3),
+    bumps: v.bumps, lastImpact: +v.lastImpact.toFixed(2), mooring: v.mooring, traffic: !!v.traffic,
+  }),
+};
 window.__pf = Object.freeze({
   snapshot() {
     const end = goal();
@@ -121,13 +132,18 @@ window.__pf = Object.freeze({
       done: [...done], viewMap: game.viewMap, dialogOpen: panel.open,
       interior: interior && { door: interior.room.door, exit: xy(interior.room.exit), desk: xy(interior.room.desk), returnTo: xy(interior.returnTo) },
       goal: end && { id: end === target ? "target" : end.id, ...xy(end) },
-      route: !interior && end ? (directions()?.path || []).map(xy) : [],
+      route: !interior && end && game.ride?.domain !== "water" ? (directions()?.path || []).map(xy) : [],
       ambulance: ambulance && { ...veh(ambulance), state: ambulance.state, loaded: ambulance.loaded || 0 },
       downed: people.filter((n) => n.knockedOut && !n.onStretcher).map(xy),
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
       traffic: cars.filter((c) => c.route).map(veh),
       parked: cars.filter((c) => !c.route && !c.medical && c !== game.ride).map(veh),
+      boats: boatFleet.boats.flatMap((b, id) => b.incoming ? [] : [{ id, ...veh(b) }]),
+      boatDock: game.ride?.domain === "water" ? berthInReach()?.id ?? null : null,
+      shipHorn: game.ride?.domain === "water" && held.has("horn"),
+      river: { top: river.top, bottom: river.bottom, bridges: river.bridges.map((b) => ({ ...b })),
+        moorings: river.moorings.map((m) => ({ ...m, quay: xy(m.quay) })) },
     };
   },
 });

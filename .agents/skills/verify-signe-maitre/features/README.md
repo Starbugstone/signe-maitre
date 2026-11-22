@@ -7,7 +7,7 @@ This folder lists the player-facing behavior of Signé, Maître ! and how to pro
 - Run `npm ci` once.
 - After any change in `src/`, run `npm run build`.
 - `pf doctor` must report all `ok` lines.
-- Each journey starts a fresh game in its own browser context: `€0 · HP 5/5 · Heat 0/3`. The player starts on foot beside the étude in column 2, row 1, and the Étude 2000 sedan is parked next to them. No case is done.
+- Each journey starts a fresh game in its own browser context: `€0 · HP 5/5 · Heat 0/3`. The player starts on foot beside the étude in column 7, row 5 (Place de la Contrainte), and the Étude 2000 sedan is parked next to them. No case is done.
 - Language follows `--lang` (`en` or `fr`), the same way a fresh player's browser locale does.
 
 ## Driving conventions
@@ -37,8 +37,10 @@ Each feature file begins with an H1 and one paragraph. It then has exactly four 
 | [Étude interior](./office-interior.md) | `office-interior` | Scripted for the probe build |
 | [Cases: noise, home visit and repossession](./cases.md) | `noise-case`, `home-visit` | Noise and home visit are scripted for the probe build. Repossession is not scripted. |
 | [Cars: boarding, driving, damage and repair](./vehicles.md) | `street-life` | Boarding and departure are checked. The starter sedan stuck in the kerb bollards on `ef81f95`/`253cd55` is fixed; `south-pavement` also drives it off. |
-| [Fleet: Volta E, SUV, city bus, dump truck and motorbike](./fleet.md) | `fleet` | Scripted for the probe build: board, drive, crash and leave each model; traffic mix and bus stop. Art is judged on `tools/art/fleet-sheet.mjs` contact sheets. |
+| [Fleet: Volta E, SUV, city bus, dump truck and motorbike](./fleet.md) | `fleet` | Scripted for the probe build: board, drive, crash and leave each model; traffic mix and an avenue bus stop. Art is judged on `tools/art/fleet-sheet.mjs` contact sheets. |
 | [Street incidents and ambulance dispatch](./street-incident.md) | `street-report`, `ambulance` | Separate probe journeys verify filing a copy and waiting for the crew to load a patient. |
 | [Hero walk and run animation](./hero-gait.md) | `tools/art/journeys/hero-gait.mjs`, `tools/art/journeys/hero-strides.mjs` | Scripted for the probe build; judged on video |
 | [Street life: traffic, pedestrians and getting unstuck](./street-life.md) | `street-life` | The traffic watch follows the sedan departure check. Traffic and collision fixtures also cover pinches and recovery. |
-| [Street scenery and railway pillars](./street-scenery.md) | `street-scenery`, `south-pavement` | Walks the garage pavement and the market alley, and the south pavement past the old kerb wall. `npm run test:scenery` also compares actor and foreground pixels. |
+| [Street scenery and railway pillars](./street-scenery.md) | `street-scenery`, `south-pavement`, `city-scenery` | Walks the garage pavement and seam alley, and the south pavement past the old kerb wall. `city-scenery` drives and walks past every monument, onto the island, to a station door and out to a ring corner. `npm run test:scenery` also compares actor and foreground pixels at the monument islands, closed arms, alleys, bridges, quays, Tour de Fer and the ring's legs. |
+| [Big city: Paris-like Port-Fer, roundabouts, bridges, alleys and ring viaduct](./big-city.md) | `big-city` | Scripted for the probe build: opens the 16×12 map, drives anticlockwise around a roundabout, verifies anticlockwise roundabout traffic, crosses a river bridge, confirms a wide sedan is refused by an alley while a walker passes through, and visits Gare du Sud beneath the Petite Ceinture ring viaduct. |
+| [River boats and moorings](./boats.md) | `boats`, `river-traffic` | Board, sound the horn, sail under a bridge, bump the quay and moor. A 260-second traffic watch checks the two island channels and all road and railway crossings. |

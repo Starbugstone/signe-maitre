@@ -359,7 +359,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 }
 #mapSheet h2 { color: #ffd172; margin: 0; }
 #mapTitle { font: bold 15px/1.3 monospace; letter-spacing: .07em; }
-#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.25; margin: 12px 10px; }
+#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.7; margin: 12px 10px; }
 #mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
 #mapKey span { display: block; }
 #casebook {

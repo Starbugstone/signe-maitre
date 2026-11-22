@@ -4,7 +4,10 @@
 // and wait for a line bus to pull up at a stop.
 export const meta = { feature: "fleet", needs: "probe" };
 
-const junctions = [75, 365, 655, 945, 1235, 1525];
+import { office, town, Y } from "../../../../src/world/town.js";
+import { brakeToStop, turnSlowly } from "./big-city.mjs";
+
+const junctions = town.roadsX;
 const turnTo = (want, a) => Math.atan2(Math.sin(want - a), Math.cos(want - a));
 const halfLengths = { sedan: 11, volta: 12, suv: 12.4, moto: 7, dumper: 19, bus: 28.5 };
 // Distance from a spot to a vehicle's body.
@@ -13,8 +16,8 @@ function gap(c, spot) {
     dy = spot.y - c.y,
     cos = Math.cos(c.a),
     sin = Math.sin(c.a);
-  const ahead = Math.abs(dx * cos + dy * sin) - halfLengths[c.model],
-    aside = Math.abs(dy * cos - dx * sin) - (c.model === "moto" ? 2.3 : 4.8);
+  const ahead = Math.abs(dx * cos + dy * sin) - c.halfLength,
+    aside = Math.abs(dy * cos - dx * sin) - c.halfWidth;
   return Math.hypot(Math.max(0, ahead), Math.max(0, aside));
 }
 // How near the game counts a vehicle when F is pressed (`reach` in src/game/boarding.js).
@@ -54,7 +57,7 @@ export default async function (d) {
             dy = y - c.y,
             cos = Math.cos(c.a),
             sin = Math.sin(c.a);
-          return Math.abs(dx * cos + dy * sin) < halfLengths[c.model] + 3.4 && Math.abs(dy * cos - dx * sin) < (c.model === "moto" ? 2.3 : 4.8) + 3.4;
+          return Math.abs(dx * cos + dy * sin) < c.halfLength + 3.4 && Math.abs(dy * cos - dx * sin) < c.halfWidth + 3.4;
         });
       const key = (i, j) => i + "," + j,
         at = (i, j) => ({ x: p.x + i * cell, y: Math.min(bottom, Math.max(top, p.y)) + j * cell });
@@ -102,18 +105,41 @@ export default async function (d) {
     if (ms - tap > 16) await d.hold(keys, ms - tap);
   }
 
+  async function wreckMotorbike(rate) {
+    // Set up in the middle of an ordinary block, where both kerbs are continuous.
+    const streetY = Y(office.row);
+    for (let i = 0; i < 70; i++) {
+      const { ride } = await d.state();
+      if (ride.condition === 0) return;
+      const nearJunction = junctions.some((x) => Math.abs(ride.x - x) < 50);
+      if (!nearJunction && Math.abs(ride.y - streetY) < 12 && Math.abs(turnTo(Math.PI, ride.a)) < 0.32) break;
+      const aim = Math.PI - Math.max(-0.45, Math.min(0.45, (streetY - ride.y) * 0.06));
+      await steer(aim, 110, rate, ride.speed < 34 ? ["up"] : []);
+    }
+    await brakeToStop(d);
+    const { ride: linedUp } = await turnSlowly(d, Math.PI / 2, 15, 0.09);
+    if (linedUp.condition === 0) return;
+    d.expect(Math.abs(turnTo(Math.PI / 2, linedUp.a)) < 0.18, "the motorbike faces the south kerb", linedUp);
+    // Back up for room to accelerate. Hitting the same wall head on makes damage repeatable.
+    for (let i = 0; i < 6; i++) {
+      if ((await d.state()).ride.condition === 0) break;
+      await d.hold(["down"], 2100);
+      await d.hold(["up"], 1150);
+    }
+  }
+
   for (const [model, wreckTo, pace, rate, accel] of fleet) {
     let parkedAt;
     await d.step(`walk-to-${model}`, async () => {
-      const { parked, p } = await d.state();
-      const car = parked.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14);
+      const { parked } = await d.state();
+      const car = parked.find((c) => c.model === model && c.showpiece && c.condition > 0);
       d.expect(!!car, `a seized ${model} stands at the étude's kerb`, parked.filter((c) => c.model !== "sedan"));
       parkedAt = car;
       // To the vehicle's door, from the pavement or the street side, whichever is open.
       // The spot must be nearer this vehicle than any other, or F takes the wrong wheel.
       // From the pavement if there is a way: traffic stops beside a walker in the street.
       const door = (kerbSide) => (spot, cars) => {
-        const now = cars.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14) || car;
+        const now = cars.find((c) => c.model === model && c.showpiece && c.condition > 0) || car;
         const mine = reach(now, spot);
         return mine < 19 && (!kerbSide || spot.y < now.y - 6) && cars.every((c) => c === now || reach(c, spot) > mine + 3);
       };
@@ -156,7 +182,7 @@ export default async function (d) {
         const { ride } = await d.state();
         top = Math.max(top, Math.abs(ride.speed));
         const gone = Math.hypot(ride.x - start.x, ride.y - start.y);
-        if (gone > 170 || (gone > 30 && top > pace * 1.1)) break;
+        if (gone > 30 && top > pace) break;
         // Nose to nose with traffic: back off a little and let it through.
         held = Math.abs(ride.speed) < 2 ? held + 1 : 0;
         if (held > 5) {
@@ -176,6 +202,7 @@ export default async function (d) {
     await d.step(`crash-${model}`, async () => {
       // Across the street into the buildings on the south side, where nothing is parked,
       // backing off and ramming again as needed.
+      if (model === "moto") await wreckMotorbike(rate);
       let still = 0,
         hits = 0,
         last = (await d.state()).ride.condition;
@@ -197,6 +224,7 @@ export default async function (d) {
       const { ride } = await d.state();
       d.note(`${model} after the crash`, { ride, hits });
       d.expect(ride.condition <= wreckTo, `the ${model} is damaged down to ${wreckTo}% or less`, ride);
+      if (model === "volta") d.expect(ride.condition > 0, "the damaged Volta still runs", ride);
       if (wreckTo === 0) d.expect((await d.hud()).hint.includes(d.t("callRecovery")), "a wreck offers roadside assistance", await d.hud());
     });
     await d.step(`leave-${model}`, async () => {
@@ -225,7 +253,7 @@ export default async function (d) {
     while (Date.now() < end && !(halted && models.size >= 4)) {
       const { traffic } = await d.state();
       for (const c of traffic) models.add(c.model);
-      halted ||= traffic.find((c) => c.model === "bus" && c.halted && Math.abs(c.speed) < 0.5);
+      halted ||= traffic.find((c) => c.model === "bus" && c.halted && c.roadClass === "avenue" && Math.abs(c.speed) < 0.5);
       await new Promise((r) => setTimeout(r, 500));
     }
     d.note("traffic models", [...models]);
@@ -235,7 +263,7 @@ export default async function (d) {
     if (halted) {
       const { state } = await d.waitFor(
         "the bus moves off again",
-        ({ state }) => state.traffic.some((c) => c.model === "bus" && !c.halted && c.speed > 4),
+        ({ state }) => state.traffic.some((c) => c.routeId === halted.routeId && !c.halted && c.speed > 4),
         30000,
       );
       d.expect(state.traffic.some((c) => c.model === "bus"), "the bus drives on", state.traffic);
