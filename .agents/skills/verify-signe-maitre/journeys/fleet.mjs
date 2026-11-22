@@ -4,6 +4,7 @@
 // and wait for a line bus to pull up at a stop.
 export const meta = { feature: "fleet", needs: "probe" };
 
+import { blockedIn } from "../../../../src/world/collision.js";
 import { office, town, Y } from "../../../../src/world/town.js";
 import { brakeToStop, turnSlowly } from "./big-city.mjs";
 
@@ -50,14 +51,15 @@ export default async function (d) {
       const { parked, p } = await d.state();
       // The player gets out within a few units of the vehicle he left: free to step away.
       const solid = (x, y) =>
-        Math.hypot(x - p.x, y - p.y) > 9 &&
+        blockedIn(town, x, y, 2.6) ||
+        (Math.hypot(x - p.x, y - p.y) > 9 &&
         parked.some((c) => {
           const dx = x - c.x,
             dy = y - c.y,
             cos = Math.cos(c.a),
             sin = Math.sin(c.a);
           return Math.abs(dx * cos + dy * sin) < c.halfLength + 3.4 && Math.abs(dy * cos - dx * sin) < c.halfWidth + 3.4;
-        });
+        }));
       const key = (i, j) => i + "," + j,
         at = (i, j) => ({ x: p.x + i * cell, y: Math.min(bottom, Math.max(top, p.y)) + j * cell });
       const seen = new Map([[key(0, 0), null]]),
@@ -86,11 +88,14 @@ export default async function (d) {
       const corners = cells.filter((c, n) => n === cells.length - 1 || (n > 0 && (c[0] - cells[n - 1][0] !== cells[n + 1][0] - c[0] || c[1] - cells[n - 1][1] !== cells[n + 1][1] - c[1])));
       try {
         for (const corner of corners) await d.walkTo(at(...corner), { tol: 2.5, timeout: 30000 });
-        return true;
+        const stopped = await d.state();
+        if (arrived(stopped.p, stopped.parked)) return true;
+        d.note("the final step carried the player past the boarding spot", { what, at: stopped.p });
       } catch (error) {
         d.note("path blocked, planning again", { what, error: error.message });
       }
     }
+    if (!required) return false;
     d.expect(false, `the player reaches ${what}`);
   }
 
@@ -161,7 +166,7 @@ export default async function (d) {
         ({ state }) => state.traffic.every((c) => reach({ ...c, model: c.model }, state.p) > reach(car, state.p) - 2),
         20000,
       ).catch(() => d.note("traffic still close", {}));
-      d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
+      await d.waitFor("the hint offers the wheel", ({ hud }) => hud.hint.includes(d.t("enterHint")), 6000);
     });
     await d.step(`board-${model}`, async () => {
       await d.press("car");
