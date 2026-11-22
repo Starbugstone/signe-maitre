@@ -506,11 +506,10 @@ function advanceTraffic(c, dt) {
   let occupied = false;
   if (rbEntry) {
     // Yield outside the roundabout kerb (front bumper clear of outerRadius) to circulating traffic.
-    if (rbOutside && !ghost && probe.remaining < stopRem + 36) {
-      const circulating = roundaboutBusy(c, rbEntry);
-      if (circulating) {
+    if (rbOutside && probe.remaining < stopRem + 36) {
+      yieldCar = roundaboutBusy(c, rbEntry);
+      if (yieldCar && !ghost) {
         occupied = true;
-        yieldCar = circulating;
         desired = Math.min(desired, Math.max(0, (probe.remaining - stopRem) * 2.5));
       }
     }
@@ -623,7 +622,9 @@ function advanceTraffic(c, dt) {
   }
   if (obstructed || desired < 1) route.wait += dt;
   else if (!ghost) route.wait = Math.max(0, route.wait - dt * 2);
-  else if (gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
+  // An offscreen driver needs to keep moving until it is past the yield line and its
+  // obstruction. Before then, a clear look-ahead can just mean the blocker is around the bend.
+  else if (!yieldCar && !exitCar && gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
 
   const other = typeof blocker === "object" ? blocker : null;
   if (

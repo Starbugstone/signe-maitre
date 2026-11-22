@@ -221,3 +221,38 @@ test("a motorbike completes an alley loop and a sedan is refused", () => {
   driveFleetLoop("moto", loop, (c, seg) => { inAlley ||= seg.roadClass === "alley" && c.speed > 5; });
   assert.ok(inAlley);
 });
+
+test("an offscreen bus clears the Obelisk entry when a second bus is left across the exit", () => {
+  const node = town.roadNodeById.get("c6r5");
+  const loop = buildTrafficLoop(town, node.col, node.row);
+  const segments = compileFleetLoop(town, loop, "bus");
+  const segIndex = segments.findIndex((seg) => seg.roundaboutEntry?.id === node.id && seg.y1 > node.y);
+  const approach = segments[segIndex];
+  const { halfLength, halfWidth } = fleet.bus;
+  const s = approach.length - approach.roundaboutEntry.stopOffset - halfLength - 2;
+  const trafficBus = {
+    ...evalSegment(approach, s),
+    model: "bus", halfLength, halfWidth, speed: 0, condition: 100,
+    route: { class: loop.class, segments, segIndex, s, pace: 36 },
+  };
+  const parkedBus = {
+    x: node.x + 41, y: node.y + 18, a: Math.PI,
+    model: "bus", halfLength, halfWidth, speed: 0, condition: 99,
+  };
+  const parkedCars = cars.splice(0, cars.length, trafficBus, parkedBus);
+  const savedPeople = people.splice(0);
+  const { camX, camY, vw, vh, ride } = game;
+  try {
+    Object.assign(game, { camX: X(7) + 50, camY: Y(5), vw: 300, vh: 175, ride: trafficBus });
+    let circulated = false;
+    for (let frame = 0; frame < 20 * 60; frame++) {
+      advanceTraffic(trafficBus, 1 / 60);
+      circulated ||= segments[trafficBus.route.segIndex].roundabout?.id === node.id;
+    }
+    assert.ok(circulated, "the bus proceeds into the roundabout after waiting");
+  } finally {
+    cars.splice(0, cars.length, ...parkedCars);
+    people.push(...savedPeople);
+    Object.assign(game, { camX, camY, vw, vh, ride });
+  }
+});

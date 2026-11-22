@@ -5821,11 +5821,10 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     let yieldCar = null;
     let occupied = false;
     if (rbEntry) {
-      if (rbOutside && !ghost && probe.remaining < stopRem + 36) {
-        const circulating = roundaboutBusy(c, rbEntry);
-        if (circulating) {
+      if (rbOutside && probe.remaining < stopRem + 36) {
+        yieldCar = roundaboutBusy(c, rbEntry);
+        if (yieldCar && !ghost) {
           occupied = true;
-          yieldCar = circulating;
           desired = Math.min(desired, Math.max(0, (probe.remaining - stopRem) * 2.5));
         }
       }
@@ -5906,7 +5905,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     }
     if (obstructed || desired < 1) route.wait += dt;
     else if (!ghost) route.wait = Math.max(0, route.wait - dt * 2);
-    else if (gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
+    else if (!yieldCar && !exitCar2 && gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
     const other = typeof blocker === "object" ? blocker : null;
     if (other?.route && other.route.blocker === c && !probe.turning && !route.lane && !other.route.lane && route.wait > 1.5) {
       if (!(other.route.id < route.id)) route.backing = game.time + 1;
