@@ -1335,9 +1335,6 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     }
     return "sedan";
   }
-  function routeClass(route) {
-    return route?.class || route?.roadClass || "street";
-  }
 
   // src/world/population.js
   function car2(x, y, a, tint, model, route) {
@@ -1478,7 +1475,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     horizontal.homeCell = vertical.homeCell = key;
     if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
     const q = Math.floor(random() * 4), f = 0.12 + random() * 0.65;
-    const model = pickModel(routeClass(null), draw2(trafficSalt));
+    const model = pickModel("street", draw2(trafficSalt));
     const left2 = X(col) + 6, right = X(col + 1) - 6, top2 = Y(row) + 6, bottom = Y(row + 1) - 6;
     const points = [
       { x: left2, y: top2 },
@@ -2967,7 +2964,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       }
     }
     clearTraffic(v, oldX, oldY, oldAngle, dt);
-    if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5, w: spec.halfWidth, l: spec.halfLength });
+    if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5, w: spec.halfWidth });
   }
   var trafficAccel = 30;
   var trafficBrake = 130;

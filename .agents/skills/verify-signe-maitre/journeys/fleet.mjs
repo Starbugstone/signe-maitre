@@ -21,8 +21,29 @@ const fleet = [
 ];
 
 export default async function (d) {
-  const pavement = (await d.state()).p.y;
+  const home = (await d.state()).p,
+    pavement = home.y;
   const seen = new Map();
+
+  // From wherever the last vehicle was left, cross the kerb where nothing is parked.
+  async function toPavement() {
+    const { parked, p } = await d.state();
+    if (Math.abs(p.y - pavement) <= 3) return;
+    const kerb = parked.filter((c) => Math.abs(c.y - pavement) < 14);
+    const clear = (x) => kerb.every((c) => Math.abs(c.x - x) > halfLengths[c.model] + 9) && junctions.every((j) => Math.abs(j - x) > 34);
+    const crossings = [];
+    for (let step = 0; step < 160; step += 8) for (const x of step ? [p.x + step, p.x - step] : [p.x]) if (clear(x)) crossings.push(x);
+    // A wreck or a car waiting for the walker can close one crossing; try the next.
+    for (const x of crossings.slice(0, 6)) {
+      try {
+        await d.walkTo({ x, y: pavement }, { tol: 3, timeout: 20000 });
+        return;
+      } catch (error) {
+        d.note("crossing blocked", { x, error: error.message });
+      }
+    }
+    d.expect(false, "the player gets back to the north pavement", crossings);
+  }
 
   // One tap on the wheel toward a heading: no longer than the turn needs, then straight on.
   async function steer(want, ms, rate, keys = ["up"]) {
@@ -41,26 +62,8 @@ export default async function (d) {
       const car = parked.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14);
       d.expect(!!car, `a seized ${model} stands at the étude's kerb`, parked.filter((c) => c.model !== "sedan"));
       parkedAt = car;
-      // Back to the pavement first, crossing the kerb where nothing is parked, then along
-      // it to the vehicle's door.
-      if (Math.abs(p.y - pavement) > 3) {
-        const kerb = parked.filter((c) => Math.abs(c.y - pavement) < 14);
-        const clear = (x) => kerb.every((c) => Math.abs(c.x - x) > halfLengths[c.model] + 9) && junctions.every((j) => Math.abs(j - x) > 34);
-        const crossings = [];
-        for (let step = 0; step < 160; step += 8) for (const x of step ? [p.x + step, p.x - step] : [p.x]) if (clear(x)) crossings.push(x);
-        // A wreck or a car waiting for the walker can close one crossing; try the next.
-        let reached = false;
-        for (const x of crossings.slice(0, 6)) {
-          try {
-            await d.walkTo({ x, y: pavement }, { tol: 3, timeout: 20000 });
-            reached = true;
-            break;
-          } catch (error) {
-            d.note("crossing blocked", { x, error: error.message });
-          }
-        }
-        d.expect(reached, "the player gets back to the north pavement", crossings);
-      }
+      // Back to the pavement first, then along it to the vehicle's door.
+      await toPavement();
       await d.walkTo({ x: car.x, y: pavement }, { tol: 5, timeout: 90000 });
       d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
     });
@@ -152,6 +155,10 @@ export default async function (d) {
     });
   }
 
+  await d.step("walk-back-to-etude", async () => {
+    await toPavement();
+    await d.walkTo({ x: home.x, y: pavement }, { tol: 6, timeout: 120000 });
+  });
   await d.step("traffic-mix", async () => {
     // Back at the étude, watch what drives by.
     const models = new Set();
