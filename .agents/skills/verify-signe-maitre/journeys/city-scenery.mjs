@@ -49,9 +49,13 @@ export default async function (d) {
   await d.step("tour-de-fer-on-foot", async () => {
     await leaveCar(d);
     // Under the east leg, then round the foot of the rear garden to the bridge mouth.
-    await d.walkTo({ x: tower.x + 68, y: tower.y + 14 }, { tol: 5 });
+    // Onto the south pavement first, clear of the parked sedan, then along it under the leg.
+    const { p: start } = await d.state();
+    const spot = { x: tower.x + 68, y: tower.y + 20 };
+    await d.walkTo({ x: start.x, y: spot.y }, { tol: 4 });
+    await d.walkTo(spot, { tol: 5 });
     const { p } = await d.state();
-    d.expect(near(p, { x: tower.x + 68, y: tower.y + 14 }, 9), "player walks beneath the tower's ironwork", p);
+    d.expect(near(p, spot, 9), "player walks beneath the tower's ironwork", p);
     for (const garden of tower.piers) {
       const cx = garden.reduce((s, q) => s + q[0], 0) / garden.length,
         cy = garden.reduce((s, q) => s + q[1], 0) / garden.length;
