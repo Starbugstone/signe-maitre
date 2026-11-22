@@ -24,7 +24,7 @@ export async function boardCar(d) {
 }
 
 export default async function (d) {
-  const drive = (dest, options = {}) => driveRouteTo(d, dest, { tol: 26, timeout: 170000, maxSpeed: 58, ...options });
+  const drive = (dest, options = {}) => driveRouteTo(d, dest, { tol: 26, timeout: 170000, maxSpeed: 46, ...options });
   const near = (a, b, r) => Math.hypot(a.x - b.x, a.y - b.y) <= r;
   const arrive = async (name, dest, what, reach = 40) => {
     await d.step(name, async () => {
@@ -44,6 +44,9 @@ export default async function (d) {
   await arrive("place-de-la-contrainte", { x: X(6) + 70, y: Y(5) + 6 }, "sedan beside the obelisk roundabout");
   await arrive("arc-des-saisies", { x: X(3) + 76, y: Y(3) + 6 }, "sedan beside Arc des Saisies");
 
+  // Regroup in the southbound lane before crossing la Ferre. This keeps the route
+  // following the avenue after the turn at the Arc, even if traffic forces a sidestep.
+  await arrive("north-bank-bridge-approach", { x: X(3) - 6, y: Y(6) - 45 }, "sedan on the north approach to Pont de Fer");
   const tower = town.monuments.find((m) => m.id === "tour-fer");
   await arrive("tour-de-fer-underpass", { x: tower.x + 60, y: tower.y - 6 }, "sedan beneath Tour de Fer");
   await d.step("tour-de-fer-on-foot", async () => {
