@@ -1,16 +1,20 @@
 # Street scenery
 
-The garage and market share a railway above a pedestrian alley. The player can enter the alley from the pavement and walk in front of the garage pillar.
+Every cell of Port-Fer shows one street painting (`town.cellKinds`). Roads the road graph does not have are built over with the painting's own frontage, ruelles and cell seams are painted lanes, la Ferre is drawn from one tall plate per column, and the Petite Ceinture runs on painted spans. Near the étude, the garage and its neighbour share the railway above a pedestrian lane: the player can enter the lane from the pavement and walk in front of the garage pillar.
 
 ## Sub-features
 
 - Railway pillars, streetlamps and bollards have solid bases.
 - Pedestrians and vehicles cover objects behind them. The elevated deck stays overhead.
-- The market span meets the next painting at its painted pillar, leaving the alley open.
+- Each painted span meets the next at a seam lane that stays open beside its outer pillar.
+- Arc des Saisies, the obelisk and the lamp standard cover a walker behind them; the Tour de Fer ironwork is drawn over the street; the side legs of the ring stand on painted brackets (west) and portals (east).
+- Closed road arms, roundabout islands, the tower's rear gardens, the cathedral and the water at the island's corners stop walkers and cars.
 
 ## How to get to it (user POV)
 
-Walk east from the étude along the north pavement of Place de la Contrainte (column 7, row 5) past the garage pillar into the adjacent seam alley, step inside the alley, and return to the pavement. The automated pixel suite (`scripts/scenery/scene.js`) also inspects the northern and southern Petite Ceinture market joins, roundabout islands, Marais alleys, bridges, Tour de Fer underpass and vertical ring viaduct piers.
+Walk east from the étude along the north pavement of Place de la Contrainte (column 7, row 5) past the garage pillar into the adjacent seam alley, step inside the alley, and return to the pavement. The automated pixel suite (`scripts/scenery/scene.js`) also inspects the ring's seam lanes and side legs, the three monument islands, closed arms, Marais alleys, bridges at their full painted width, the island and its quays, the Tour de Fer underpass, station doors, and the decks over boats.
+
+`node scripts/scenery/overview.mjs <dir>` writes a stitched picture of the whole city, one gameplay-scale frame of every painting in place and contact sheets. Add `spots '{"name":[x,y]}'` for named places. Look at them after any change to a painting, its registration or the bake recipes (`tools/art/bake-scenery.mjs`).
 
 ## Driving it with pf
 
