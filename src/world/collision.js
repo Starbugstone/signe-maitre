@@ -161,6 +161,7 @@ export function blockedIn(layout, x, y, r) {
   // 1. Street furniture (lamps and bollards) in this cell.
   for (const post of streetProps(layout, col, row)) {
     const radius = post.item.radius;
+    if (!radius) continue;
     if (Math.abs(x - post.x) < r + radius && Math.hypot(x - post.x, y - post.y + radius / 2) < r + radius)
       return true;
   }
@@ -282,6 +283,7 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
       // Street props (lamps and bollards).
       for (const post of streetProps(layout, col, row)) {
         const r = post.item.radius;
+        if (!r) continue;
         const box = { x: post.x, y: post.y - r / 2, a: 0, halfLength: r, halfWidth: r / 2 };
         if (
           Math.abs(box.x - x) < rx + box.halfLength &&

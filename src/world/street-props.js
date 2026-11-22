@@ -1,4 +1,5 @@
 import { CELL_W, CELL_H, X, Y } from "./layout.js";
+import { paintings } from "./paintings.js";
 
 export const kerbX = 17.6,
   kerbY = 16.8;
@@ -118,6 +119,17 @@ export function registerSceneryManifest(entries) {
   }
 }
 
+// Monuments and street furniture that stand up out of the later paintings: anyone behind
+// their foot line is covered by the painted silhouette. They have no base of their own to
+// bump into; the painting's solids (src/world/paintings.js) do that.
+for (const [key, painting] of Object.entries(paintings)) {
+  if (!painting.tall) continue;
+  props[key] = painting.tall.map(({ outline, foot }) => {
+    const xs = outline.map((p) => p[0]);
+    return { key, x: (Math.min(...xs) + Math.max(...xs)) / 2, y: foot, radius: 0, outline, tall: true };
+  });
+}
+
 const canalHeight = CELL_H - 31 + 5;
 props.canal = makeProps(
   "canal",
@@ -166,7 +178,7 @@ export function streetProps(layout, col, row) {
     id = row * layout.cols + col;
   if (cache.has(id)) return cache.get(id);
 
-  const key = layout.blocks[row][col];
+  const key = layout.cellKinds?.[row]?.[col] ?? layout.blocks[row][col];
   const cellProps = props[key] || [];
   const result = [];
   const cx = X(col),
@@ -187,8 +199,9 @@ export function streetProps(layout, col, row) {
   }
 
   const keepProp = (wx, wy, item) => {
+    if (item.tall) return true;
     if (river) {
-      if (row === layout.canalRow && item.y > 0) return false;
+      if (row === layout.canalRow && item.y > 26) return false;
       if (row === layout.riverSouthRow && item.y < -11) return false;
       if (wy > river.top - 3 && wy < river.bottom + 3 && !meta?.isIsland) return false;
       if (meta?.isIsland) {

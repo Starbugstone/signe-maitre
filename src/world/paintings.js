@@ -207,4 +207,45 @@ export const paintings = {
   paintings.islandCathedral.cathedral = rectangle(c.x(360), c.y(160), c.x(1256), c.y(431));
 }
 
+// Painted bridge decks and the island's quay wall, for redrawing them over passing hulls.
+// World units from the river cell's centre; the island halves hang off columns 8 and 10.
+{
+  const envelopes = {
+    riverBridge: [
+      [468, 157], [586, 157], [587, 132], [635, 132], [635, 0], [875, 0], [875, 132], [919, 132], [919, 159],
+      [1033, 159], [1041, 301], [947, 316], [947, 617], [1060, 699], [1060, 805], [960, 820], [960, 1000],
+      [553, 1000], [553, 820], [449, 800], [449, 700], [560, 614], [575, 319], [470, 298],
+    ],
+    riverIronBridge: [
+      [495, 147], [602, 147], [610, 0], [894, 0], [896, 145], [1011, 145], [1011, 286], [906, 329], [906, 608],
+      [1006, 666], [1006, 791], [905, 809], [905, 1000], [600, 1000], [600, 809], [493, 791], [493, 667],
+      [600, 605], [608, 332], [498, 287],
+    ],
+  };
+  for (const [key, envelope] of Object.entries(envelopes)) {
+    const north = fromRiver(key, "northBank"),
+      south = fromRiver(key, "southBank");
+    paintings[key].deck = envelope.map(([px, py]) => [
+      north.x(px),
+      py <= 150 ? riverPlate.top : py < 420 ? north.y(py) : py < 940 ? south.y(py) : riverPlate.top + riverPlate.height,
+    ]);
+  }
+  for (const key of ["islandWest", "islandEast"]) {
+    const x = fromRiver(key, "islandNorth").x;
+    paintings[key].decks = [rectangle(x(633), riverPlate.top, x(873), -70), rectangle(x(633), 70, x(873), riverPlate.top + riverPlate.height)];
+  }
+  paintings.islandWest.outline = islandNose("islandWest", [
+    [500, 380], [400, 385], [300, 406], [150, 438], [82, 502], [100, 550], [150, 599], [200, 618], [300, 637],
+    [375, 648], [480, 657],
+  ]);
+  paintings.islandEast.outline = islandNose("islandEast", [
+    [1030, 657], [1125, 640], [1200, 628], [1300, 590], [1350, 565], [1375, 537], [1398, 493], [1350, 447],
+    [1300, 429], [1200, 402], [1115, 388], [1009, 380],
+  ]);
+}
+
+// Sacré-Créancier's stairs come down to a broad forecourt; its west arm narrows to a ruelle
+// only beyond it.
+paintings.basilica.forecourt = { w: 100 };
+
 export const paintingKeys = Object.keys(paintings);

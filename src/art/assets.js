@@ -27,7 +27,40 @@ import marketImage from "../../assets/market.webp";
 import garageImage from "../../assets/garage.webp";
 import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
-import canalImage from "../../assets/canal.webp";
+// Street paintings baked by tools/art/bake-scenery.mjs, keyed as in src/world/paintings.js.
+import alleyCrossPlate from "../../assets/scenery/alleyCross.webp";
+import alleyStripHPlate from "../../assets/scenery/alleyStripH.webp";
+import alleyStripVPlate from "../../assets/scenery/alleyStripV.webp";
+import basilicaPlate from "../../assets/scenery/basilica.webp";
+import boulevardPlate from "../../assets/scenery/boulevard.webp";
+import haussmannPlate from "../../assets/scenery/haussmann.webp";
+import haussmannCafePlate from "../../assets/scenery/haussmannCafe.webp";
+import islandCathedralPlate from "../../assets/scenery/islandCathedral.webp";
+import islandEastPlate from "../../assets/scenery/islandEast.webp";
+import islandWestPlate from "../../assets/scenery/islandWest.webp";
+import marketHallPlate from "../../assets/scenery/marketHall.webp";
+import obeliskSquarePlate from "../../assets/scenery/obeliskSquare.webp";
+import operaPlate from "../../assets/scenery/opera.webp";
+import palaisJusticePlate from "../../assets/scenery/palaisJustice.webp";
+import parkPlate from "../../assets/scenery/park.webp";
+import railBridgeBedPlate from "../../assets/scenery/railBridgeBed.webp";
+import railBridgeTopPlate from "../../assets/scenery/railBridgeTop.webp";
+import ringBracketPlate from "../../assets/scenery/ringBracket.webp";
+import ringCanopiesPlate from "../../assets/scenery/ringCanopies.webp";
+import ringDeckPlate from "../../assets/scenery/ringDeck.webp";
+import ringNorthPlate from "../../assets/scenery/ringNorth.webp";
+import ringNorthBPlate from "../../assets/scenery/ringNorthB.webp";
+import ringPortalPlate from "../../assets/scenery/ringPortal.webp";
+import ringStationPlate from "../../assets/scenery/ringStation.webp";
+import ringStationBPlate from "../../assets/scenery/ringStationB.webp";
+import riverPlate from "../../assets/scenery/river.webp";
+import riverBridgePlate from "../../assets/scenery/riverBridge.webp";
+import riverIronBridgePlate from "../../assets/scenery/riverIronBridge.webp";
+import rondPointPlate from "../../assets/scenery/rondPoint.webp";
+import starArchPlate from "../../assets/scenery/starArch.webp";
+import teeNorthPlate from "../../assets/scenery/teeNorth.webp";
+import towerBasePlate from "../../assets/scenery/towerBase.webp";
+import towerIronPlate from "../../assets/scenery/towerIron.webp";
 import bargeTurns from "../../assets/bargeTurns.webp";
 import riverboatTurns from "../../assets/riverboatTurns.webp";
 import speedboatTurns from "../../assets/speedboatTurns.webp";
@@ -70,7 +103,39 @@ export const imageData = {
   garage: garageImage,
   docks: docksImage,
   square: squareImage,
-  canal: canalImage,
+  alleyCross: alleyCrossPlate,
+  alleyStripH: alleyStripHPlate,
+  alleyStripV: alleyStripVPlate,
+  basilica: basilicaPlate,
+  boulevard: boulevardPlate,
+  haussmann: haussmannPlate,
+  haussmannCafe: haussmannCafePlate,
+  islandCathedral: islandCathedralPlate,
+  islandEast: islandEastPlate,
+  islandWest: islandWestPlate,
+  marketHall: marketHallPlate,
+  obeliskSquare: obeliskSquarePlate,
+  opera: operaPlate,
+  palaisJustice: palaisJusticePlate,
+  park: parkPlate,
+  railBridgeBed: railBridgeBedPlate,
+  railBridgeTop: railBridgeTopPlate,
+  ringBracket: ringBracketPlate,
+  ringCanopies: ringCanopiesPlate,
+  ringDeck: ringDeckPlate,
+  ringNorth: ringNorthPlate,
+  ringNorthB: ringNorthBPlate,
+  ringPortal: ringPortalPlate,
+  ringStation: ringStationPlate,
+  ringStationB: ringStationBPlate,
+  river: riverPlate,
+  riverBridge: riverBridgePlate,
+  riverIronBridge: riverIronBridgePlate,
+  rondPoint: rondPointPlate,
+  starArch: starArchPlate,
+  teeNorth: teeNorthPlate,
+  towerBase: towerBasePlate,
+  towerIron: towerIronPlate,
   bargeTurns,
   riverboatTurns,
   speedboatTurns,
