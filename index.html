@@ -366,7 +366,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 }
 #mapSheet h2 { color: #ffd172; margin: 0; }
 #mapTitle { font: bold 15px/1.3 monospace; letter-spacing: .07em; }
-#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.25; margin: 12px 10px; }
+#mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.7; margin: 12px 10px; }
 #mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
 #mapKey span { display: block; }
 #casebook {
@@ -561,13 +561,261 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   var CELL_H = 228;
   var X = (col) => 75 + col * CELL_W;
   var Y = (row) => 72 + row * CELL_H;
-  var palettes = /* @__PURE__ */ new Set(["market", "garage", "docks", "square"]);
-  function buildTown({ blocks, canalRow: canalRow2, railways, addresses, interiors }) {
-    const rows2 = blocks.length, cols = blocks[0]?.length ?? 0;
-    if (rows2 < 2 || cols < 2 || blocks.some((row) => row.length !== cols || row.some((key) => !palettes.has(key))))
+  var defaultPalettes = /* @__PURE__ */ new Set(["market", "garage", "docks", "square"]);
+  var ROAD_HALF_WIDTH = {
+    avenue: 25,
+    street: 25,
+    alley: 7
+  };
+  var ALLEY_MAX_VEHICLE_HALF_WIDTH = 3.6;
+  function roundaboutOuterRadius(radius) {
+    if (radius >= 21) return 54;
+    if (radius >= 17) return 46;
+    return 42;
+  }
+  function buildRingLoop({ left: left2, right, top: top2, bottom, cornerR = 36, cornerSteps = 8 }) {
+    const pts = [];
+    const addArc = (cx, cy, startA, endA) => {
+      for (let i = 0; i <= cornerSteps; i++) {
+        const a = startA + (endA - startA) * i / cornerSteps;
+        pts.push({ x: +(cx + Math.cos(a) * cornerR).toFixed(2), y: +(cy + Math.sin(a) * cornerR).toFixed(2) });
+      }
+    };
+    addArc(right - cornerR, top2 + cornerR, -Math.PI / 2, 0);
+    addArc(right - cornerR, bottom - cornerR, 0, Math.PI / 2);
+    addArc(left2 + cornerR, bottom - cornerR, Math.PI / 2, Math.PI);
+    addArc(left2 + cornerR, top2 + cornerR, Math.PI, 3 * Math.PI / 2);
+    pts.push({ x: pts[0].x, y: pts[0].y });
+    let length = 0;
+    for (let i = 0; i < pts.length - 1; i++)
+      length += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    return { points: pts, length };
+  }
+  function projectOnRing(points, target2) {
+    let bestDist = Infinity, bestS = 0, bestPt = points[0], acc = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+      const t2 = Math.max(0, Math.min(1, ((target2.x - a.x) * dx + (target2.y - a.y) * dy) / (len * len)));
+      const px = a.x + dx * t2, py = a.y + dy * t2;
+      const d = Math.hypot(target2.x - px, target2.y - py);
+      if (d < bestDist) {
+        bestDist = d;
+        bestS = acc + len * t2;
+        bestPt = { x: +px.toFixed(2), y: +py.toFixed(2) };
+      }
+      acc += len;
+    }
+    return { s: +bestS.toFixed(2), stop: bestPt, dist: bestDist };
+  }
+  function makeDefaultRoads(cols, rows2, canalRow2, riverSouthRow, bridgeCols) {
+    const nodes = [];
+    const byCoord = /* @__PURE__ */ new Map();
+    const addNode = (col, row, kind = "cross") => {
+      const id = `c${col}r${row}`;
+      const node = { id, col, row, x: X(col), y: Y(row), kind };
+      nodes.push(node);
+      byCoord.set(id, node);
+      return node;
+    };
+    const hasRiverRow = riverSouthRow === canalRow2 + 2;
+    for (let r = 0; r < rows2; r++) {
+      if (hasRiverRow && r === canalRow2 + 1) continue;
+      for (let c = 0; c < cols; c++) addNode(c, r);
+    }
+    const edges = [];
+    const addEdge = (a, b, cls = "street") => edges.push({ a, b, class: cls, halfWidth: ROAD_HALF_WIDTH[cls] });
+    for (let r = 0; r < rows2; r++) {
+      if (hasRiverRow && r === canalRow2 + 1) continue;
+      for (let c = 0; c < cols - 1; c++) addEdge(`c${c}r${r}`, `c${c + 1}r${r}`, "street");
+    }
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows2 - 1; r++) {
+        if (hasRiverRow && r === canalRow2) {
+          if (bridgeCols.has(c)) addEdge(`c${c}r${r}`, `c${c}r${r + 2}`, "street");
+          continue;
+        }
+        if (hasRiverRow && r === canalRow2 + 1) continue;
+        if (!hasRiverRow && r === canalRow2 && !bridgeCols.has(c)) continue;
+        addEdge(`c${c}r${r}`, `c${c}r${r + 1}`, "street");
+      }
+    }
+    return { nodes, edges };
+  }
+  function makeRiver({ top: top2, bottom, islands = [], bridges = [], centreline = [], moorings = [], width: width2 }) {
+    function onWater(x, y, r = 0) {
+      if (x - r < 0 || x + r > width2) return false;
+      if (y - r < top2 || y + r > bottom) return false;
+      for (const isl of islands) {
+        const cx = Math.max(isl.left, Math.min(x, isl.right));
+        const cy = Math.max(isl.top, Math.min(y, isl.bottom));
+        const d = Math.hypot(x - cx, y - cy);
+        if (r > 0 ? d < r : x >= isl.left && x <= isl.right && y >= isl.top && y <= isl.bottom) return false;
+      }
+      return true;
+    }
+    return { top: top2, bottom, islands, bridges, centreline, moorings, onWater };
+  }
+  function rectOverlapsCell(rect2, col, row, pad = 28) {
+    const cx = X(col), cy = Y(row);
+    return rect2.right >= cx - CELL_W / 2 - pad && rect2.left <= cx + CELL_W / 2 + pad && rect2.bottom >= cy - CELL_H / 2 - pad && rect2.top <= cy + CELL_H / 2 + pad;
+  }
+  function polyBounds(poly) {
+    let left2 = Infinity, right = -Infinity, top2 = Infinity, bottom = -Infinity;
+    for (const [x, y] of poly) {
+      if (x < left2) left2 = x;
+      if (x > right) right = x;
+      if (y < top2) top2 = y;
+      if (y > bottom) bottom = y;
+    }
+    return { left: left2, right, top: top2, bottom };
+  }
+  function buildTown({
+    blocks: blocks2,
+    cellKinds: cellKinds2,
+    canalRow: canalRow2,
+    river: riverSpec,
+    roads: roadsSpec,
+    ring: ringSpec,
+    monuments: monuments2 = [],
+    parks: parks2 = [],
+    railways = [],
+    addresses = [],
+    interiors = [],
+    palettes = defaultPalettes,
+    buildPiers
+  }) {
+    const rows2 = blocks2.length, cols = blocks2[0]?.length ?? 0;
+    if (rows2 < 2 || cols < 2 || blocks2.some((row) => row.length !== cols || row.some((key) => !palettes.has(key))))
       throw new Error("Town needs a rectangular grid of registered street paintings");
     if (!Number.isInteger(canalRow2) || canalRow2 < 0 || canalRow2 + 1 >= rows2)
       throw new Error("Canal needs two banks");
+    const width2 = X(cols - 1) + 75, height2 = Y(rows2 - 1) + 72;
+    const singleBandCanal = !riverSpec;
+    const riverSouthRow = singleBandCanal ? canalRow2 + 1 : riverSpec.southRow ?? canalRow2 + 2;
+    const riverRow = singleBandCanal ? null : riverSpec.riverRow ?? canalRow2 + 1;
+    const riverTop2 = singleBandCanal ? Y(canalRow2) + 16 + (CELL_H - 31) * 0.13 : riverSpec.top;
+    const riverBottom2 = singleBandCanal ? Y(canalRow2) + 16 + (CELL_H - 31) * 0.86 : riverSpec.bottom;
+    const bridgeList = singleBandCanal ? Array.from({ length: cols }, (_, col) => ({ col, x: X(col), halfWidth: 22, clearance: true })) : riverSpec.bridges.map((b) => ({
+      col: b.col,
+      x: b.x ?? X(b.col),
+      halfWidth: b.halfWidth ?? 22,
+      clearance: b.clearance !== false
+    }));
+    const bridgeCols = new Set(bridgeList.map((b) => b.col));
+    const islands = singleBandCanal ? [] : (riverSpec.islands || []).map((i) => ({ ...i }));
+    const centreline = !singleBandCanal && riverSpec.centreline?.length ? riverSpec.centreline.map((pt) => ({ x: pt.x, y: pt.y })) : [
+      { x: 0, y: (riverTop2 + riverBottom2) / 2 },
+      { x: width2, y: (riverTop2 + riverBottom2) / 2 }
+    ];
+    const moorings = (riverSpec?.moorings || []).map((m) => ({
+      id: m.id,
+      x: m.x,
+      y: m.y,
+      a: m.a ?? 0,
+      quay: { x: m.quay.x, y: m.quay.y }
+    }));
+    const river2 = makeRiver({
+      top: riverTop2,
+      bottom: riverBottom2,
+      islands,
+      bridges: bridgeList,
+      centreline,
+      moorings,
+      width: width2
+    });
+    const rawRoads = roadsSpec || makeDefaultRoads(cols, rows2, canalRow2, riverSouthRow, bridgeCols);
+    const roadNodeById = /* @__PURE__ */ new Map();
+    const roadNodes = rawRoads.nodes.map((n) => {
+      const node = {
+        id: n.id,
+        col: n.col,
+        row: n.row,
+        x: n.x ?? X(n.col),
+        y: n.y ?? Y(n.row),
+        kind: n.kind || "cross",
+        ...n.radius ? { radius: n.radius, outerRadius: n.outerRadius ?? roundaboutOuterRadius(n.radius) } : {}
+      };
+      if (roadNodeById.has(node.id)) throw new Error("Duplicate road node: " + node.id);
+      roadNodeById.set(node.id, node);
+      return node;
+    });
+    const roadAdj = new Map(roadNodes.map((n) => [n.id, []]));
+    const roadEdges = rawRoads.edges.map((e) => {
+      const na = roadNodeById.get(e.a), nb = roadNodeById.get(e.b);
+      if (!na || !nb) throw new Error(`Road edge references missing node: ${e.a} -> ${e.b}`);
+      const cls = e.class || "street";
+      const halfWidth = e.halfWidth ?? ROAD_HALF_WIDTH[cls];
+      const edge = {
+        a: e.a,
+        b: e.b,
+        class: cls,
+        halfWidth,
+        ...e.oneWay ? { oneWay: e.oneWay } : {},
+        ...e.seam ? { seam: true } : {},
+        ...e.bridge ? { bridge: true } : {}
+      };
+      const length = Math.hypot(nb.x - na.x, nb.y - na.y);
+      roadAdj.get(e.a).push({ to: e.b, edge, length, dir: "a>b" });
+      roadAdj.get(e.b).push({ to: e.a, edge, length, dir: "b>a" });
+      return edge;
+    });
+    for (const node of roadNodes) {
+      if (node.kind === "roundabout") continue;
+      const deg = roadAdj.get(node.id).length;
+      if (deg <= 1) node.kind = "end";
+      else if (deg === 2 || deg === 3) node.kind = "tee";
+      else node.kind = "cross";
+    }
+    const roads = { nodes: roadNodes, edges: roadEdges };
+    let ring2 = null;
+    if (ringSpec) {
+      const loop2 = ringSpec.points?.length ? { points: ringSpec.points, length: ringSpec.length } : buildRingLoop(ringSpec);
+      const stations = (ringSpec.stations || []).map((st) => {
+        const proj = projectOnRing(loop2.points, st.stop);
+        return {
+          id: st.id,
+          name: { fr: st.name.fr, en: st.name.en },
+          s: st.s ?? proj.s,
+          stop: proj.stop,
+          street: { x: st.street.x, y: st.street.y }
+        };
+      });
+      stations.sort((a, b) => a.s - b.s);
+      ring2 = {
+        points: loop2.points,
+        length: +loop2.length.toFixed(2),
+        deckLift: ringSpec.deckLift ?? 40,
+        stations,
+        northRow: ringSpec.northRow,
+        southRow: ringSpec.southRow,
+        minCol: ringSpec.minCol,
+        maxCol: ringSpec.maxCol,
+        left: ringSpec.left,
+        right: ringSpec.right,
+        top: ringSpec.top,
+        bottom: ringSpec.bottom,
+        cornerR: ringSpec.cornerR ?? 36,
+        piers: []
+      };
+    } else if (rows2 >= 4 && cols >= 4) {
+      const railScaleY2 = (CELL_H / 2 - 16.8) / 429;
+      const pierDepth2 = -CELL_H / 2 + 378 * railScaleY2;
+      const geom = {
+        northRow: 1,
+        southRow: rows2 - 1,
+        minCol: 1,
+        maxCol: cols - 2,
+        left: (X(0) + X(1)) / 2,
+        right: (X(cols - 2) + X(cols - 1)) / 2,
+        top: Y(1) + pierDepth2,
+        bottom: Y(rows2 - 1) + pierDepth2,
+        cornerR: 36
+      };
+      const loop2 = buildRingLoop(geom);
+      ring2 = { ...geom, points: loop2.points, length: +loop2.length.toFixed(2), deckLift: 40, stations: [], piers: [] };
+    }
     const lines = /* @__PURE__ */ new Map();
     for (const line of railways) {
       if (!Number.isInteger(line.row) || line.row < 0 || line.row >= rows2 || line.row === canalRow2 + 1 || lines.has(line.row))
@@ -577,14 +825,19 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       if (!(line.speed > 0) || !Number.isFinite(line.phase)) throw new Error("Invalid train timetable");
       lines.set(line.row, line);
     }
-    for (const [j, row] of blocks.entries()) {
-      if (row.includes("market") && j !== canalRow2 + 1 && !lines.has(j))
+    const viaductRows = new Set(lines.keys());
+    if (ring2) {
+      if (ring2.northRow != null) viaductRows.add(ring2.northRow);
+      if (ring2.southRow != null) viaductRows.add(ring2.southRow);
+    }
+    for (const [j, row] of blocks2.entries()) {
+      if (row.includes("market") && j !== riverRow && !viaductRows.has(j))
         throw new Error("Market painting has an unconnected viaduct in row " + j);
     }
     const jobs2 = addresses.map(({ col, row, dx, dy, ...address }) => {
-      if (!Number.isInteger(col) || !Number.isInteger(row) || !blocks[row]?.[col])
+      if (!Number.isInteger(col) || !Number.isInteger(row) || !blocks2[row]?.[col])
         throw new Error("Address outside town: " + address.id);
-      return { ...address, name: address.id, x: X(col) + dx, y: Y(row) + dy };
+      return { ...address, col, row, name: address.id, x: X(col) + dx, y: Y(row) + dy };
     });
     const byId = new Map(jobs2.map((job) => [job.id, job]));
     if (jobs2.length !== byId.size) throw new Error("Duplicate address");
@@ -600,7 +853,6 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
           throw new Error("Unreachable room anchor: " + room.door);
       rooms.set(room.door, room);
     }
-    const width2 = X(cols - 1) + 75, height2 = Y(rows2 - 1) + 72;
     function cellAt(x, y) {
       return {
         col: Math.max(0, Math.min(cols - 1, Math.round((x - X(0)) / CELL_W))),
@@ -611,8 +863,21 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       const a = cellAt(x - pad, y - pad), b = cellAt(x + w + pad, y + h + pad);
       return { firstCol: a.col, lastCol: b.col, firstRow: a.row, lastRow: b.row };
     }
-    return {
-      blocks,
+    const normalizedMonuments = monuments2.map((m) => ({
+      id: m.id,
+      name: { fr: m.name.fr, en: m.name.en },
+      col: m.col,
+      row: m.row,
+      x: m.x ?? X(m.col),
+      y: m.y ?? Y(m.row),
+      footprint: m.footprint,
+      ...m.passUnder ? { passUnder: true } : {},
+      ...m.piers ? { piers: m.piers } : {},
+      ...m.style ? { style: m.style } : {}
+    }));
+    const layout = {
+      blocks: blocks2,
+      cellKinds: cellKinds2 || blocks2,
       rows: rows2,
       cols,
       width: width2,
@@ -624,176 +889,218 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       cellAt,
       visibleCells,
       canalRow: canalRow2,
+      riverRow,
+      riverSouthRow,
+      singleBandCanal,
+      roads,
+      roadNodeById,
+      roadAdj,
+      river: river2,
+      ring: ring2,
+      monuments: normalizedMonuments,
+      parks: parks2,
       roadsX: Array.from({ length: cols }, (_, i) => X(i)),
       roadsY: Array.from({ length: rows2 }, (_, i) => Y(i))
     };
-  }
-  function trainPosition(line, width2, seconds) {
-    const carLength = 51, gap = 0.6, count = 3, length = count * (carLength + gap);
-    return { head: (seconds * line.speed + line.phase) % (width2 + length + 36), carLength, gap, count };
-  }
-
-  // src/world/town.js
-  var TAU = 2 * Math.PI;
-  var definition = {
-    blocks: [
-      ["garage", "docks", "square", "garage", "garage", "square"],
-      ["square", "garage", "market", "square", "docks", "market"],
-      ["market", "square", "garage", "docks", "market", "garage"],
-      ["garage", "market", "square", "garage", "docks", "square"],
-      ["square", "garage", "market", "docks", "square", "market"],
-      ["docks", "square", "garage", "market", "garage", "docks"]
-    ],
-    canalRow: 2,
-    railways: [1, 2, 4, 5].map((row, i) => ({
-      row,
-      from: "west",
-      to: "east",
-      speed: 49 + 3 * i,
-      phase: 420 + i * 347
-    })),
-    addresses: [
-      { id: "office", col: 2, row: 1, dx: 57, dy: -21, symbol: "\xC9", color: "#ffc857" },
-      { id: "repo", col: 1, row: 0, dx: 69, dy: -20, symbol: "R", color: "#ff79ae" },
-      { id: "noise", col: 4, row: 3, dx: -57, dy: -18, symbol: "C", color: "#64ebd0" },
-      { id: "flat", col: 0, row: 4, dx: 74, dy: -22, symbol: "S", color: "#ffa851" },
-      { id: "auction", col: 3, row: 4, dx: 72, dy: -20, symbol: "A", color: "#c2a0ff" }
-    ],
-    interiors: [
-      {
-        door: "office",
-        image: "officeInterior",
-        width: 160,
-        height: 100,
-        floor: { left: 14, right: 146, top: 63, bottom: 94 },
-        entry: { x: 80, y: 90 },
-        exit: { x: 80, y: 93 },
-        desk: { x: 80, y: 65 },
-        action: "caseDesk"
+    if (ring2 && buildPiers) ring2.piers = buildPiers(layout);
+    const openRectsAll = [];
+    const northPavement = 28, southPavement = 23, streetHW = 25;
+    for (const e of roadEdges) {
+      const na = roadNodeById.get(e.a), nb = roadNodeById.get(e.b);
+      const alley = e.class === "alley";
+      const horiz = Math.abs(na.y - nb.y) < 1;
+      if (horiz) {
+        const minX = Math.min(na.x, nb.x), maxX = Math.max(na.x, nb.x);
+        const pad = alley ? e.halfWidth : streetHW;
+        openRectsAll.push({
+          left: minX - pad,
+          right: maxX + pad,
+          top: na.y - (alley ? e.halfWidth : northPavement),
+          bottom: na.y + (alley ? e.halfWidth : southPavement),
+          alley,
+          edge: e
+        });
+      } else {
+        const minY = Math.min(na.y, nb.y), maxY = Math.max(na.y, nb.y);
+        const isBridge = !alley && minY < river2.bottom && maxY > river2.top && bridgeCols.has(Math.round((na.x - X(0)) / CELL_W));
+        const hw = alley ? e.halfWidth : isBridge ? 22 : streetHW;
+        const topPad = alley ? e.halfWidth : northPavement;
+        const botPad = alley ? e.halfWidth : southPavement;
+        openRectsAll.push({
+          left: na.x - hw,
+          right: na.x + hw,
+          top: minY - topPad,
+          bottom: maxY + botPad,
+          alley,
+          edge: e
+        });
       }
-    ]
-  };
-  var town = buildTown(definition);
-  var { blocks: city, width: W, height: H, jobs, roadsX, roadsY, canalRow } = town;
-  var office = town.byId.get("office");
-  var auction = town.byId.get("auction");
-  var canalTop = Y(canalRow) + 16;
-  var canalBottom = Y(canalRow + 1) - 15;
-
-  // src/core/controls.js
-  var sources = /* @__PURE__ */ new Map();
-  var analog = { x: 0, y: 0, steering: 0, throttle: 0 };
-  function clearAnalog() {
-    analog.x = analog.y = analog.steering = analog.throttle = 0;
-  }
-  var held = {
-    has(control2) {
-      return sources.has(control2);
-    },
-    add(control2, source) {
-      if (!sources.has(control2)) sources.set(control2, /* @__PURE__ */ new Set());
-      sources.get(control2).add(source);
-    },
-    delete(control2, source) {
-      if (source === void 0) {
-        sources.delete(control2);
-        return;
-      }
-      const owners = sources.get(control2);
-      if (owners?.delete(source) && !owners.size) sources.delete(control2);
-    },
-    clear() {
-      sources.clear();
-      clearAnalog();
     }
-  };
-  function axis(positive, negative, fallback) {
-    const plus = held.has(positive), minus = held.has(negative);
-    return plus || minus ? Number(plus) - Number(minus) : fallback;
-  }
-  function walkVector() {
-    return [axis("right", "left", analog.x), axis("down", "up", analog.y)];
-  }
-  function steeringInput() {
-    return axis("right", "left", analog.steering);
-  }
-  function throttleInput() {
-    return axis("up", "down", analog.throttle);
-  }
-
-  // src/core/state.js
-  var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  var dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  var seed = 71;
-  function rand() {
-    seed = Math.imul(seed, 1664525) + 1013904223 >>> 0;
-    return seed / 4294967296;
-  }
-  var artwork = {};
-  var p = { x: X(2) + 28, y: Y(1) - 25, a: Math.PI / 2, hp: 5 };
-  var cars = [];
-  var people = [];
-  var trails = [];
-  var fx = [];
-  var done = /* @__PURE__ */ new Set();
-  var game = {
-    artReady: false,
-    konamiHero: false,
-    ride: null,
-    time: 0,
-    heat: 0,
-    wallet: 0,
-    hitCooldown: 0,
-    flash: 0,
-    msgLife: 0,
-    active: "",
-    stage: "",
-    viewMap: false,
-    sound: true,
-    audio: null,
-    vw: 0,
-    vh: 0,
-    camX: p.x,
-    camY: p.y,
-    lastDir: 1,
-    quipTime: 3,
-    quipCooldown: 0
-  };
-  try {
-    game.sound = localStorage.getItem("port-fer-sound") !== "off";
-  } catch {
-  }
-
-  // src/platform/canvas.js
-  var $ = (s) => document.querySelector(s);
-  var canvas = $("#game");
-  var g = canvas.getContext("2d");
-  var panel = $("#panel");
-  function resize() {
-    const zoom = clamp(Math.min(innerWidth / 280, innerHeight / 185), 1.95, 5.15);
-    game.vw = innerWidth / zoom;
-    game.vh = innerHeight / zoom;
-    const density = Math.min(devicePixelRatio || 1, innerWidth < 650 ? 1.5 : 1);
-    canvas.width = Math.round(innerWidth * density);
-    canvas.height = Math.round(innerHeight * density);
-    g.setTransform(canvas.width / game.vw, 0, 0, canvas.height / game.vh, 0, 0);
-    g.imageSmoothingEnabled = true;
-    g.imageSmoothingQuality = "low";
-  }
-  resize();
-  addEventListener("resize", resize);
-  function rect(c, x, y, w, h, color) {
-    c.fillStyle = color;
-    c.fillRect(x, y, w, h);
-  }
-  function label(c, s, x, y, color, size = 8) {
-    c.font = "bold " + size + "px monospace";
-    c.fillStyle = color;
-    c.fillText(s, x, y);
-  }
-  function hud(selector, value) {
-    const el = $(selector);
-    if (el.textContent !== value) el.textContent = value;
+    for (const node of roadNodes) {
+      const inc = roadAdj.get(node.id);
+      const hasWide = inc.some((x) => x.edge.class !== "alley");
+      if (!hasWide) continue;
+      if (node.col === 0) {
+        openRectsAll.push({
+          left: 0,
+          right: node.x + streetHW,
+          top: node.y - northPavement,
+          bottom: node.y + southPavement,
+          alley: false
+        });
+      }
+      if (node.col === cols - 1) {
+        openRectsAll.push({
+          left: node.x - streetHW,
+          right: width2,
+          top: node.y - northPavement,
+          bottom: node.y + southPavement,
+          alley: false
+        });
+      }
+      if (node.row === 0) {
+        const hasVertical = inc.some((x) => x.edge.class !== "alley" && Math.abs(roadNodeById.get(x.to).x - node.x) < 1);
+        if (hasVertical)
+          openRectsAll.push({
+            left: node.x - streetHW,
+            right: node.x + streetHW,
+            top: 0,
+            bottom: node.y + southPavement,
+            alley: false
+          });
+      }
+      if (node.row === rows2 - 1) {
+        const hasVertical = inc.some((x) => x.edge.class !== "alley" && Math.abs(roadNodeById.get(x.to).x - node.x) < 1);
+        if (hasVertical)
+          openRectsAll.push({
+            left: node.x - streetHW,
+            right: node.x + streetHW,
+            top: node.y - northPavement,
+            bottom: height2,
+            alley: false
+          });
+      }
+    }
+    if (!singleBandCanal) {
+      openRectsAll.push({
+        left: 0,
+        right: width2,
+        top: Y(canalRow2) + 14,
+        bottom: river2.top - 1,
+        alley: false,
+        quay: true
+      });
+      openRectsAll.push({
+        left: 0,
+        right: width2,
+        top: river2.bottom + 1,
+        bottom: Y(riverSouthRow) - 14,
+        alley: false,
+        quay: true
+      });
+      for (const isl of islands) {
+        openRectsAll.push({
+          left: isl.left + 8,
+          right: isl.right - 8,
+          top: isl.top + 2,
+          bottom: isl.bottom - 2,
+          alley: false,
+          quay: true
+        });
+      }
+    } else {
+      openRectsAll.push({
+        left: 0,
+        right: width2,
+        top: Y(canalRow2) + 14,
+        bottom: riverTop2,
+        alley: false,
+        quay: true
+      });
+      openRectsAll.push({
+        left: 0,
+        right: width2,
+        top: riverBottom2,
+        bottom: Y(canalRow2 + 1) - 14,
+        alley: false,
+        quay: true
+      });
+    }
+    const roundaboutsAll = roadNodes.filter((n) => n.kind === "roundabout").map((n) => ({ id: n.id, col: n.col, row: n.row, x: n.x, y: n.y, radius: n.radius, outerRadius: n.outerRadius }));
+    const solidPolysAll = [];
+    for (const m of normalizedMonuments) {
+      const polys = m.piers ? m.piers : m.footprint ? [m.footprint] : [];
+      for (const poly of polys) solidPolysAll.push({ poly, bounds: polyBounds(poly), monument: m });
+    }
+    const cells = new Array(rows2 * cols);
+    for (let row = 0; row < rows2; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cx = X(col), cy = Y(row);
+        const node = roadNodeById.get(`c${col}r${row}`) || null;
+        const inc = node ? roadAdj.get(node.id) : [];
+        const wideArms = { n: false, s: false, e: false, w: false };
+        const allArms = { n: null, s: null, e: null, w: null };
+        for (const { to, edge } of inc) {
+          const other = roadNodeById.get(to);
+          const dx = other.x - node.x, dy = other.y - node.y;
+          const dir = Math.abs(dx) > Math.abs(dy) ? dx > 0 ? "e" : "w" : dy > 0 ? "s" : "n";
+          allArms[dir] = edge.class;
+          if (edge.class !== "alley") wideArms[dir] = true;
+        }
+        const hasWideRoad = !!(wideArms.n || wideArms.s || wideArms.e || wideArms.w);
+        if (hasWideRoad) {
+          if (col === 0) wideArms.w = true;
+          if (col === cols - 1) wideArms.e = true;
+          if (row === 0 && (wideArms.s || allArms.s)) wideArms.n = true;
+          if (row === rows2 - 1 && (wideArms.n || allArms.n)) wideArms.s = true;
+        }
+        const island2 = islands.find((isl) => cx >= isl.left && cx <= isl.right && cy >= isl.top && cy <= isl.bottom) || null;
+        const openRects = openRectsAll.filter((r) => rectOverlapsCell(r, col, row, 32));
+        const roundabouts = roundaboutsAll.filter(
+          (rb) => Math.abs(rb.x - cx) <= CELL_W / 2 + rb.outerRadius + 24 && Math.abs(rb.y - cy) <= CELL_H / 2 + rb.outerRadius + 24
+        );
+        const solidPolys = solidPolysAll.filter((s) => rectOverlapsCell(s.bounds, col, row, 28)).map((s) => s.poly);
+        const ringPiers = (ring2?.piers || []).filter((p2) => rectOverlapsCell(p2, col, row, 24));
+        const edges = roadEdges.filter((e) => {
+          const na = roadNodeById.get(e.a), nb = roadNodeById.get(e.b);
+          return rectOverlapsCell(
+            {
+              left: Math.min(na.x, nb.x) - e.halfWidth,
+              right: Math.max(na.x, nb.x) + e.halfWidth,
+              top: Math.min(na.y, nb.y) - e.halfWidth,
+              bottom: Math.max(na.y, nb.y) + e.halfWidth
+            },
+            col,
+            row,
+            16
+          );
+        });
+        cells[row * cols + col] = {
+          col,
+          row,
+          node,
+          hasWideRoad,
+          wideArms,
+          allArms,
+          isRiverRow: riverRow !== null && row === riverRow,
+          isIsland: !!island2,
+          island: island2,
+          hasBridge: bridgeCols.has(col),
+          openRects,
+          roundabouts,
+          solidPolys,
+          ringPiers,
+          edges
+        };
+      }
+    }
+    layout.cellMeta = (col, row) => {
+      const c = Math.max(0, Math.min(cols - 1, col));
+      const r = Math.max(0, Math.min(rows2 - 1, row));
+      return cells[r * cols + c];
+    };
+    layout.roadNodeAt = (col, row) => roadNodeById.get(`c${col}r${row}`) || null;
+    return layout;
   }
 
   // src/world/street-props.js
@@ -895,16 +1202,17 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     ];
   }
   var props = {};
-  for (const [key, { lamps, bollards }] of Object.entries(fixtures)) {
-    const [xs, ys] = plateRegistration[key];
+  function buildPlateProps(key, kerbs, spec = { lamps: [], bollards: [] }) {
+    const [xs, ys] = kerbs;
     props[key] = makeProps(
       key,
       (x) => register(x / 0.6, [0, ...xs, 1500], [-CELL_W / 2, -kerbX, 0, kerbX, CELL_W / 2]),
       (y) => register(y / 0.6, [0, ...ys, 1e3], [-CELL_H / 2, -kerbY, 0, kerbY, CELL_H / 2]),
-      lamps,
-      bollards
+      spec.lamps || [],
+      spec.bollards || []
     );
   }
+  for (const [key, spec] of Object.entries(fixtures)) buildPlateProps(key, plateRegistration[key], spec);
   var canalHeight = CELL_H - 31 + 5;
   props.canal = makeProps(
     "canal",
@@ -927,22 +1235,87 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       [260, 12, 64, 204, 888]
     ]
   );
+  function nearPoly(x, y, poly, pad) {
+    if (!poly?.length) return false;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if (yi > y !== yj > y && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+      const dx = xj - xi, dy = yj - yi, len2 = dx * dx + dy * dy;
+      const t2 = len2 > 0 ? Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2)) : 0;
+      if (Math.hypot(x - (xi + dx * t2), y - (yi + dy * t2)) < pad) return true;
+    }
+    return inside;
+  }
   var byLayout = /* @__PURE__ */ new WeakMap();
   function streetProps(layout, col, row) {
     if (!byLayout.has(layout)) byLayout.set(layout, /* @__PURE__ */ new Map());
     const cache = byLayout.get(layout), id = row * layout.cols + col;
     if (cache.has(id)) return cache.get(id);
-    const key = layout.blocks[row][col], result = [];
-    for (const item of props[key]) {
-      if (row === layout.canalRow && item.y > 0) continue;
-      if (row === layout.canalRow + 1 && item.y < -11) continue;
-      result.push({ x: X(col) + item.x, y: Y(row) + item.y, item });
+    const key = layout.blocks[row][col];
+    const cellProps = props[key] || [];
+    const result = [];
+    const cx = X(col), cy = Y(row);
+    const meta = layout.cellMeta?.(col, row);
+    const river2 = layout.river;
+    if (meta?.isRiverRow && !meta.isIsland) {
+      cache.set(id, result);
+      return result;
     }
-    if (row === layout.canalRow || row === layout.canalRow + 1)
+    if (meta && !meta.hasWideRoad) {
+      cache.set(id, result);
+      return result;
+    }
+    const keepProp = (wx, wy, item) => {
+      if (river2) {
+        if (row === layout.canalRow && item.y > 0) return false;
+        if (row === layout.riverSouthRow && item.y < -11) return false;
+        if (wy > river2.top - 3 && wy < river2.bottom + 3 && !meta?.isIsland) return false;
+        if (meta?.isIsland) {
+          const isl = meta.island;
+          if (wx < isl.left + 8 || wx > isl.right - 8 || wy < isl.top + 8 || wy > isl.bottom - 8) return false;
+        }
+      }
+      if (meta) {
+        if (item.x < -28 && !meta.wideArms.w) return false;
+        if (item.x > 28 && !meta.wideArms.e) return false;
+        if (item.y < -30 && !meta.wideArms.n) return false;
+        if (item.y > 26 && !meta.wideArms.s) return false;
+        for (const rb of meta.roundabouts)
+          if (Math.hypot(wx - rb.x, wy - rb.y) < rb.outerRadius + 4) return false;
+        for (const poly of meta.solidPolys) if (nearPoly(wx, wy, poly, 4)) return false;
+        for (const rect2 of meta.openRects)
+          if (rect2.alley && wx >= rect2.left - 3 && wx <= rect2.right + 3 && wy >= rect2.top - 3 && wy <= rect2.bottom + 3)
+            return false;
+      }
+      if (layout.ring?.stations) {
+        for (const st of layout.ring.stations)
+          if (Math.hypot(wx - st.street.x, wy - st.street.y) < 11) return false;
+      }
+      if (river2?.moorings) {
+        for (const m of river2.moorings)
+          if (Math.hypot(wx - m.quay.x, wy - m.quay.y) < 11) return false;
+      }
+      if (layout.jobs) {
+        for (const job of layout.jobs)
+          if (Math.abs(wx - job.x) < 5 && wy >= job.y - 2 && wy <= Y(job.row) && item.radius < 2.2) return false;
+      }
+      if (layout.monuments) {
+        for (const m of layout.monuments)
+          if (m.passUnder && m.col === col && m.row === row && Math.hypot(wx - m.x, wy - m.y) < 52) return false;
+      }
+      return true;
+    };
+    for (const item of cellProps) {
+      const wx = cx + item.x, wy = cy + item.y;
+      if (keepProp(wx, wy, item)) result.push({ x: wx, y: wy, item });
+    }
+    if (layout.singleBandCanal && (row === layout.canalRow || row === layout.canalRow + 1)) {
       for (const item of props.canal) {
         const y = Y(layout.canalRow) + item.y;
-        if (layout.cellAt(X(col), y).row === row) result.push({ x: X(col) + item.x, y, item });
+        if (layout.cellAt(cx, y).row === row) result.push({ x: cx + item.x, y, item });
       }
+    }
     cache.set(id, result);
     return result;
   }
@@ -955,6 +1328,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   var bayWidth = CELL_W / 5;
   var marketPiers = [88, 406, 602, 898, 1259, 1469];
   var pierDepth = -CELL_H / 2 + foot * railScaleY;
+  var pierThickness = 3.5;
   function marketColumnX(pixel) {
     const [left2, centre, right] = plateRegistration.market[0];
     if (pixel <= left2) return -CELL_W / 2 + pixel * (CELL_W / 2 - kerbX) / left2;
@@ -982,9 +1356,687 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   ];
   var marketSection = { bases: marketBases };
   function viaductSection(layout, row, col) {
-    const blocks = layout.blocks[row];
-    if (blocks[col] === "market") return marketSection;
-    return sections[Number(blocks[col - 1] === "market")][Number(blocks[col + 1] === "market")];
+    const blocks2 = layout.blocks[row];
+    if (blocks2[col] === "market") return marketSection;
+    const minCol = layout.ring?.minCol ?? 0;
+    const maxCol = layout.ring?.maxCol ?? layout.cols - 1;
+    const westMarket = col > minCol && blocks2[col - 1] === "market";
+    const eastMarket = col < maxCol && blocks2[col + 1] === "market";
+    return sections[Number(westMarket)][Number(eastMarket)];
+  }
+  function buildRingPiers(layout) {
+    const ring2 = layout.ring;
+    if (!ring2) return [];
+    const piers = [];
+    const { northRow, southRow, minCol, maxCol, left: left2, right, top: top2, bottom, cornerR = 36 } = ring2;
+    const river2 = layout.river;
+    for (const row of [northRow, southRow]) {
+      if (row == null || row < 0 || row >= layout.rows) continue;
+      const yFoot = Y(row) + pierDepth;
+      for (let col = minCol; col <= maxCol; col++) {
+        const section = viaductSection(layout, row, col);
+        for (const [bLeft, bRight] of section.bases) {
+          const x1 = X(col) + bLeft, x2 = X(col) + bRight;
+          if (col === minCol && x1 < left2 + 12) continue;
+          if (col === maxCol && x2 > right - 12) continue;
+          if (Math.abs((x1 + x2) / 2 - X(col)) < 26) continue;
+          piers.push({
+            left: x1,
+            right: x2,
+            top: yFoot - pierThickness,
+            bottom: yFoot,
+            x: (x1 + x2) / 2,
+            y: yFoot,
+            orientation: "horizontal",
+            row,
+            col
+          });
+        }
+      }
+    }
+    const blockedY = (py) => {
+      for (let r = 0; r < layout.rows; r++) if (Math.abs(py - Y(r)) < 34) return true;
+      if (river2 && py > river2.top - 5 && py < river2.bottom + 5) return true;
+      for (const st of ring2.stations || []) if (Math.hypot(0, py - st.street.y) < 16) return false;
+      return false;
+    };
+    for (const [side, vx] of [
+      ["west", left2],
+      ["east", right]
+    ]) {
+      const startY = top2 + cornerR + 18;
+      const endY = bottom - cornerR - 18;
+      const ys = [];
+      for (let r = northRow; r < southRow; r++) {
+        const mid = (Y(r) + Y(r + 1)) / 2;
+        for (const offset of [-32, 32]) {
+          const py = mid + offset;
+          if (py >= startY && py <= endY && !blockedY(py)) ys.push(py);
+        }
+      }
+      if (river2) {
+        for (const py of [river2.top - 10, river2.bottom + 10]) {
+          if (py >= startY && py <= endY) ys.push(py);
+        }
+      }
+      ys.sort((a, b) => a - b);
+      const chosen = [];
+      for (const py of ys) {
+        if (chosen.length && py - chosen.at(-1) < 22) continue;
+        if ((ring2.stations || []).some((st) => Math.hypot(vx - st.street.x, py - st.street.y) < 18)) continue;
+        chosen.push(py);
+        piers.push({
+          left: vx - 3.6,
+          right: vx + 3.6,
+          top: py - 2.6,
+          bottom: py + 2.6,
+          x: vx,
+          y: py,
+          orientation: "vertical",
+          side
+        });
+      }
+    }
+    return piers;
+  }
+
+  // src/world/town.js
+  var TAU = 2 * Math.PI;
+  var COLS = 16;
+  var ROWS = 12;
+  var CANAL_ROW = 6;
+  var RIVER_ROW = 7;
+  var RIVER_SOUTH_ROW = 8;
+  var BRIDGE_COLS = [1, 3, 4, 6, 8, 10, 11, 12, 13, 14];
+  var BRIDGE_SET = new Set(BRIDGE_COLS);
+  var ROUNDABOUTS = /* @__PURE__ */ new Map([
+    ["c3r3", { radius: 22, outerRadius: 54 }],
+    // Étoile des Saisies (Arc des Saisies)
+    ["c6r5", { radius: 18, outerRadius: 46 }],
+    // Place de la Contrainte (Obelisk)
+    ["c13r2", { radius: 15, outerRadius: 42 }],
+    // Rond-Point du Timbre
+    ["c10r10", { radius: 15, outerRadius: 42 }]
+    // Place de la Rive-Sud
+  ]);
+  function octagon(cx, cy, rx, ry = rx) {
+    return Array.from({ length: 8 }, (_, i) => {
+      const a = i * TAU / 8 + Math.PI / 8;
+      return [+(cx + Math.cos(a) * rx).toFixed(1), +(cy + Math.sin(a) * ry).toFixed(1)];
+    });
+  }
+  function boxPoly(left2, top2, right, bottom) {
+    return [
+      [left2, top2],
+      [right, top2],
+      [right, bottom],
+      [left2, bottom]
+    ];
+  }
+  var blocks = [
+    // 0    1         2         3         4         5         6         7         8         9         10        11        12        13        14        15
+    ["square", "garage", "square", "square", "garage", "square", "square", "square", "square", "square", "garage", "square", "square", "garage", "square", "docks"],
+    // r00 Butte du Créancier
+    ["square", "garage", "market", "square", "market", "garage", "square", "market", "square", "market", "garage", "market", "square", "market", "garage", "square"],
+    // r01 Petite Ceinture North
+    ["garage", "square", "square", "square", "square", "garage", "square", "square", "square", "square", "square", "garage", "square", "square", "square", "garage"],
+    // r02 Grands Boulevards North
+    ["square", "garage", "square", "square", "square", "square", "square", "square", "garage", "square", "garage", "square", "garage", "square", "square", "garage"],
+    // r03 Arc / Opéra / Parc NE
+    ["garage", "square", "square", "garage", "square", "garage", "square", "square", "square", "garage", "square", "garage", "square", "square", "square", "docks"],
+    // r04 Bourse / Vieux Marais
+    ["square", "garage", "square", "square", "garage", "square", "square", "garage", "square", "garage", "square", "garage", "square", "square", "garage", "docks"],
+    // r05 Contrainte / Étude / Marais
+    ["docks", "square", "garage", "square", "square", "square", "square", "square", "square", "square", "square", "square", "square", "garage", "docks", "docks"],
+    // r06 Quai Nord
+    ["docks", "docks", "docks", "docks", "docks", "docks", "docks", "docks", "square", "square", "square", "docks", "docks", "docks", "docks", "docks"],
+    // r07 la Ferre + Île (cols 8..10)
+    ["docks", "garage", "square", "square", "square", "square", "square", "square", "square", "square", "square", "square", "garage", "docks", "docks", "docks"],
+    // r08 Quai Sud / Tour de Fer
+    ["docks", "garage", "square", "square", "square", "garage", "square", "square", "square", "garage", "square", "garage", "square", "docks", "garage", "docks"],
+    // r09 Champ-de-Fer / Sénat / Latin
+    ["garage", "square", "square", "square", "square", "square", "square", "square", "square", "square", "square", "square", "garage", "docks", "square", "docks"],
+    // r10 Boulevard Rive Gauche
+    ["docks", "garage", "market", "square", "market", "garage", "market", "square", "market", "garage", "square", "market", "docks", "market", "garage", "docks"]
+    // r11 Petite Ceinture South
+  ];
+  var cellKinds = blocks.map(
+    (row, r) => row.map((key, c) => {
+      if (r === RIVER_ROW) {
+        if (c === 8) return "palaisJustice";
+        if (c === 9) return "islandWest";
+        if (c === 10) return "islandCathedral";
+        return BRIDGE_SET.has(c) ? "riverBridge" : "river";
+      }
+      if (c === 3 && r === 3) return "starArch";
+      if (c === 6 && r === 5) return "obeliskSquare";
+      if (ROUNDABOUTS.has(`c${c}r${r}`)) return "boulevard";
+      if (c === 3 && r === 8) return "towerBase";
+      if (c === 7 && r === 3) return "opera";
+      if (c === 8 && r === 0) return "basilica";
+      if ((c === 3 || c === 4) && r === 9) return "park";
+      if (c === 14 && (r === 3 || r === 4)) return "park";
+      if (c === 7 && r === 9) return "park";
+      if (c >= 10 && c <= 11 && r === 4) return "alleyCross";
+      if (c >= 9 && c <= 12 && r >= 3 && r <= 5) return "haussmannCafe";
+      if (r === 1) return "ringNorth";
+      if (r === 11) return "ringSouth";
+      if (r === 6 || r === 8) return "boulevard";
+      if (r === 2 || r === 10 || c === 2 || c === 13) return "boulevard";
+      if (key === "square") return (c + r) % 3 === 0 ? "haussmannCafe" : "haussmann";
+      return key;
+    })
+  );
+  function buildParisRoads() {
+    const nodes = [];
+    const nodeIds = /* @__PURE__ */ new Set();
+    const addNode = (col, row, extra = {}) => {
+      const id = `c${col}r${row}`;
+      const rb = ROUNDABOUTS.get(id);
+      const node = {
+        id,
+        col,
+        row,
+        x: X(col),
+        y: Y(row),
+        kind: rb ? "roundabout" : "cross",
+        ...rb ? { radius: rb.radius, outerRadius: rb.outerRadius } : {},
+        ...extra
+      };
+      nodes.push(node);
+      nodeIds.add(id);
+      return node;
+    };
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (r === RIVER_ROW && (c < 8 || c > 10)) continue;
+        addNode(c, r);
+      }
+    }
+    const edgeKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
+    const omitted = /* @__PURE__ */ new Set([
+      // Impasse de l'Ouest at (1, 4): connects only east to (2, 4).
+      edgeKey("c0r4", "c1r4"),
+      edgeKey("c1r3", "c1r4"),
+      edgeKey("c1r4", "c1r5"),
+      // Impasse du Parchemin at (12, 4) inside Marais: alley dead end off (11, 4).
+      edgeKey("c12r3", "c12r4"),
+      edgeKey("c12r4", "c12r5"),
+      edgeKey("c12r4", "c13r4"),
+      // Allée du Champ-de-Fer at (4, 9) inside SW park: dead end off (4, 8).
+      edgeKey("c3r9", "c4r9"),
+      edgeKey("c4r9", "c5r9"),
+      edgeKey("c4r9", "c4r10"),
+      // Impasse des Buttes at (14, 3) inside Parc des Buttes-Fiscales: dead end off (13, 3).
+      edgeKey("c14r2", "c14r3"),
+      edgeKey("c14r3", "c14r4"),
+      edgeKey("c14r3", "c15r3"),
+      // Cour du Sénat at (7, 9) inside Jardin du Sénat: dead end off (7, 8).
+      edgeKey("c6r9", "c7r9"),
+      edgeKey("c7r9", "c8r9"),
+      edgeKey("c7r9", "c7r10"),
+      // Additional T-junctions for natural Parisian street rhythm.
+      edgeKey("c5r1", "c5r2"),
+      edgeKey("c12r9", "c12r10"),
+      // Island centre square (9, 7) has no N/S bridges (bridges are at col 8 and col 10).
+      edgeKey("c9r6", "c9r7"),
+      edgeKey("c9r7", "c9r8")
+    ]);
+    const alleyEdges = /* @__PURE__ */ new Set([
+      // Le Vieux Marais (centre-east dense old quarter).
+      edgeKey("c10r3", "c10r4"),
+      edgeKey("c10r4", "c10r5"),
+      edgeKey("c11r3", "c11r4"),
+      edgeKey("c11r4", "c11r5"),
+      edgeKey("c9r4", "c10r4"),
+      edgeKey("c10r4", "c11r4"),
+      edgeKey("c11r4", "c12r4"),
+      edgeKey("c10r3", "c11r3"),
+      edgeKey("c10r5", "c11r5"),
+      // Quartier Latin (Rive Gauche old quarter).
+      edgeKey("c9r8", "c9r9"),
+      edgeKey("c9r9", "c10r9"),
+      // Montmartre / Butte du Créancier narrow lanes flanking Sacré-Créancier.
+      edgeKey("c7r0", "c8r0"),
+      edgeKey("c8r0", "c9r0")
+    ]);
+    function edgeClass(c1, r1, c2, r2) {
+      const k = edgeKey(`c${c1}r${r1}`, `c${c2}r${r2}`);
+      if (alleyEdges.has(k)) return "alley";
+      if (r1 === r2) {
+        if (r1 === 6 || r1 === 8) return "avenue";
+        if ((r1 === 2 || r1 === 10) && Math.min(c1, c2) >= 2 && Math.max(c1, c2) <= 13) return "avenue";
+        if (r1 === 3 && Math.min(c1, c2) >= 1 && Math.max(c1, c2) <= 8) return "avenue";
+        if (r1 === 5 && Math.min(c1, c2) >= 3 && Math.max(c1, c2) <= 8) return "avenue";
+        return "street";
+      }
+      if (c1 === c2) {
+        if ((c1 === 2 || c1 === 13) && Math.min(r1, r2) >= 2 && Math.max(r1, r2) <= 10) return "avenue";
+        if (c1 === 3 && Math.min(r1, r2) >= 1 && Math.max(r1, r2) <= 11) return "avenue";
+        if (c1 === 6 && Math.min(r1, r2) >= 1 && Math.max(r1, r2) <= 10) return "avenue";
+        if (c1 === 8) return "avenue";
+        if (c1 === 10 && Math.min(r1, r2) >= 2 && Math.max(r1, r2) <= 10) return "avenue";
+        return "street";
+      }
+      return "street";
+    }
+    const edges = [];
+    const pushEdge = (a, b, cls, extra = {}) => {
+      if (omitted.has(edgeKey(a, b))) return;
+      edges.push({ a, b, class: cls, halfWidth: ROAD_HALF_WIDTH[cls], ...extra });
+    };
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS - 1; c++) {
+        const a = `c${c}r${r}`, b = `c${c + 1}r${r}`;
+        if (!nodeIds.has(a) || !nodeIds.has(b)) continue;
+        pushEdge(a, b, edgeClass(c, r, c + 1, r));
+      }
+    }
+    for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < ROWS - 1; r++) {
+        if (r === CANAL_ROW) {
+          if (!BRIDGE_SET.has(c)) continue;
+          if (c >= 8 && c <= 10) {
+            pushEdge(`c${c}r6`, `c${c}r7`, edgeClass(c, 6, c, 7), { bridge: true });
+          } else {
+            pushEdge(`c${c}r6`, `c${c}r8`, edgeClass(c, 6, c, 8), { bridge: true });
+          }
+          continue;
+        }
+        if (r === RIVER_ROW) {
+          if (c >= 8 && c <= 10 && BRIDGE_SET.has(c)) {
+            pushEdge(`c${c}r7`, `c${c}r8`, edgeClass(c, 7, c, 8), { bridge: true });
+          }
+          continue;
+        }
+        const a = `c${c}r${r}`, b = `c${c}r${r + 1}`;
+        if (!nodeIds.has(a) || !nodeIds.has(b)) continue;
+        pushEdge(a, b, edgeClass(c, r, c, r + 1));
+      }
+    }
+    const seamAlleys = [
+      { col: 9.5, rowA: 4, rowB: 5 },
+      // Passage des Greffes (right next to Le Boum / Marais)
+      { col: 10.5, rowA: 3, rowB: 4 },
+      // Passage du Sceau (Marais heart)
+      { col: 6.5, rowA: 0, rowB: 1 },
+      // Passage de la Butte (Montmartre steps shortcut, clear of market west pier)
+      { col: 9.5, rowA: 8, rowB: 9 }
+      // Passage des Écoles (Quartier Latin)
+    ];
+    function splitHorizontalEdge(cLeft, row, midCol) {
+      const a = `c${cLeft}r${row}`, b = `c${cLeft + 1}r${row}`;
+      const midId = `c${midCol}r${row}`;
+      if (!nodeIds.has(midId)) {
+        nodes.push({ id: midId, col: midCol, row, x: X(midCol), y: Y(row), kind: "tee" });
+        nodeIds.add(midId);
+      }
+      const idx = edges.findIndex((e) => e.a === a && e.b === b || e.a === b && e.b === a);
+      if (idx >= 0) {
+        const orig = edges[idx];
+        edges.splice(
+          idx,
+          1,
+          { a, b: midId, class: orig.class, halfWidth: orig.halfWidth },
+          { a: midId, b, class: orig.class, halfWidth: orig.halfWidth }
+        );
+      }
+      return midId;
+    }
+    for (const s of seamAlleys) {
+      const cLeft = Math.floor(s.col);
+      const topId = splitHorizontalEdge(cLeft, s.rowA, s.col);
+      const botId = splitHorizontalEdge(cLeft, s.rowB, s.col);
+      edges.push({ a: topId, b: botId, class: "alley", halfWidth: ROAD_HALF_WIDTH.alley, seam: true });
+    }
+    return { nodes, edges };
+  }
+  var riverTop = Y(CANAL_ROW) + 42;
+  var riverBottom = Y(RIVER_SOUTH_ROW) - 42;
+  var island = {
+    left: X(8) - 108,
+    // 2287
+    right: X(10) + 108,
+    // 3083
+    top: Y(RIVER_ROW) - 78,
+    // 1590
+    bottom: Y(RIVER_ROW) + 78
+    // 1746
+  };
+  var river = {
+    riverRow: RIVER_ROW,
+    southRow: RIVER_SOUTH_ROW,
+    top: riverTop,
+    bottom: riverBottom,
+    islands: [island],
+    bridges: BRIDGE_COLS.map((col) => ({ col, x: X(col), halfWidth: 22, clearance: true })),
+    // Smooth west-to-east navigation centreline curving through the wide 108-unit south channel around Île de la Ferre.
+    centreline: [
+      { x: 0, y: Y(RIVER_ROW) },
+      { x: 1960, y: Y(RIVER_ROW) },
+      { x: 2150, y: 1756 },
+      { x: 2300, y: 1800 },
+      { x: 2685, y: 1800 },
+      { x: 3070, y: 1800 },
+      { x: 3220, y: 1756 },
+      { x: 3410, y: Y(RIVER_ROW) },
+      { x: X(COLS - 1) + 75, y: Y(RIVER_ROW) }
+    ],
+    // 6 moorings: berth on open water (onWater === true) right beside a walkable stone quay.
+    moorings: [
+      { id: "quai-ouest", x: X(1) + 90, y: riverTop + 14, a: 0, quay: { x: X(1) + 90, y: riverTop - 12 } },
+      { id: "quai-contrainte", x: X(5), y: riverTop + 14, a: 0, quay: { x: X(5), y: riverTop - 12 } },
+      { id: "quai-tour", x: X(2), y: riverBottom - 14, a: 0, quay: { x: X(2), y: riverBottom + 12 } },
+      { id: "ile-parvis", x: X(9), y: island.bottom + 14, a: Math.PI, quay: { x: X(9), y: island.bottom - 12 } },
+      { id: "quai-marais", x: X(12) + 90, y: riverTop + 14, a: 0, quay: { x: X(12) + 90, y: riverTop - 12 } },
+      { id: "quai-docks", x: X(13) + 90, y: riverBottom - 14, a: Math.PI, quay: { x: X(13) + 90, y: riverBottom + 12 } }
+    ]
+  };
+  var ringLeft = (X(0) + X(1)) / 2;
+  var ringRight = (X(14) + X(15)) / 2;
+  var ringTop = Y(1) + pierDepth;
+  var ringBottom = Y(11) + pierDepth;
+  var ring = {
+    northRow: 1,
+    southRow: 11,
+    minCol: 1,
+    maxCol: 14,
+    left: ringLeft,
+    right: ringRight,
+    top: ringTop,
+    bottom: ringBottom,
+    cornerR: 36,
+    deckLift: 40,
+    stations: [
+      {
+        id: "porte-etoile",
+        name: { fr: "Porte de l\u2019\xC9toile", en: "Star Gate" },
+        stop: { x: X(3) + 88, y: ringTop },
+        street: { x: X(3) + 88, y: Y(1) - 21 }
+      },
+      {
+        id: "butte-creancier",
+        name: { fr: "Butte-du-Cr\xE9ancier", en: "Creditor Hill" },
+        stop: { x: X(8) + 88, y: ringTop },
+        street: { x: X(8) + 88, y: Y(1) - 21 }
+      },
+      {
+        id: "buttes-fiscales",
+        name: { fr: "Buttes-Fiscales", en: "Tax Hills" },
+        stop: { x: X(12) + 88, y: ringTop },
+        street: { x: X(12) + 88, y: Y(1) - 21 }
+      },
+      {
+        id: "viaduc-est",
+        name: { fr: "Viaduc-Est", en: "East Viaduct" },
+        stop: { x: ringRight, y: Y(4) - 18 },
+        street: { x: ringRight - 22, y: Y(4) - 18 }
+      },
+      {
+        id: "porte-docks",
+        name: { fr: "Porte des Docks", en: "Docks Gate" },
+        stop: { x: X(12) + 88, y: ringBottom },
+        street: { x: X(12) + 88, y: Y(11) - 21 }
+      },
+      {
+        id: "gare-sud",
+        name: { fr: "Gare du Sud", en: "South Station" },
+        stop: { x: X(8) + 88, y: ringBottom },
+        street: { x: X(8) + 88, y: Y(11) - 21 }
+      },
+      {
+        id: "champ-fer",
+        name: { fr: "Champ-de-Fer", en: "Iron Field" },
+        stop: { x: X(3) + 88, y: ringBottom },
+        street: { x: X(3) + 88, y: Y(11) - 21 }
+      },
+      {
+        id: "viaduc-ouest",
+        name: { fr: "Viaduc-Ouest", en: "West Viaduct" },
+        stop: { x: ringLeft, y: Y(5) - 18 },
+        street: { x: ringLeft + 22, y: Y(5) - 18 }
+      }
+    ]
+  };
+  var monuments = [
+    {
+      id: "arc-saisies",
+      name: { fr: "Arc des Saisies", en: "Arch of Seizures" },
+      col: 3,
+      row: 3,
+      x: X(3),
+      y: Y(3),
+      footprint: octagon(X(3), Y(3), 15, 13),
+      style: "arch"
+    },
+    {
+      id: "tour-fer",
+      name: { fr: "Tour de Fer", en: "Iron Tower" },
+      col: 3,
+      row: 8,
+      x: X(3),
+      y: Y(8),
+      // Outer base footprint for map/visuals; passUnder=true uses the 4 corner iron legs as collision piers so roads pass beneath.
+      footprint: boxPoly(X(3) - 44, Y(8) - 42, X(3) + 44, Y(8) + 42),
+      passUnder: true,
+      piers: [
+        boxPoly(X(3) - 44, Y(8) - 42, X(3) - 29, Y(8) - 30),
+        boxPoly(X(3) + 29, Y(8) - 42, X(3) + 44, Y(8) - 30),
+        boxPoly(X(3) - 44, Y(8) + 27, X(3) - 29, Y(8) + 41),
+        boxPoly(X(3) + 29, Y(8) + 27, X(3) + 44, Y(8) + 41)
+      ],
+      style: "tower"
+    },
+    {
+      id: "place-contrainte",
+      name: { fr: "Place de la Contrainte", en: "Writ Square Obelisk" },
+      col: 6,
+      row: 5,
+      x: X(6),
+      y: Y(5),
+      footprint: octagon(X(6), Y(5), 11, 10),
+      style: "obelisk"
+    },
+    {
+      id: "hotel-ventes",
+      name: { fr: "H\xF4tel des Ventes", en: "Grand Auction House" },
+      col: 7,
+      row: 3,
+      x: X(7) + 74,
+      y: Y(3) - 62,
+      footprint: boxPoly(X(7) + 36, Y(3) - 96, X(7) + 114, Y(3) - 33),
+      style: "opera"
+    },
+    {
+      id: "sacre-creancier",
+      name: { fr: "Sacr\xE9-Cr\xE9ancier", en: "Sacred Creditor Basilica" },
+      col: 8,
+      row: 0,
+      x: X(8),
+      y: Y(0) - 52,
+      footprint: boxPoly(X(8) - 64, 8, X(8) + 64, Y(0) - 33),
+      style: "basilica"
+    },
+    {
+      id: "palais-justice",
+      name: { fr: "Palais de Justice", en: "Law Courts" },
+      col: 8,
+      row: 7,
+      x: X(8) - 64,
+      y: Y(7) - 49,
+      footprint: boxPoly(X(8) - 98, Y(7) - 68, X(8) - 31, Y(7) - 31),
+      style: "palais"
+    },
+    {
+      id: "notre-dame-port",
+      name: { fr: "Notre-Dame-du-Port", en: "Our Lady of the Port" },
+      col: 10,
+      row: 7,
+      x: X(10) + 66,
+      y: Y(7),
+      footprint: boxPoly(X(10) + 33, Y(7) - 60, X(10) + 98, Y(7) + 60),
+      style: "cathedral"
+    }
+  ];
+  var parks = [
+    { id: "champ-de-fer", name: { fr: "Jardin du Champ-de-Fer", en: "Iron Field Gardens" }, cols: [3, 4], rows: [9, 9] },
+    { id: "buttes-fiscales", name: { fr: "Parc des Buttes-Fiscales", en: "Tax-Hill Park" }, cols: [14, 14], rows: [3, 4] },
+    { id: "jardin-senat", name: { fr: "Jardin du S\xE9nat-des-Clercs", en: "Clerks' Senate Garden" }, cols: [7, 7], rows: [9, 9] }
+  ];
+  var definition = {
+    blocks,
+    cellKinds,
+    canalRow: CANAL_ROW,
+    river,
+    roads: buildParisRoads(),
+    ring,
+    monuments,
+    parks,
+    railways: [],
+    // 5 case addresses relocated to central Paris-Port-Fer landmarks (all verified clear of props & obstacles).
+    addresses: [
+      { id: "office", col: 7, row: 5, dx: 78, dy: -21, symbol: "\xC9", color: "#ffc857" },
+      { id: "repo", col: 5, row: 4, dx: 64, dy: -21, symbol: "R", color: "#ff79ae" },
+      { id: "noise", col: 9, row: 5, dx: -64, dy: -21, symbol: "C", color: "#64ebd0" },
+      { id: "flat", col: 6, row: 6, dx: 72, dy: -22, symbol: "S", color: "#ffa851" },
+      { id: "auction", col: 7, row: 3, dx: 62, dy: -22, symbol: "A", color: "#c2a0ff" }
+    ],
+    interiors: [
+      {
+        door: "office",
+        image: "officeInterior",
+        width: 160,
+        height: 100,
+        floor: { left: 14, right: 146, top: 63, bottom: 94 },
+        entry: { x: 80, y: 90 },
+        exit: { x: 80, y: 93 },
+        desk: { x: 80, y: 65 },
+        action: "caseDesk"
+      }
+    ],
+    buildPiers: buildRingPiers
+  };
+  var town = buildTown(definition);
+  var { blocks: city, width: W, height: H, jobs, roadsX, roadsY, canalRow } = town;
+  var office = town.byId.get("office");
+  var auction = town.byId.get("auction");
+  var canalTop = town.river.top;
+  var canalBottom = town.river.bottom;
+
+  // src/core/controls.js
+  var sources = /* @__PURE__ */ new Map();
+  var analog = { x: 0, y: 0, steering: 0, throttle: 0 };
+  function clearAnalog() {
+    analog.x = analog.y = analog.steering = analog.throttle = 0;
+  }
+  var held = {
+    has(control2) {
+      return sources.has(control2);
+    },
+    add(control2, source) {
+      if (!sources.has(control2)) sources.set(control2, /* @__PURE__ */ new Set());
+      sources.get(control2).add(source);
+    },
+    delete(control2, source) {
+      if (source === void 0) {
+        sources.delete(control2);
+        return;
+      }
+      const owners = sources.get(control2);
+      if (owners?.delete(source) && !owners.size) sources.delete(control2);
+    },
+    clear() {
+      sources.clear();
+      clearAnalog();
+    }
+  };
+  function axis(positive, negative, fallback) {
+    const plus = held.has(positive), minus = held.has(negative);
+    return plus || minus ? Number(plus) - Number(minus) : fallback;
+  }
+  function walkVector() {
+    return [axis("right", "left", analog.x), axis("down", "up", analog.y)];
+  }
+  function steeringInput() {
+    return axis("right", "left", analog.steering);
+  }
+  function throttleInput() {
+    return axis("up", "down", analog.throttle);
+  }
+
+  // src/core/state.js
+  var clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  var dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  var seed = 71;
+  function rand() {
+    seed = Math.imul(seed, 1664525) + 1013904223 >>> 0;
+    return seed / 4294967296;
+  }
+  var artwork = {};
+  var p = { x: office.x - 22, y: office.y - 3, a: Math.PI / 2, hp: 5 };
+  var cars = [];
+  var people = [];
+  var trails = [];
+  var fx = [];
+  var done = /* @__PURE__ */ new Set();
+  var game = {
+    artReady: false,
+    konamiHero: false,
+    ride: null,
+    time: 0,
+    heat: 0,
+    wallet: 0,
+    hitCooldown: 0,
+    flash: 0,
+    msgLife: 0,
+    active: "",
+    stage: "",
+    viewMap: false,
+    sound: true,
+    audio: null,
+    vw: 0,
+    vh: 0,
+    camX: p.x,
+    camY: p.y,
+    lastDir: 1,
+    quipTime: 3,
+    quipCooldown: 0
+  };
+  try {
+    game.sound = localStorage.getItem("port-fer-sound") !== "off";
+  } catch {
+  }
+
+  // src/platform/canvas.js
+  var $ = (s) => document.querySelector(s);
+  var canvas = $("#game");
+  var g = canvas.getContext("2d");
+  var panel = $("#panel");
+  function resize() {
+    const zoom = clamp(Math.min(innerWidth / 280, innerHeight / 185), 1.95, 5.15);
+    game.vw = innerWidth / zoom;
+    game.vh = innerHeight / zoom;
+    const density = Math.min(devicePixelRatio || 1, innerWidth < 650 ? 1.5 : 1);
+    canvas.width = Math.round(innerWidth * density);
+    canvas.height = Math.round(innerHeight * density);
+    g.setTransform(canvas.width / game.vw, 0, 0, canvas.height / game.vh, 0, 0);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "low";
+  }
+  resize();
+  addEventListener("resize", resize);
+  function rect(c, x, y, w, h, color) {
+    c.fillStyle = color;
+    c.fillRect(x, y, w, h);
+  }
+  function label(c, s, x, y, color, size = 8) {
+    c.font = "bold " + size + "px monospace";
+    c.fillStyle = color;
+    c.fillText(s, x, y);
+  }
+  function hud(selector, value) {
+    const el = $(selector);
+    if (el.textContent !== value) el.textContent = value;
   }
 
   // src/world/vehicle-shape.js
@@ -1016,88 +2068,252 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
 
   // src/world/collision.js
-  var streetHalfWidth = 25;
-  var northPavement = 28;
-  var southPavement = 23;
-  var pierThickness = 3.5;
-  function blockedIn(layout, x, y, r) {
-    const W2 = layout.width, H2 = layout.height, canalTop2 = Y(layout.canalRow) + 16, canalBottom2 = Y(layout.canalRow + 1) - 15;
-    if (x < r || y < r || x > W2 - r || y > H2 - r) return true;
-    const { col, row } = layout.cellAt(x, y);
-    const dx = Math.abs(x - X(col)), dy = y - Y(row);
-    for (const post of streetProps(layout, col, row)) {
-      const radius = post.item.radius;
-      if (Math.abs(x - post.x) < r + radius && Math.hypot(x - post.x, y - post.y + radius / 2) < r + radius)
-        return true;
+  function pointInPoly(x, y, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if (yi > y !== yj > y && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
     }
-    if (y > canalTop2 && y < canalBottom2) {
-      const f = (y - canalTop2) / (canalBottom2 - canalTop2);
-      if (dx < 22 - r) return false;
-      return f > 0.13 - r / 200 && f < 0.86 + r / 200;
+    return inside;
+  }
+  function circleHitsPoly(x, y, r, poly) {
+    if (pointInPoly(x, y, poly)) return true;
+    if (r <= 0) return false;
+    const r2 = r * r;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      const dx = xj - xi, dy = yj - yi, len2 = dx * dx + dy * dy;
+      const t2 = len2 > 0 ? Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2)) : 0;
+      const px = xi + dx * t2 - x, py = yi + dy * t2 - y;
+      if (px * px + py * py < r2) return true;
     }
-    const fromFoot = dy - pierDepth;
+    return false;
+  }
+  function circleHitsBox(x, y, r, b) {
+    const cx = Math.max(b.left, Math.min(x, b.right));
+    const cy = Math.max(b.top, Math.min(y, b.bottom));
+    const dx = x - cx, dy = y - cy;
+    return dx * dx + dy * dy < r * r;
+  }
+  function obbHitsCircle(pose, cx, cy, r) {
+    const dx = cx - pose.x, dy = cy - pose.y;
+    const c = Math.cos(pose.a), s = Math.sin(pose.a);
+    const localX = dx * c + dy * s;
+    const localY = -dx * s + dy * c;
+    const clampedX = Math.max(-pose.halfLength, Math.min(localX, pose.halfLength));
+    const clampedY = Math.max(-pose.halfWidth, Math.min(localY, pose.halfWidth));
+    const rx = localX - clampedX, ry = localY - clampedY;
+    return rx * rx + ry * ry < r * r;
+  }
+  function obbCorners(pose) {
+    const c = Math.cos(pose.a), s = Math.sin(pose.a);
+    const lx = c * pose.halfLength, ly = s * pose.halfLength;
+    const wx = -s * pose.halfWidth, wy = c * pose.halfWidth;
+    return [
+      [pose.x + lx + wx, pose.y + ly + wy],
+      [pose.x + lx - wx, pose.y + ly - wy],
+      [pose.x - lx - wx, pose.y - ly - wy],
+      [pose.x - lx + wx, pose.y - ly + wy]
+    ];
+  }
+  function obbHitsPoly(pose, poly) {
+    const rect2 = obbCorners(pose);
+    const axes = [
+      [Math.cos(pose.a), Math.sin(pose.a)],
+      [-Math.sin(pose.a), Math.cos(pose.a)]
+    ];
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const dx = poly[i][0] - poly[j][0], dy = poly[i][1] - poly[j][1];
+      const len = Math.hypot(dx, dy);
+      if (len > 1e-6) axes.push([-dy / len, dx / len]);
+    }
+    for (const [ax, ay] of axes) {
+      let minA = Infinity, maxA = -Infinity;
+      for (const [px, py] of rect2) {
+        const p2 = px * ax + py * ay;
+        if (p2 < minA) minA = p2;
+        if (p2 > maxA) maxA = p2;
+      }
+      let minB = Infinity, maxB = -Infinity;
+      for (const [px, py] of poly) {
+        const p2 = px * ax + py * ay;
+        if (p2 < minB) minB = p2;
+        if (p2 > maxB) maxB = p2;
+      }
+      if (maxA <= minB || maxB <= minA) return false;
+    }
+    return true;
+  }
+  function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam) {
+    for (const r of cell.openRects) {
+      if (r.alley && !allowAlley) continue;
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
+    }
+    for (const rb of cell.roundabouts) {
+      const dx = x - rb.x, dy = y - rb.y;
+      if (dx * dx + dy * dy <= rb.outerRadius * rb.outerRadius) return true;
+    }
+    if (allowServiceSeam) {
+      if (!layout.river || !layout.river.onWater(x, y, 0)) {
+        const { col, row } = layout.cellAt(x, y);
+        const dx = Math.abs(x - X(col)), dy = Math.abs(y - Y(row));
+        if (Math.abs(dx - CELL_W / 2) < 2.9 || Math.abs(dy - CELL_H / 2) < 2.9) {
+          const m = layout.cellMeta(col, row);
+          if (!m.isRiverRow || m.isIsland) return true;
+        }
+      }
+    }
+    return false;
+  }
+  var CIRCLE_DIRS = Array.from({ length: 8 }, (_, i) => {
+    const a = i * Math.PI / 4;
+    return [Math.cos(a), Math.sin(a)];
+  });
+  function hitsLegacyLines(layout, x, y, r) {
+    if (!layout.lines?.size) return false;
+    const { row } = layout.cellAt(x, y);
+    const fromFoot = y - Y(row) - pierDepth;
     if (layout.lines.has(row) && fromFoot < r && fromFoot > -pierThickness - r) {
       const { col: first } = layout.cellAt(x - r, y), { col: last } = layout.cellAt(x + r, y);
       for (let i = first; i <= last; i++)
         for (const [left2, right] of viaductSection(layout, row, i).bases)
           if (x + r > X(i) + left2 && x - r < X(i) + right) return true;
     }
-    const seamX = Math.abs(dx - CELL_W / 2), seamY = Math.abs(Math.abs(dy) - CELL_H / 2);
-    if (r < 4 && (seamX < 2.9 || seamY < 2.9)) return false;
-    return dx > streetHalfWidth - r && !(dy >= -northPavement + r && dy <= southPavement - r);
+    return false;
   }
-  var obstacles = /* @__PURE__ */ new Map();
-  function cellObstacles(col, row) {
-    const id = row * town.cols + col;
-    if (obstacles.has(id)) return obstacles.get(id);
-    const solids = [], cx = X(col), cy = Y(row);
-    function add(left2, top2, right, bottom) {
-      solids.push({
-        x: cx + (left2 + right) / 2,
-        y: cy + (top2 + bottom) / 2,
-        a: 0,
-        halfLength: (right - left2) / 2,
-        halfWidth: (bottom - top2) / 2
-      });
+  function blockedIn(layout, x, y, r) {
+    const W2 = layout.width, H2 = layout.height;
+    if (x < r || y < r || x > W2 - r || y > H2 - r) return true;
+    const { col, row } = layout.cellAt(x, y);
+    const cell = layout.cellMeta(col, row);
+    const allowAlley = r <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
+    const allowServiceSeam = r < 4;
+    for (const post of streetProps(layout, col, row)) {
+      const radius = post.item.radius;
+      if (Math.abs(x - post.x) < r + radius && Math.hypot(x - post.x, y - post.y + radius / 2) < r + radius)
+        return true;
     }
-    for (const side of [-1, 1]) {
-      const outer = side * CELL_W / 2, inner = side * streetHalfWidth;
-      const left2 = Math.min(inner, outer), right = Math.max(inner, outer);
-      if (row !== town.canalRow + 1) add(left2, -CELL_H / 2, right, -northPavement);
-      if (row !== town.canalRow) add(left2, southPavement, right, CELL_H / 2);
-      if (row === town.canalRow || row === town.canalRow + 1) {
-        const top2 = Y(town.canalRow) + 16 - cy, height2 = CELL_H - 31;
-        add(
-          Math.min(outer, side * 22),
-          Math.max(-CELL_H / 2, top2 + height2 * 0.13),
-          Math.max(outer, side * 22),
-          Math.min(CELL_H / 2, top2 + height2 * 0.86)
-        );
+    for (const rb of cell.roundabouts) {
+      const minD = rb.radius + r;
+      const dx = x - rb.x, dy = y - rb.y;
+      if (dx * dx + dy * dy < minD * minD) return true;
+    }
+    for (const poly of cell.solidPolys) {
+      if (circleHitsPoly(x, y, r, poly)) return true;
+    }
+    for (const pier of cell.ringPiers) {
+      if (circleHitsBox(x, y, r, pier)) return true;
+    }
+    if (hitsLegacyLines(layout, x, y, r)) return true;
+    if (allowServiceSeam && (!layout.river || !layout.river.onWater(x, y, 0)) && (!cell.isRiverRow || cell.isIsland)) {
+      const seamX = Math.abs(Math.abs(x - X(col)) - CELL_W / 2);
+      const seamY = Math.abs(Math.abs(y - Y(row)) - CELL_H / 2);
+      if (seamX < 2.9 || seamY < 2.9) return false;
+    }
+    for (const rect2 of cell.openRects) {
+      if (rect2.alley && !allowAlley) continue;
+      if (x >= rect2.left + r && x <= rect2.right - r && y >= rect2.top + r && y <= rect2.bottom - r) return false;
+    }
+    for (const rb of cell.roundabouts) {
+      const maxR = rb.outerRadius - r;
+      if (maxR > 0) {
+        const dx = x - rb.x, dy = y - rb.y;
+        if (dx * dx + dy * dy <= maxR * maxR) return false;
       }
     }
-    if (town.lines.has(row))
-      for (const [left2, right] of viaductSection(town, row, col).bases)
-        add(left2, pierDepth - pierThickness, right, pierDepth);
-    for (const post of streetProps(town, col, row)) {
-      const r = post.item.radius;
-      solids.push({ x: post.x, y: post.y - r / 2, a: 0, halfLength: r, halfWidth: r / 2 });
+    if (!pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam)) return true;
+    for (const [cx, cy] of CIRCLE_DIRS) {
+      const sx = x + cx * r, sy = y + cy * r;
+      const sc = layout.cellAt(sx, sy);
+      const sCell = sc.col === col && sc.row === row ? cell : layout.cellMeta(sc.col, sc.row);
+      if (!pointInOpenSpace(layout, sCell, sx, sy, allowAlley, allowServiceSeam)) return true;
     }
-    obstacles.set(id, solids);
-    return solids;
+    return false;
   }
-  function vehicleBlocked(vehicle, x = vehicle.x, y = vehicle.y, a = vehicle.a, leaving = false) {
+  function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, a = vehicle.a, leaving = false) {
     const halfLength = vehicle.halfLength ?? sedanHalfLength, halfWidth = vehicle.halfWidth ?? sedanHalfWidth;
     const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
     const rx = cos * halfLength + sin * halfWidth, ry = sin * halfLength + cos * halfWidth;
-    if (!leaving && (x < rx || y < ry || x > town.width - rx || y > town.height - ry)) return true;
-    const first = town.cellAt(x - rx, y - ry), last = town.cellAt(x + rx, y + ry);
+    if (!leaving && (x < rx || y < ry || x > layout.width - rx || y > layout.height - ry)) return true;
+    const canUseAlley = halfWidth <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
     const pose = { x, y, a, halfLength, halfWidth };
-    for (let row = first.row; row <= last.row; row++)
-      for (let col = first.col; col <= last.col; col++)
-        for (const solid of cellObstacles(col, row))
-          if (Math.abs(solid.x - x) < rx + solid.halfLength && Math.abs(solid.y - y) < ry + solid.halfWidth && carContact(pose, solid))
+    const first = layout.cellAt(x - rx, y - ry), last = layout.cellAt(x + rx, y + ry);
+    for (let row = first.row; row <= last.row; row++) {
+      for (let col = first.col; col <= last.col; col++) {
+        const cell = layout.cellMeta(col, row);
+        for (const rb of cell.roundabouts) {
+          if (obbHitsCircle(pose, rb.x, rb.y, rb.radius)) return true;
+        }
+        for (const poly of cell.solidPolys) {
+          if (obbHitsPoly(pose, poly)) return true;
+        }
+        for (const pier of cell.ringPiers) {
+          const box2 = {
+            x: (pier.left + pier.right) / 2,
+            y: (pier.top + pier.bottom) / 2,
+            a: 0,
+            halfLength: (pier.right - pier.left) / 2,
+            halfWidth: (pier.bottom - pier.top) / 2
+          };
+          if (Math.abs(box2.x - x) < rx + box2.halfLength && Math.abs(box2.y - y) < ry + box2.halfWidth && carContact(pose, box2))
             return true;
+        }
+        if (layout.lines?.has(row)) {
+          const cy = Y(row);
+          for (const [left2, right] of viaductSection(layout, row, col).bases) {
+            const box2 = {
+              x: X(col) + (left2 + right) / 2,
+              y: cy + pierDepth - pierThickness / 2,
+              a: 0,
+              halfLength: (right - left2) / 2,
+              halfWidth: pierThickness / 2
+            };
+            if (Math.abs(box2.x - x) < rx + box2.halfLength && Math.abs(box2.y - y) < ry + box2.halfWidth && carContact(pose, box2))
+              return true;
+          }
+        }
+        for (const post of streetProps(layout, col, row)) {
+          const r = post.item.radius;
+          const box2 = { x: post.x, y: post.y - r / 2, a: 0, halfLength: r, halfWidth: r / 2 };
+          if (Math.abs(box2.x - x) < rx + box2.halfLength && Math.abs(box2.y - y) < ry + box2.halfWidth && carContact(pose, box2))
+            return true;
+        }
+      }
+    }
+    const centerCell = layout.cellMeta(layout.cellAt(x, y).col, layout.cellAt(x, y).row);
+    const corners = obbCorners(pose);
+    for (const rect2 of centerCell.openRects) {
+      if (rect2.alley && !canUseAlley) continue;
+      if (corners[0][0] >= rect2.left && corners[0][0] <= rect2.right && corners[0][1] >= rect2.top && corners[0][1] <= rect2.bottom && corners[1][0] >= rect2.left && corners[1][0] <= rect2.right && corners[1][1] >= rect2.top && corners[1][1] <= rect2.bottom && corners[2][0] >= rect2.left && corners[2][0] <= rect2.right && corners[2][1] >= rect2.top && corners[2][1] <= rect2.bottom && corners[3][0] >= rect2.left && corners[3][0] <= rect2.right && corners[3][1] >= rect2.top && corners[3][1] <= rect2.bottom)
+        return false;
+    }
+    for (const rb of centerCell.roundabouts) {
+      const r2 = rb.outerRadius * rb.outerRadius;
+      if (corners.every(([px, py]) => (px - rb.x) ** 2 + (py - rb.y) ** 2 <= r2)) return false;
+    }
+    const c = Math.cos(a), s = Math.sin(a);
+    const samples = [
+      [x, y],
+      ...corners,
+      // Front & rear centres.
+      [x + c * halfLength, y + s * halfLength],
+      [x - c * halfLength, y - s * halfLength]
+    ];
+    for (const f of [-0.6, -0.2, 0.2, 0.6]) {
+      const lx = c * halfLength * f, ly = s * halfLength * f;
+      samples.push([x + lx - s * halfWidth, y + ly + c * halfWidth]);
+      samples.push([x + lx + s * halfWidth, y + ly - c * halfWidth]);
+    }
+    for (const [px, py] of samples) {
+      if (leaving && (px < 0 || py < 0 || px > layout.width || py > layout.height)) continue;
+      const sc = layout.cellAt(px, py);
+      const cell = layout.cellMeta(sc.col, sc.row);
+      if (!pointInOpenSpace(layout, cell, px, py, canUseAlley, false)) return true;
+    }
     return false;
+  }
+  function vehicleBlocked(vehicle, x = vehicle.x, y = vehicle.y, a = vehicle.a, leaving = false) {
+    return vehicleBlockedIn(town, vehicle, x, y, a, leaving);
   }
   var blocked = (x, y, r) => blockedIn(town, x, y, r);
   function distanceToBody(v, x, y) {
@@ -1150,7 +2366,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function lineClear(x, y, tx, ty) {
     const steps = Math.ceil(Math.hypot(tx - x, ty - y));
-    for (let i = 1; i <= steps; i++) if (blocked(x + (tx - x) * i / steps, y + (ty - y) * i / steps, 1)) return false;
+    for (let i = 1; i <= steps; i++)
+      if (blocked(x + (tx - x) * i / steps, y + (ty - y) * i / steps, 1)) return false;
     return true;
   }
   function strikeClear(x, y, tx, ty) {
@@ -1167,7 +2384,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     const cell = 1.5, seen = /* @__PURE__ */ new Set(["0,0"]), queue = [[0, 0]];
     while (queue.length) {
       const [i, j] = queue.shift();
-      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (const [di, dj] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1]
+      ]) {
         const ni = i + di, nj = j + dj, key = ni + "," + nj;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -1180,12 +2402,463 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     return true;
   }
   function freeSpot(x, y, r, beyond = 0) {
-    for (let ring = Math.max(2, Math.ceil(beyond / 2) * 2); ring <= 40 + beyond; ring += 2)
+    for (let ring2 = Math.max(2, Math.ceil(beyond / 2) * 2); ring2 <= 40 + beyond; ring2 += 2)
       for (let i = 0; i < 16; i++) {
-        const a = i / 16 * Math.PI * 2, nx = x + Math.cos(a) * ring, ny = y + Math.sin(a) * ring;
+        const a = i / 16 * Math.PI * 2, nx = x + Math.cos(a) * ring2, ny = y + Math.sin(a) * ring2;
         if (!footBlocked(nx, ny, r) && lineClear(x, y, nx, ny)) return { x: nx, y: ny };
       }
     return null;
+  }
+
+  // src/world/routes.js
+  var TAU2 = 2 * Math.PI;
+  var RIGHT_LANE = 6;
+  var CORNER_R = 8;
+  var FILLET_R = 10;
+  function roundaboutCircRadius(node) {
+    return Math.round((node.radius + node.outerRadius) * 0.5);
+  }
+  function wrapAngle(a) {
+    return Math.atan2(Math.sin(a), Math.cos(a));
+  }
+  function normUnit(dx, dy) {
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  }
+  function roundaboutFillet(cx, cy, R, armAngle, laneOffset, isEntry) {
+    const ax = Math.cos(armAngle), ay = Math.sin(armAngle);
+    const ux = ay, uy = -ax;
+    const f = FILLET_R;
+    const d = laneOffset;
+    const sign = isEntry ? 1 : -1;
+    const uf = sign * (d + f);
+    const vf = Math.sqrt(Math.max(1, (R + f) * (R + f) - (d + f) * (d + f)));
+    const fcx = cx + ux * uf + ax * vf;
+    const fcy = cy + uy * uf + ay * vf;
+    const straightPt = { x: cx + ux * (sign * d) + ax * vf, y: cy + uy * (sign * d) + ay * vf };
+    const k = R / (R + f);
+    const ringPt = { x: cx + (fcx - cx) * k, y: cy + (fcy - cy) * k };
+    const ringAngle = Math.atan2(ringPt.y - cy, ringPt.x - cx);
+    const aStraight = Math.atan2(straightPt.y - fcy, straightPt.x - fcx);
+    const aRing = Math.atan2(ringPt.y - fcy, ringPt.x - fcx);
+    let startA, deltaA;
+    if (isEntry) {
+      startA = aStraight;
+      deltaA = wrapAngle(aRing - aStraight);
+      if (deltaA <= 0) deltaA += TAU2;
+    } else {
+      startA = aRing;
+      deltaA = wrapAngle(aStraight - aRing);
+      if (deltaA <= 0) deltaA += TAU2;
+    }
+    return {
+      straightPt,
+      ringPt,
+      ringAngle,
+      fillet: {
+        type: "arc",
+        cx: fcx,
+        cy: fcy,
+        r: f,
+        startA,
+        deltaA,
+        length: f * Math.abs(deltaA),
+        inRoundabout: true
+      }
+    };
+  }
+  function compileNodeCycle(town2, nodeIds, laneOffset = RIGHT_LANE) {
+    const n = nodeIds.length;
+    if (n < 3) return null;
+    const nodes = nodeIds.map((id) => town2.roadNodeById.get(id));
+    if (nodes.some((x) => !x)) return null;
+    const transitions = [];
+    for (let i = 0; i < n; i++) {
+      const prev2 = nodes[(i + n - 1) % n];
+      const curr = nodes[i];
+      const next = nodes[(i + 1) % n];
+      const [ix, iy] = normUnit(curr.x - prev2.x, curr.y - prev2.y);
+      const [ox, oy] = normUnit(next.x - curr.x, next.y - curr.y);
+      const inLaneX = -iy * laneOffset, inLaneY = ix * laneOffset;
+      const outLaneX = -oy * laneOffset, outLaneY = ox * laneOffset;
+      if (curr.kind === "roundabout") {
+        const R = roundaboutCircRadius(curr);
+        const armIn = Math.atan2(prev2.y - curr.y, prev2.x - curr.x);
+        const armOut = Math.atan2(next.y - curr.y, next.x - curr.x);
+        const entry = roundaboutFillet(curr.x, curr.y, R, armIn, laneOffset, true);
+        const exit = roundaboutFillet(curr.x, curr.y, R, armOut, laneOffset, false);
+        let deltaA2 = wrapAngle(exit.ringAngle - entry.ringAngle);
+        if (deltaA2 >= -0.05) deltaA2 -= TAU2;
+        const ringArc = {
+          type: "arc",
+          cx: curr.x,
+          cy: curr.y,
+          r: R,
+          startA: entry.ringAngle,
+          deltaA: deltaA2,
+          length: R * Math.abs(deltaA2),
+          inRoundabout: true,
+          roundabout: { id: curr.id, x: curr.x, y: curr.y, radius: curr.radius, outerRadius: curr.outerRadius }
+        };
+        transitions.push({
+          inPt: entry.straightPt,
+          outPt: exit.straightPt,
+          arcs: [entry.fillet, ringArc, exit.fillet],
+          roundaboutEntry: {
+            id: curr.id,
+            x: curr.x,
+            y: curr.y,
+            radius: curr.radius,
+            outerRadius: curr.outerRadius,
+            joinAngle: entry.ringAngle,
+            joinPt: entry.ringPt
+          },
+          junction: null
+        });
+        continue;
+      }
+      const cross = ix * oy - iy * ox;
+      const dot = ix * ox + iy * oy;
+      if (Math.abs(cross) < 0.05 && dot > 0.5) {
+        const pt = { x: curr.x + inLaneX, y: curr.y + inLaneY };
+        transitions.push({
+          inPt: pt,
+          outPt: pt,
+          arcs: [],
+          junction: { x: curr.x, y: curr.y },
+          roundaboutEntry: null
+        });
+        continue;
+      }
+      const r = cross > 0 ? CORNER_R : CORNER_R + 2 * laneOffset;
+      const det = ix * oy - iy * ox;
+      const dx = outLaneX - inLaneX, dy = outLaneY - inLaneY;
+      const tInt = (dx * oy - dy * ox) / det;
+      const cornerX = curr.x + inLaneX + ix * tInt;
+      const cornerY = curr.y + inLaneY + iy * tInt;
+      const inPt = { x: cornerX - ix * r, y: cornerY - iy * r };
+      const outPt = { x: cornerX + ox * r, y: cornerY + oy * r };
+      const sign = cross > 0 ? 1 : -1;
+      const fcx = inPt.x - iy * sign * r;
+      const fcy = inPt.y + ix * sign * r;
+      const startA = Math.atan2(inPt.y - fcy, inPt.x - fcx);
+      const endA = Math.atan2(outPt.y - fcy, outPt.x - fcx);
+      let deltaA = wrapAngle(endA - startA);
+      if (sign > 0 && deltaA <= 0) deltaA += TAU2;
+      if (sign < 0 && deltaA >= 0) deltaA -= TAU2;
+      transitions.push({
+        inPt,
+        outPt,
+        arcs: [
+          {
+            type: "arc",
+            cx: fcx,
+            cy: fcy,
+            r,
+            startA,
+            deltaA,
+            length: r * Math.abs(deltaA),
+            inRoundabout: false,
+            junction: { x: curr.x, y: curr.y }
+          }
+        ],
+        junction: { x: curr.x, y: curr.y },
+        roundaboutEntry: null
+      });
+    }
+    const segments = [];
+    for (let i = 0; i < n; i++) {
+      const prevT = transitions[(i + n - 1) % n];
+      const currT = transitions[i];
+      const prevNode = nodes[(i + n - 1) % n];
+      const currNode = nodes[i];
+      const edgeInfo = town2.roadAdj.get(prevNode.id)?.find((a) => a.to === currNode.id)?.edge;
+      const isAlley = edgeInfo?.class === "alley";
+      const x1 = prevT.outPt.x, y1 = prevT.outPt.y;
+      const x2 = currT.inPt.x, y2 = currT.inPt.y;
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      if (len > 0.5) {
+        segments.push({
+          type: "line",
+          x1,
+          y1,
+          x2,
+          y2,
+          length: len,
+          a: Math.atan2(y2 - y1, x2 - x1),
+          inRoundabout: false,
+          isAlley,
+          junction: currT.junction,
+          roundaboutEntry: currT.roundaboutEntry
+        });
+      }
+      for (const arc of currT.arcs) segments.push({ ...arc, isAlley });
+    }
+    return segments.length ? segments : null;
+  }
+  function compileLegacyPoints(points) {
+    const n = points.length;
+    if (n < 3) return null;
+    const transitions = [];
+    for (let i = 0; i < n; i++) {
+      const prev2 = points[(i + n - 1) % n];
+      const curr = points[i];
+      const next = points[(i + 1) % n];
+      const [ix, iy] = normUnit(curr.x - prev2.x, curr.y - prev2.y);
+      const [ox, oy] = normUnit(next.x - curr.x, next.y - curr.y);
+      const cross = ix * oy - iy * ox;
+      if (Math.abs(cross) < 0.05) {
+        transitions.push({ inPt: curr, outPt: curr, arcs: [] });
+        continue;
+      }
+      const r = CORNER_R;
+      const inPt = { x: curr.x - ix * r, y: curr.y - iy * r };
+      const outPt = { x: curr.x + ox * r, y: curr.y + oy * r };
+      const sign = cross > 0 ? 1 : -1;
+      const fcx = inPt.x - iy * sign * r;
+      const fcy = inPt.y + ix * sign * r;
+      const startA = Math.atan2(inPt.y - fcy, inPt.x - fcx);
+      const endA = Math.atan2(outPt.y - fcy, outPt.x - fcx);
+      let deltaA = wrapAngle(endA - startA);
+      if (sign > 0 && deltaA <= 0) deltaA += TAU2;
+      if (sign < 0 && deltaA >= 0) deltaA -= TAU2;
+      transitions.push({
+        inPt,
+        outPt,
+        arcs: [{ type: "arc", cx: fcx, cy: fcy, r, startA, deltaA, length: r * Math.abs(deltaA), inRoundabout: false }]
+      });
+    }
+    const segments = [];
+    for (let i = 0; i < n; i++) {
+      const prevT = transitions[(i + n - 1) % n];
+      const currT = transitions[i];
+      const len = Math.hypot(currT.inPt.x - prevT.outPt.x, currT.inPt.y - prevT.outPt.y);
+      if (len > 0.5) {
+        segments.push({
+          type: "line",
+          x1: prevT.outPt.x,
+          y1: prevT.outPt.y,
+          x2: currT.inPt.x,
+          y2: currT.inPt.y,
+          length: len,
+          a: Math.atan2(currT.inPt.y - prevT.outPt.y, currT.inPt.x - prevT.outPt.x),
+          inRoundabout: false,
+          junction: { x: points[i].x, y: points[i].y },
+          roundaboutEntry: null
+        });
+      }
+      for (const arc of currT.arcs) segments.push(arc);
+    }
+    return segments;
+  }
+  function buildTrafficLoop(town2, col, row, { maxHalfWidth = 4.8 } = {}) {
+    const allowAlley = maxHalfWidth <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
+    const startNode = town2.roadNodeAt(col, row);
+    if (!startNode || startNode.kind === "end") return null;
+    const allowed = (adj) => {
+      if (!allowAlley && adj.edge.class === "alley") return false;
+      if (adj.edge.oneWay && adj.edge.oneWay !== adj.dir) return false;
+      const toNode = town2.roadNodeById.get(adj.to);
+      if (!toNode || toNode.kind === "end") return false;
+      return true;
+    };
+    const outs = (town2.roadAdj.get(startNode.id) || []).filter(allowed);
+    const east = outs.find((a) => {
+      const n = town2.roadNodeById.get(a.to);
+      return n.x > startNode.x && Math.abs(n.y - startNode.y) < 1;
+    });
+    const firstStep2 = east || outs[0];
+    if (!firstStep2) return null;
+    const visited = /* @__PURE__ */ new Set([startNode.id]);
+    const path = [startNode.id];
+    let prevId = startNode.id;
+    let currId = firstStep2.to;
+    const maxSteps = 12;
+    for (let step = 0; step < maxSteps; step++) {
+      if (currId === startNode.id) {
+        if (path.length >= 4) {
+          let area = 0;
+          for (let i = 0; i < path.length; i++) {
+            const a = town2.roadNodeById.get(path[i]);
+            const b = town2.roadNodeById.get(path[(i + 1) % path.length]);
+            area += a.x * b.y - b.x * a.y;
+          }
+          const ordered = area >= 0 ? path : [path[0], ...path.slice(1).reverse()];
+          const segments = compileNodeCycle(town2, ordered, RIGHT_LANE);
+          return segments ? { nodeIds: ordered, segments } : null;
+        }
+        return null;
+      }
+      if (visited.has(currId)) return null;
+      visited.add(currId);
+      path.push(currId);
+      const prev2 = town2.roadNodeById.get(prevId);
+      const curr = town2.roadNodeById.get(currId);
+      const inAngle = Math.atan2(curr.y - prev2.y, curr.x - prev2.x);
+      const candidates = (town2.roadAdj.get(currId) || []).filter((a) => a.to !== prevId && allowed(a)).map((a) => {
+        const next = town2.roadNodeById.get(a.to);
+        const outAngle = Math.atan2(next.y - curr.y, next.x - curr.x);
+        const turn = wrapAngle(outAngle - inAngle);
+        const priority = turn > 0.3 ? 0 : Math.abs(turn) <= 0.3 ? 1 : 2;
+        return { to: a.to, priority, turn };
+      }).sort((a, b) => a.priority - b.priority || b.turn - a.turn);
+      if (!candidates.length) return null;
+      prevId = currId;
+      currId = candidates[0].to;
+    }
+    return null;
+  }
+  function evalSegment(seg, s) {
+    if (seg.type === "line") {
+      const f2 = seg.length > 0 ? Math.max(0, Math.min(1, s / seg.length)) : 0;
+      return {
+        x: seg.x1 + (seg.x2 - seg.x1) * f2,
+        y: seg.y1 + (seg.y2 - seg.y1) * f2,
+        a: seg.a
+      };
+    }
+    const f = seg.length > 0 ? Math.max(0, Math.min(1, s / seg.length)) : 0;
+    const theta = seg.startA + seg.deltaA * f;
+    return {
+      x: seg.cx + Math.cos(theta) * seg.r,
+      y: seg.cy + Math.sin(theta) * seg.r,
+      a: theta + (seg.deltaA >= 0 ? Math.PI / 2 : -Math.PI / 2)
+    };
+  }
+  function projectToEdge(point, na, nb) {
+    const dx = nb.x - na.x, dy = nb.y - na.y;
+    const len2 = dx * dx + dy * dy;
+    const t2 = len2 > 0 ? Math.max(0, Math.min(1, ((point.x - na.x) * dx + (point.y - na.y) * dy) / len2)) : 0;
+    const x = na.x + dx * t2, y = na.y + dy * t2;
+    return { x, y, t: t2, dist: Math.hypot(point.x - x, point.y - y), len: Math.sqrt(len2) };
+  }
+  function anchorOnGraph(layout, point, canUseAlley) {
+    let best = null;
+    for (const edge of layout.roads.edges) {
+      if (!canUseAlley && edge.class === "alley") continue;
+      const na = layout.roadNodeById.get(edge.a), nb = layout.roadNodeById.get(edge.b);
+      const proj = projectToEdge(point, na, nb);
+      if (!best || proj.dist < best.dist) {
+        best = { edge, na, nb, x: proj.x, y: proj.y, t: proj.t, len: proj.len, dist: proj.dist };
+      }
+    }
+    return best;
+  }
+  function expandRoundabouts(waypoints, nodeSeq, driving) {
+    const out = [];
+    for (let i = 0; i < waypoints.length; i++) {
+      const pt = waypoints[i];
+      const node = nodeSeq[i];
+      if (node?.kind === "roundabout" && i > 0 && i < waypoints.length - 1) {
+        const prev2 = waypoints[i - 1], next = waypoints[i + 1];
+        const R = roundaboutCircRadius(node);
+        const aIn = Math.atan2(prev2.y - node.y, prev2.x - node.x);
+        const aOut = Math.atan2(next.y - node.y, next.x - node.x);
+        let delta = wrapAngle(aOut - aIn);
+        if (driving) {
+          if (delta >= -0.05) delta -= TAU2;
+        } else {
+          if (Math.abs(delta) < 0.05) delta = 0;
+        }
+        const steps = Math.max(2, Math.ceil(Math.abs(delta) / (Math.PI / 6)));
+        for (let k = 0; k <= steps; k++) {
+          const a = aIn + delta * k / steps;
+          out.push({ x: node.x + Math.cos(a) * R, y: node.y + Math.sin(a) * R });
+        }
+      } else {
+        out.push(pt);
+      }
+    }
+    return out;
+  }
+  function cleanPath(points) {
+    const clean = [points[0]];
+    for (const node of points.slice(1)) {
+      const prev2 = clean[clean.length - 1];
+      if (Math.hypot(node.x - prev2.x, node.y - prev2.y) > 0.5) clean.push(node);
+    }
+    return clean;
+  }
+  function findRoute(layout, start, finish, { onFoot = true, vehicleHalfWidth = 4.8, isBlocked = null } = {}) {
+    const canUseAlley = onFoot || vehicleHalfWidth <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
+    const distanceToDoor = Math.hypot(finish.x - start.x, finish.y - start.y);
+    const lineWalkable = (r) => {
+      if (!isBlocked) return false;
+      const samples = Math.max(2, Math.ceil(distanceToDoor / 3));
+      for (let i = 1; i < samples; i++) {
+        const f = i / samples;
+        if (isBlocked(start.x + (finish.x - start.x) * f, start.y + (finish.y - start.y) * f, r)) return false;
+      }
+      return true;
+    };
+    if (distanceToDoor < 37 && lineWalkable(onFoot ? 2.4 : 4.2)) return [start, finish];
+    if (onFoot && distanceToDoor < 115 && lineWalkable(2.6)) return [start, finish];
+    const a = anchorOnGraph(layout, start, canUseAlley);
+    const b = anchorOnGraph(layout, finish, canUseAlley);
+    if (!a || !b) return [start, finish];
+    if (a.edge === b.edge) return cleanPath([start, { x: a.x, y: a.y }, { x: b.x, y: b.y }, finish]);
+    const distMap = /* @__PURE__ */ new Map();
+    const prevMap = /* @__PURE__ */ new Map();
+    const visited = /* @__PURE__ */ new Set();
+    const relax = (id, cost, via) => {
+      if (cost < (distMap.get(id) ?? Infinity)) {
+        distMap.set(id, cost);
+        prevMap.set(id, via);
+      }
+    };
+    if (onFoot || a.edge.oneWay !== "a>b") relax(a.na.id, a.t * a.len, null);
+    if (onFoot || a.edge.oneWay !== "b>a") relax(a.nb.id, (1 - a.t) * a.len, null);
+    const goalIds = /* @__PURE__ */ new Set();
+    const goalEdgeCost = /* @__PURE__ */ new Map();
+    if (onFoot || b.edge.oneWay !== "b>a") {
+      goalIds.add(b.na.id);
+      goalEdgeCost.set(b.na.id, b.t * b.len);
+    }
+    if (onFoot || b.edge.oneWay !== "a>b") {
+      goalIds.add(b.nb.id);
+      goalEdgeCost.set(b.nb.id, (1 - b.t) * b.len);
+    }
+    const totalNodes = layout.roads.nodes.length;
+    for (let iter = 0; iter < totalNodes; iter++) {
+      let u = null, bestD = Infinity;
+      for (const [id, d] of distMap) {
+        if (!visited.has(id) && d < bestD) {
+          bestD = d;
+          u = id;
+        }
+      }
+      if (u === null) break;
+      visited.add(u);
+      for (const step of layout.roadAdj.get(u) || []) {
+        if (!canUseAlley && step.edge.class === "alley") continue;
+        if (!onFoot && step.edge.oneWay && step.edge.oneWay !== step.dir) continue;
+        if (visited.has(step.to)) continue;
+        const weight = !onFoot && step.edge.class === "avenue" ? 0.96 : 1;
+        relax(step.to, bestD + step.length * weight, u);
+      }
+    }
+    let bestGoalNode = null, bestTotal = Infinity;
+    for (const gid of goalIds) {
+      const cost = (distMap.get(gid) ?? Infinity) + goalEdgeCost.get(gid);
+      if (cost < bestTotal) {
+        bestTotal = cost;
+        bestGoalNode = gid;
+      }
+    }
+    if (!bestGoalNode) return [start, finish];
+    const chain = [];
+    for (let cur = bestGoalNode; cur != null; cur = prevMap.get(cur)) chain.push(cur);
+    chain.reverse();
+    const rawPoints = [start, { x: a.x, y: a.y }];
+    const rawNodes = [null, null];
+    for (const id of chain) {
+      const node = layout.roadNodeById.get(id);
+      rawPoints.push({ x: node.x, y: node.y });
+      rawNodes.push(node);
+    }
+    rawPoints.push({ x: b.x, y: b.y }, finish);
+    rawNodes.push(null, null);
+    return cleanPath(expandRoundabouts(rawPoints, rawNodes, !onFoot));
   }
 
   // src/world/population.js
@@ -1194,9 +2867,20 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     cars.push(v);
     return v;
   }
-  var sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "\xC9tude 2000");
-  sedan.home = { x: sedan.x, y: sedan.y, a: 0 };
-  var target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
+  function findSedanSpot() {
+    const y = Y(office.row) - 14;
+    const preferred = p.x + 10;
+    for (let offset = 0; offset < 70; offset++) {
+      for (const x of offset ? [preferred + offset, preferred - offset] : [preferred]) {
+        if (!vehicleBlocked({ x, y, a: 0 })) return { x, y, a: 0 };
+      }
+    }
+    return { x: preferred, y, a: 0 };
+  }
+  var sedanSpot = findSedanSpot();
+  var sedan = car(sedanSpot.x, sedanSpot.y, sedanSpot.a, "cream", "\xC9tude 2000");
+  sedan.home = { ...sedanSpot };
+  var target = car(X(5) + 95, Y(2) - 10, Math.PI, "gold", "Moutarde GT");
   var colors = ["blue", "olive", "rose", "silver"];
   var civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
   var fighterLooks = [
@@ -1258,49 +2942,63 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     people.push(n);
     return n;
   }
+  var loopCache = /* @__PURE__ */ new Map();
+  function cachedLoop(col, row) {
+    const key = col + "," + row;
+    if (!loopCache.has(key)) loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: 4.8 }));
+    return loopCache.get(key);
+  }
   function populate(col, row, key) {
+    const meta = town.cellMeta(col, row);
+    if (meta.isRiverRow && !meta.isIsland) return;
     let seed2 = (Math.imul(col + 11, 73856093) ^ Math.imul(row + 7, 19349663)) >>> 0;
     const random = () => {
       seed2 = Math.imul(seed2, 1664525) + 1013904223 >>> 0;
       return seed2 / 4294967296;
     };
-    if (col < town.cols - 1 && (col + row) % 2 && !(col === 2 && row === 1)) {
+    if (col < town.cols - 1 && meta.wideArms.e && meta.node?.kind !== "roundabout" && (col + row) % 2 && !(col === office.col && row === office.row) && !(col === 5 && row === 2)) {
       const kerbX2 = X(col) + 112, y = Y(row) - 16;
-      for (let offset = 0; offset < CELL_W / 2; offset++) {
-        const x = [kerbX2 + offset, kerbX2 - offset].find((x2) => !vehicleBlocked({ x: x2, y, a: Math.PI }));
+      for (let offset = 0; offset < CELL_W / 2 - 48; offset++) {
+        const x = [kerbX2 + offset, kerbX2 - offset].find(
+          (cand) => Math.abs(cand - X(col)) > 58 && !vehicleBlocked({ x: cand, y, a: Math.PI })
+        );
         if (x !== void 0) {
           car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
           break;
         }
       }
     }
-    const horizontal = person(
-      X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43),
-      Y(row) - 24,
-      col % 4 === 0 ? "tough" : "local",
-      "x",
-      random
-    );
-    const vertical = person(
-      X(col) + (row === canalRow ? 15 : 20),
-      Y(row) + (row === town.rows - 1 ? -1 : 1) * (32 + random() * 39),
-      "local",
-      "y",
-      random
-    );
-    horizontal.homeCell = vertical.homeCell = key;
+    if (meta.hasWideRoad) {
+      const hx = X(col) + (col === town.cols - 1 ? -1 : 1) * (40 + random() * 43);
+      const hy = Y(row) - 24;
+      if (!footBlocked(hx, hy, 3)) {
+        person(hx, hy, col % 4 === 0 ? "tough" : "local", "x", random).homeCell = key;
+      }
+      const vx = X(col) + (row === town.canalRow ? 15 : 20);
+      const vy = Y(row) + (row === town.rows - 1 ? -1 : 1) * (32 + random() * 39);
+      if (!footBlocked(vx, vy, 3)) {
+        person(vx, vy, "local", "y", random).homeCell = key;
+      }
+    } else if (meta.node) {
+      const ax = meta.node.x, ay = meta.node.y;
+      if (!footBlocked(ax, ay, 3)) {
+        person(ax, ay, "local", random() < 0.5 ? "x" : "y", random).homeCell = key;
+      }
+    }
     if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
-    const left2 = X(col) + 6, right = X(col + 1) - 6, top2 = Y(row) + 6, bottom = Y(row + 1) - 6;
-    const points = [
-      { x: left2, y: top2 },
-      { x: right, y: top2 },
-      { x: right, y: bottom },
-      { x: left2, y: bottom }
-    ];
-    const q = Math.floor(random() * 4), a = points[q], to = (q + 1) % 4, b = points[to], f = 0.12 + random() * 0.65;
-    car(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, Math.atan2(b.y - a.y, b.x - a.x), colors[q], "Citadine", {
-      points,
-      to,
+    const loop2 = cachedLoop(col, row);
+    if (!loop2) return;
+    const straights = loop2.segments.map((seg, idx) => ({ seg, idx })).filter(({ seg }) => seg.type === "line" && seg.length > 60 && !seg.isAlley);
+    if (!straights.length) return;
+    const pick = straights[Math.floor(random() * straights.length)];
+    const s = 18 + random() * (pick.seg.length - 36);
+    const pose = evalSegment(pick.seg, s);
+    if (vehicleBlocked({ ...pose })) return;
+    const q = Math.floor(random() * 4);
+    car(pose.x, pose.y, pose.a, colors[q], "Citadine", {
+      segments: loop2.segments,
+      segIndex: pick.idx,
+      s,
       pace: 24 + q * 6
     }).homeCell = key;
   }
@@ -2033,11 +3731,20 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function planApproach(patient, view, occupied) {
     const { col, row } = town.cellAt(patient.x, patient.y);
-    const streets2 = [
+    const candidates = [
       { horizontal: true, centre: Y(row), along: patient.x, cross: patient.y },
       { horizontal: false, centre: X(col), along: patient.y, cross: patient.x }
-    ].sort((a, b) => Math.abs(a.cross - a.centre) - Math.abs(b.cross - b.centre));
-    for (const road of streets2) {
+    ];
+    for (const dr of [-1, 1]) {
+      if (row + dr >= 0 && row + dr < town.rows && Math.abs(patient.y - Y(row + dr)) < 90)
+        candidates.push({ horizontal: true, centre: Y(row + dr), along: patient.x, cross: patient.y });
+    }
+    for (const dc of [-1, 1]) {
+      if (col + dc >= 0 && col + dc < town.cols && Math.abs(patient.x - X(col + dc)) < 90)
+        candidates.push({ horizontal: false, centre: X(col + dc), along: patient.y, cross: patient.x });
+    }
+    candidates.sort((a, b) => Math.abs(a.cross - a.centre) - Math.abs(b.cross - b.centre));
+    for (const road of candidates) {
       const { horizontal, centre, along, cross } = road;
       const point = (u, w) => horizontal ? { x: u, y: w } : { x: w, y: u };
       const extent = horizontal ? W : H;
@@ -2246,8 +3953,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     moveCar: ["No room at the door. Move the car.", "La porti\xE8re est coinc\xE9e. D\xE9placez la voiture."],
     closer: ["Get closer to a car.", "Approchez-vous d\u2019une voiture."],
     seized: [
-      "Vehicle seized. Auction hall, south of the canal.",
-      "V\xE9hicule saisi. H\xF4tel des ventes, au sud du canal."
+      "Vehicle seized. Deliver it to the auction hall.",
+      "V\xE9hicule saisi. Direction l\u2019h\xF4tel des ventes."
     ],
     sedan: [
       "Company car. All dents have been duly witnessed.",
@@ -2341,7 +4048,20 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     canvas: ["Overhead open-world game in Port-Fer", "Jeu en monde ouvert en vue de dessus \xE0 Port-Fer"],
     frLang: ["Switch to French", "Passer en fran\xE7ais"],
     enLang: ["Switch to English", "Passer en anglais"],
-    loading: ["Opening Port-Fer\u2026", "Ouverture de Port-Fer\u2026"]
+    loading: ["Opening Port-Fer\u2026", "Ouverture de Port-Fer\u2026"],
+    districtArc: ["Seizure Star", "\xC9toile des Saisies"],
+    districtButte: ["Creditor Hill", "Butte du Cr\xE9ancier"],
+    districtOpera: ["Auction Opera", "Quartier de l\u2019Op\xE9ra"],
+    districtParcNord: ["Tax-Hill Park", "Buttes-Fiscales"],
+    districtContrainte: ["Writ Square", "Place de la Contrainte"],
+    districtMarais: ["Old Marais", "Le Vieux Marais"],
+    districtFaubourgEst: ["Clerks\u2019 Suburb", "Faubourg des Greffes"],
+    districtQuaisOuest: ["West Quays", "Quais de l\u2019Ouest"],
+    districtIle: ["\xCEle de la Ferre", "\xCEle de la Ferre"],
+    districtFerre: ["River Ferre", "La Ferre"],
+    districtTour: ["Iron Field", "Champ-de-Fer"],
+    districtRiveGauche: ["Clerks\u2019 Quarter", "Quartier des Clercs"],
+    districtDocks: ["Ferre Docks", "Les Docks de la Ferre"]
   };
 
   // src/ui/dialogs.js
@@ -2602,6 +4322,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 
   // src/game/driving.js
   var quarterTurn = Math.PI / 2;
+  var TAU3 = 2 * Math.PI;
   function closingSpeed(a, b, normal) {
     return Math.max(
       0,
@@ -2696,38 +4417,64 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   var trafficBrake = 130;
   var passingLanes = [-12, -17];
   var pavementLanes = [9, 12];
-  var turnRadius = 8;
   var nextTrafficId = 1;
-  function pathAdvance(route, dt, step, lane = route.lane || 0) {
-    const points = route.points, i = route.to, count = points.length;
-    const destination = points[i], before = points[(i + count - 1) % count], after = points[(i + 1) % count];
-    const ix = Math.sign(destination.x - before.x), iy = Math.sign(destination.y - before.y);
-    const ox = Math.sign(after.x - destination.x), oy = Math.sign(after.y - destination.y);
-    const entrance = { x: destination.x - turnRadius * ix, y: destination.y - turnRadius * iy };
-    let { px: x, py: y } = route, arc = route.arc || 0, a, turnDone = false;
-    const remaining = (entrance.x - x) * ix + (entrance.y - y) * iy;
-    if (remaining > step && arc === 0) {
-      x += ix * step;
-      y += iy * step;
-      a = Math.atan2(iy, ix);
-    } else {
-      arc = Math.min(quarterTurn, arc + (step - Math.max(0, remaining)) / Math.max(turnRadius, turnRadius - lane));
-      const forward = turnRadius * Math.sin(arc), turn = turnRadius * (1 - Math.cos(arc));
-      x = entrance.x + ix * forward + ox * turn;
-      y = entrance.y + iy * forward + oy * turn;
-      a = Math.atan2(iy * Math.cos(arc) + oy * Math.sin(arc), ix * Math.cos(arc) + ox * Math.sin(arc));
-      turnDone = arc >= quarterTurn;
+  function ensureCompiled(c, route) {
+    if (route.segments) return;
+    if (route.points) {
+      route.segments = compileLegacyPoints(route.points);
+      let bestIdx = 0, bestS = 0, bestD = Infinity;
+      for (let i = 0; i < route.segments.length; i++) {
+        const seg = route.segments[i];
+        if (seg.type !== "line") continue;
+        const dx = seg.x2 - seg.x1, dy = seg.y2 - seg.y1;
+        const t2 = seg.length > 0 ? clamp(((c.x - seg.x1) * dx + (c.y - seg.y1) * dy) / (seg.length * seg.length), 0, 1) : 0;
+        const d = Math.hypot(c.x - (seg.x1 + dx * t2), c.y - (seg.y1 + dy * t2));
+        if (d < bestD) {
+          bestD = d;
+          bestIdx = i;
+          bestS = t2 * seg.length;
+        }
+      }
+      route.segIndex = bestIdx;
+      route.s = bestS;
     }
-    return { x, y, a, arc: turnDone ? 0 : arc, to: turnDone ? (i + 1) % count : i, remaining, destination };
+  }
+  function advanceAlong(segments, segIndex, s, step, lane = 0) {
+    const count = segments.length;
+    let idx = segIndex;
+    let curS = s;
+    let left2 = step;
+    let guard = 0;
+    while (left2 > 0 && guard++ < count + 2) {
+      const seg2 = segments[idx];
+      const radiusScale = seg2.type === "arc" ? Math.max(0.5, seg2.r / Math.max(4, seg2.r + (seg2.deltaA >= 0 ? -lane : lane))) : 1;
+      const effStep = left2 * radiusScale;
+      const avail = seg2.length - curS;
+      if (effStep < avail) {
+        curS += effStep;
+        left2 = 0;
+      } else {
+        left2 -= avail / radiusScale;
+        idx = (idx + 1) % count;
+        curS = 0;
+      }
+    }
+    const seg = segments[idx];
+    const pose = evalSegment(seg, curS);
+    return {
+      x: pose.x,
+      y: pose.y,
+      a: pose.a,
+      segIndex: idx,
+      s: curS,
+      seg,
+      turning: seg.type === "arc",
+      inRoundabout: !!seg.inRoundabout,
+      remaining: Math.max(0, seg.length - curS)
+    };
   }
   function pathAt(route, distance, lane = route.lane || 0) {
-    const walker = { points: route.points, to: route.to, arc: route.arc || 0, px: route.px, py: route.py };
-    let pose = pathAdvance(walker, 0, 0, lane);
-    for (let left2 = distance; left2 > 0; left2 -= 4) {
-      pose = pathAdvance(walker, 0, Math.min(4, left2), lane);
-      Object.assign(walker, { px: pose.x, py: pose.y, arc: pose.arc, to: pose.to });
-    }
-    return pose;
+    return advanceAlong(route.segments, route.segIndex, route.s, distance, lane);
   }
   function placed(path, lane) {
     return { x: path.x - Math.sin(path.a) * lane, y: path.y + Math.cos(path.a) * lane, a: path.a };
@@ -2742,7 +4489,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     }
     return false;
   }
-  var oncoming = (o, a) => o.route && Math.abs(o.route.lane) <= 6 && Math.cos(o.a - a) <= -0.5;
+  var oncoming = (o, a) => o.route && Math.abs(o.route.lane || 0) <= 6 && Math.cos(o.a - a) <= -0.5;
   function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 || laneTo !== 0) {
     const cos = Math.cos(path.a), sin = Math.sin(path.a), length = c.halfLength ?? sedanHalfLength, width2 = c.halfWidth ?? sedanHalfWidth;
     const low = Math.min(laneFrom, laneTo) - width2, high = Math.max(laneFrom, laneTo) + width2;
@@ -2783,7 +4530,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     return (Math.abs(o.speed || 0) < 1 || o.condition === 0) && !(o.route && o.route.wait < 1.5);
   }
   function startPass(c, route, probe, here) {
-    if (probe.arc !== 0 || probe.remaining < 20) return;
+    if (probe.turning || probe.inRoundabout || probe.seg.isAlley || probe.remaining < 20) return;
     const lanes = route.wait > 4 ? [...passingLanes, ...pavementLanes] : passingLanes;
     const lane = lanes.find(
       (l) => [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAt(route, d, l), l))) && lookAhead(c, here, l, l, 60).gap > 50
@@ -2796,13 +4543,14 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     return outsideView(o, viewport(game.camX, game.camY, game.vw || 300, game.vh || 220, W, H), 16);
   }
   function backOff(c, route, probe, dt) {
-    if (probe.arc !== 0) return;
-    const back = 10 * dt, px = route.px - Math.cos(probe.a) * back, py = route.py - Math.sin(probe.a) * back;
-    const pose = placed({ x: px, y: py, a: probe.a }, route.lane);
+    if (probe.turning || route.s < 2) return;
+    const back = Math.min(route.s, 10 * dt);
+    const nextS = route.s - back;
+    const pt = evalSegment(probe.seg, nextS);
+    const pose = placed(pt, route.lane);
     if (!clearPose(c, pose)) return;
-    route.px = px;
-    route.py = py;
-    Object.assign(c, { x: pose.x, y: pose.y, a: probe.a });
+    route.s = nextS;
+    Object.assign(c, { x: pose.x, y: pose.y, a: pose.a });
   }
   function honk(c, at) {
     c.route.honked = game.time;
@@ -2839,24 +4587,40 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     route.stalledFor = v && v === route.stalledBy && c.speed < 0.5 ? (route.stalledFor || 0) + dt : 0;
     route.stalledBy = v;
   }
+  function roundaboutBusy(c, rbEntry) {
+    const { x: rx, y: ry, outerRadius, joinAngle, joinPt } = rbEntry;
+    for (const o of cars) {
+      if (o === c || yieldsTo(c, o)) continue;
+      const dCenter = Math.hypot(o.x - rx, o.y - ry);
+      if (dCenter > outerRadius + 4) continue;
+      if (o.route && o.route.wait > 4) continue;
+      if (o === game.ride && c.route.wait > 3) continue;
+      if (Math.hypot(o.x - joinPt.x, o.y - joinPt.y) < 22) return o;
+      const oAngle = Math.atan2(o.y - ry, o.x - rx);
+      const upstream = ((oAngle - joinAngle) % TAU3 + TAU3) % TAU3;
+      if (upstream < 1.35) return o;
+    }
+    return null;
+  }
   function advanceTraffic(c, dt) {
     const route = c.route;
-    if (route.px === void 0) {
-      route.px = c.x;
-      route.py = c.y;
-    }
+    ensureCompiled(c, route);
+    if (!route.segments?.length) return;
     route.id ??= nextTrafficId++;
+    route.segIndex ??= 0;
+    route.s ??= 0;
     route.lane ??= 0;
     route.laneTarget ??= 0;
     route.speed ??= 0;
     route.wait ??= 0;
     const cruise = route.pace * 1.25;
-    const probe = pathAdvance(route, 0, 0);
+    const probe = advanceAlong(route.segments, route.segIndex, route.s, 0);
     const ghost = route.wait > 6 && offscreen(c);
-    const here = { x: route.px, y: route.py, a: probe.a };
-    let desired = probe.arc > 0 || probe.remaining < 18 ? Math.min(cruise, 15 + Math.max(0, probe.remaining)) : cruise;
+    const here = { x: probe.x, y: probe.y, a: probe.a };
+    let desired = probe.turning || probe.remaining < 18 ? Math.min(cruise, probe.inRoundabout ? cruise * 0.85 : 15 + Math.max(0, probe.remaining)) : cruise;
     if (route.lane !== 0) desired = Math.min(desired, cruise * 0.6);
-    const reach = 12 + route.speed * 0.9, straight = probe.arc === 0 ? Math.min(reach, Math.max(0, probe.remaining)) : 0;
+    const reach = 12 + route.speed * 0.9;
+    const straight = !probe.turning ? Math.min(reach, Math.max(0, probe.remaining)) : 0;
     const watchFrom = route.laneTarget !== 0 ? route.laneTarget : route.lane;
     let { gap, what } = lookAhead(c, here, watchFrom, route.laneTarget, straight);
     if (straight < reach) {
@@ -2868,10 +4632,10 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     if (walker.gap < gap) ({ gap, what } = walker);
     const margin = what && isStalled(what) ? 9 : 3;
     if (gap < reach && !(ghost && offscreen(what))) desired = Math.min(desired, Math.max(0, (gap - margin) * 2.4));
-    const junctionX = roadsX[Math.round((probe.destination.x - X(0)) / CELL_W)];
-    const junctionY = roadsY[Math.round((probe.destination.y - Y(0)) / CELL_H)];
-    const within = (o, r) => Math.abs(o.x - junctionX) < r && Math.abs(o.y - junctionY) < r;
-    const headingIn = (o) => (junctionX - o.x) * (o.slideX || 0) + (junctionY - o.y) * (o.slideY || 0) > 0;
+    const junc = !probe.turning ? probe.seg.junction : null;
+    const rbEntry = !probe.turning ? probe.seg.roundaboutEntry : null;
+    const within = (o, r) => junc && Math.abs(o.x - junc.x) < r && Math.abs(o.y - junc.y) < r;
+    const headingIn = (o) => junc && (junc.x - o.x) * (o.slideX || 0) + (junc.y - o.y) * (o.slideY || 0) > 0;
     const onTraffic = (o) => {
       for (let k = 0; k < 3 && o?.route; k++) {
         const next2 = o.route.heldBy;
@@ -2881,8 +4645,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       }
       return true;
     };
-    const holds = (o) => o !== c && (o.route ? o.route.wait <= 4 || onTraffic(o) : o === game.ride ? route.wait <= 3 : o.medical && Math.abs(o.speed || 0) > 1) && (within(o, 30) || within(o, 40) && headingIn(o));
-    const outside = !within(c, 40);
+    const holds = (o) => junc && o !== c && (o.route ? o.route.wait <= 4 || onTraffic(o) : o === game.ride ? route.wait <= 3 : o.medical && Math.abs(o.speed || 0) > 1) && (within(o, 30) || within(o, 40) && headingIn(o));
+    const outside = junc ? !within(c, 40) : false;
     const exitBlocked = () => {
       for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46; d += 6) {
         const pose = placed(pathAt(route, d), route.lane);
@@ -2892,11 +4656,23 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       }
       return null;
     };
-    const exitCar2 = probe.arc === 0 && probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
-    const occupied = outside && !ghost && (cars.some(holds) || !!exitCar2);
-    if (occupied) {
-      const toLine = Math.max(Math.abs(c.x - junctionX), Math.abs(c.y - junctionY)) - 40 - 0.5;
-      desired = Math.min(desired, Math.max(0, toLine * 2.5));
+    let exitCar2 = null;
+    let occupied = false;
+    if (rbEntry) {
+      if (!ghost && probe.remaining < 26) {
+        const circulating = roundaboutBusy(c, rbEntry);
+        if (circulating) {
+          occupied = true;
+          desired = Math.min(desired, Math.max(0, (probe.remaining - 3) * 2.4));
+        }
+      }
+    } else if (junc) {
+      exitCar2 = probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
+      occupied = outside && !ghost && (cars.some(holds) || !!exitCar2);
+      if (occupied) {
+        const toLine = Math.max(Math.abs(c.x - junc.x), Math.abs(c.y - junc.y)) - 40 - 0.5;
+        desired = Math.min(desired, Math.max(0, toLine * 2.5));
+      }
     }
     if (route.laneTarget !== route.lane) desired = Math.min(desired, Math.max(8, cruise * 0.6));
     const accel = desired > route.speed ? trafficAccel : trafficBrake;
@@ -2906,7 +4682,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     const heldBy = desired < 1 && what ? what : route.blocker && !route.blocker.route ? route.blocker : null;
     if (heldBy) {
       const person2 = heldBy === p || people.includes(heldBy);
-      if ((person2 || heldBy === game.ride) && route.wait > 0.7 && game.time - (route.honked || -9) > 2.4) honk(c, heldBy);
+      if ((person2 || heldBy === game.ride) && route.wait > 0.7 && game.time - (route.honked || -9) > 2.4)
+        honk(c, heldBy);
       else if (isStalled(heldBy) && route.wait > 3 && game.time - (route.honked || -9) > 5) honk(c, null);
       if ((isStalled(heldBy) || person2 && route.wait > 1.5) && route.wait > 1.2 && route.laneTarget === 0 && route.lane === 0)
         startPass(c, route, probe, here);
@@ -2915,9 +4692,10 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       const home = [0, 10, 20].every((d) => clearPose(c, placed(pathAt(route, d), d ? route.lane * (1 - d / 25) : 0)));
       if (home && lookAhead(c, here, 0, 0, 60, false).gap > 30) route.laneTarget = 0;
     }
-    if (route.laneTarget !== 0 && route.wait > 2 && (route.lane === 0 || clearPose(c, placed(here, 0)))) route.laneTarget = 0;
+    if (route.laneTarget !== 0 && route.wait > 2 && (route.lane === 0 || clearPose(c, placed(here, 0))))
+      route.laneTarget = 0;
     const step = route.speed * dt;
-    const path = pathAdvance(route, dt, step);
+    const path = advanceAlong(route.segments, route.segIndex, route.s, step, route.lane);
     const body = (lane2, shift) => {
       const pose = placed(path, lane2);
       if (shift) pose.a = path.a + clamp(Math.atan2(shift, Math.max(step, 0.5)), -0.4, 0.4);
@@ -2927,7 +4705,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     const wantShift = clamp(route.laneTarget - route.lane, -lateral, lateral);
     function blockedAt(pose, moving) {
       if (!moving) return "still";
-      if (!ghost && outside && within(pose, 40) && cars.some(holds)) return "junction";
+      if (!ghost && junc && outside && within(pose, 40) && cars.some(holds)) return "junction";
+      if (!ghost && rbEntry && probe.remaining < 10 && roundaboutBusy(c, rbEntry)) return "junction";
       if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
       if (!game.ride && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
         return p;
@@ -2937,8 +4716,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         if (!hit) continue;
         const before = carContact(c, other2)?.depth ?? 0;
         const behind = (other2.x - c.x) * Math.cos(c.a) + (other2.y - c.y) * Math.sin(c.a) < 0;
-        if (route.arc > 0 && !other2.route && isStalled(other2) && behind) continue;
-        const graze = route.arc > 0 && route.wait > 2 && (!other2.route && isStalled(other2) && hit.depth < 0.6 || other2.route?.arc > 0 && other2.route.blocker === c && route.id < other2.route.id && hit.depth < 1.5);
+        if (probe.turning && !other2.route && isStalled(other2) && behind) continue;
+        const graze = probe.turning && route.wait > 2 && (!other2.route && isStalled(other2) && hit.depth < 0.6 || other2.route && other2.route.blocker === c && route.id < other2.route.id && hit.depth < 1.5);
         if (hit.depth < before || graze) continue;
         return other2;
       }
@@ -2962,12 +4741,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     else if (!ghost) route.wait = Math.max(0, route.wait - dt * 2);
     else if (gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
     const other = typeof blocker === "object" ? blocker : null;
-    if (other?.route && other.route.blocker === c && route.arc === 0 && !route.lane && !other.route.lane && route.wait > 1.5) {
-      if (!(other.route.arc === 0 && other.route.id < route.id)) route.backing = game.time + 1;
+    if (other?.route && other.route.blocker === c && !probe.turning && !route.lane && !other.route.lane && route.wait > 1.5) {
+      if (!(other.route.id < route.id)) route.backing = game.time + 1;
     }
     if (route.lane && what?.route && Math.cos(what.a - probe.a) < -0.5 && desired < 1 && route.wait > 1.5)
       route.backing = game.time + 1;
-    if (other && !other.route && isStalled(other) && route.arc === 0 && !route.lane && route.wait > 2 && route.laneTarget === 0)
+    if (other && !other.route && isStalled(other) && !probe.turning && !route.lane && route.wait > 2 && route.laneTarget === 0)
       route.backing = game.time + 0.6;
     if (route.backing > game.time) {
       backOff(c, route, probe, dt);
@@ -2993,10 +4772,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     c.x = next.x;
     c.y = next.y;
     c.a = next.a;
-    route.px = path.x;
-    route.py = path.y;
-    route.arc = path.arc;
-    route.to = path.to;
+    route.segIndex = path.segIndex;
+    route.s = path.s;
     route.lane = lane;
   }
 
@@ -5491,6 +7268,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   var slate;
   var roadPaint;
   var edgeStone;
+  var asphalt;
   function paintCanvas(w, h) {
     const c = document.createElement("canvas");
     c.width = Math.round(w * plateScale);
@@ -5533,15 +7311,44 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         const d = index(u, v), weight = 1 - Math.abs(v - band) / band;
         const paint = Math.min(1, Math.max(0, (pixels[d + 1] - 69) / 27));
         for (let k = 0; k < 3; k++) {
-          const asphalt = pixels[a + k] + (pixels[b + k] - pixels[a + k]) * v / (band * 2);
-          pixels[d + k] += (asphalt - pixels[d + k]) * paint * Math.min(1, weight * 3);
+          const asphaltPx = pixels[a + k] + (pixels[b + k] - pixels[a + k]) * v / (band * 2);
+          pixels[d + k] += (asphaltPx - pixels[d + k]) * paint * Math.min(1, weight * 3);
         }
       }
     }
     ctx.putImageData(slice, x, y);
   }
+  function prepareRiverPlates() {
+    const src = artwork.canal;
+    const waterTile = paintCanvas(CELL_W, 140);
+    const wctx = waterTile.getContext("2d");
+    const halfW = waterTile.width / 2;
+    wctx.drawImage(src, 0, 68, 690, 316, 0, 0, halfW + 1, waterTile.height);
+    wctx.drawImage(src, 846, 68, 690, 316, halfW, 0, halfW + 1, waterTile.height);
+    plates.riverWater = waterTile;
+    const northQuay = paintCanvas(CELL_W, 27);
+    const nctx = northQuay.getContext("2d");
+    nctx.drawImage(src, 0, 10, 690, 56, 0, 0, halfW + 1, northQuay.height);
+    nctx.drawImage(src, 846, 10, 690, 56, halfW, 0, halfW + 1, northQuay.height);
+    plates.northQuay = northQuay;
+    const southQuay = paintCanvas(CELL_W, 30);
+    const sctx = southQuay.getContext("2d");
+    sctx.drawImage(src, 0, 389, 690, 78, 0, 0, halfW + 1, southQuay.height);
+    sctx.drawImage(src, 846, 389, 690, 78, halfW, 0, halfW + 1, southQuay.height);
+    plates.southQuay = southQuay;
+    const bridge = registerPlate(
+      src,
+      [682, 700, 769, 834, 854],
+      [10, 65, 389, 456, 467],
+      [0, 6, 22, 38, 44],
+      [0, 20, 124, 142, 148]
+    );
+    clearMarkings(bridge, false, 22, 2.2, 0);
+    plates.riverBridge = bridge;
+  }
   function prepareTown() {
     for (const [key, [xx, yy]] of Object.entries(plateRegistration)) {
+      if (!artwork[key]) continue;
       const xs = [0, ...xx, 1500], ys = [0, ...yy, 1e3];
       const xt = [0, CELL_W / 2 - kerbX, CELL_W / 2, CELL_W / 2 + kerbX, CELL_W];
       const yt = [0, CELL_H / 2 - kerbY, CELL_H / 2, CELL_H / 2 + kerbY, CELL_H];
@@ -5551,20 +7358,18 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       plates[key] = plate;
       northApproaches[key] = paintNorthApproach(plate);
     }
-    const ht = canalBottom - canalTop + 5;
-    plates.canal = registerPlate(
-      artwork.canal,
-      [0, 700, 769, 834, 1536],
-      [10, 65, 389, 456, 467],
-      [0, 132, 145, 158, 290],
-      [0, 27, ht - 28, ht - 4, ht]
-    );
-    clearMarkings(plates.canal, false, CELL_W / 2, 2.4, 0);
+    prepareRiverPlates();
     setts = paintPattern(artwork.market, 1080, 372, 76, 30, 0.2, "#21192b58");
     wall = paintPattern(artwork.market, 539, 682, 34, 40, 0.2, "#23182763");
     slate = paintPattern(artwork.square, 73, 3, 47, 53, 0.2, "#231d339d");
     edgeStone = paintPattern(artwork.market, 36, 415, 179, 7, 0.2, "#724e4d2e");
     roadPaint = paintPattern(artwork.market, 32, 498, 39, 4, 0.2, "#80627362");
+    asphalt = paintPattern(artwork.square, 680, 460, 58, 44, 0.22, "#211c2c52");
+  }
+  function cellPlateKey(col, row) {
+    const kind = town.cellKinds?.[row]?.[col];
+    if (kind && plates[kind]) return kind;
+    return city[row][col];
   }
   function paintNorthApproach(plate) {
     const approach2 = paintCanvas(CELL_W, 26), ctx = approach2.getContext("2d");
@@ -5650,7 +7455,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   };
   function sideAlley(ctx, x, y, left2, right, south) {
     const start = south ? 18 : -CELL_H / 2, end = south ? CELL_H / 2 : -kerbY - 0.5;
-    const lEave = eaves[left2][south ? 3 : 1], rEave = eaves[right][south ? 2 : 0];
+    const lEave = (eaves[left2] || eaves.square)[south ? 3 : 1], rEave = (eaves[right] || eaves.square)[south ? 2 : 0];
     const lFoot = south ? 111 : -28, rFoot = south ? 110 : -27;
     const leftEdge = [
       [x - 3.6, y + start],
@@ -5746,158 +7551,707 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       ctx.stroke();
     }
   }
-  function markLane(ctx, x, y, vertical, start, end, spacing, size) {
+  function markLane(ctx, x, y, vertical, start, end, spacing, size, double = false) {
     for (let d = start; d + size <= end + 0.01; d += spacing) {
       const salt = Math.sin((x + y + d) * 58.97);
       if (vertical) {
-        rect(ctx, x - 0.4, y + d, 0.8, size, roadPaint);
-        rect(ctx, x - 0.37, y + d + (salt + 1) * size * 0.36, 0.76, 0.45, "#34283c90");
+        if (double) {
+          rect(ctx, x - 1, y + d, 0.55, size, roadPaint);
+          rect(ctx, x + 0.45, y + d, 0.55, size, roadPaint);
+        } else {
+          rect(ctx, x - 0.4, y + d, 0.8, size, roadPaint);
+          rect(ctx, x - 0.37, y + d + (salt + 1) * size * 0.36, 0.76, 0.45, "#34283c90");
+        }
       } else {
-        rect(ctx, x + d, y - 0.44, size, 0.88, roadPaint);
-        rect(ctx, x + d + (salt + 1) * size * 0.34, y - 0.44, 0.58, 0.86, "#38283790");
+        if (double) {
+          rect(ctx, x + d, y - 1.05, size, 0.58, roadPaint);
+          rect(ctx, x + d, y + 0.47, size, 0.58, roadPaint);
+        } else {
+          rect(ctx, x + d, y - 0.44, size, 0.88, roadPaint);
+          rect(ctx, x + d + (salt + 1) * size * 0.34, y - 0.44, 0.58, 0.86, "#38283790");
+        }
       }
+    }
+  }
+  function drawMissingArmCover(ctx, cx, cy, dir, isPark) {
+    const fillRoof = isPark ? "#1c332a" : slate;
+    const fillWall = isPark ? "#244035" : wall;
+    const drawCover = (x, y, w, h) => {
+      rect(ctx, x, y, w, h, fillRoof);
+      ctx.strokeStyle = "#191322";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      if (isPark) {
+        ctx.fillStyle = "#264638";
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath();
+          ctx.arc(x + w * (i + 0.5) / 4, y + h * 0.5, Math.min(w, h) * 0.35, 0, TAU);
+          ctx.fill();
+        }
+      } else {
+        rect(ctx, x + 1, y + h - 8, w - 2, 7, fillWall);
+        rect(ctx, x + 2, y + h - 2, w - 4, 1.5, edgeStone);
+      }
+    };
+    if (dir === "n") drawCover(cx - 28, cy - CELL_H / 2, 56, CELL_H / 2 - 28);
+    else if (dir === "s") drawCover(cx - 28, cy + 23, 56, CELL_H / 2 - 23);
+    else if (dir === "w") drawCover(cx - CELL_W / 2, cy - 28, CELL_W / 2 - 25, 51);
+    else if (dir === "e") drawCover(cx + 25, cy - 28, CELL_W / 2 - 25, 51);
+  }
+  function drawAlleyOverlay(ctx, edge) {
+    const na = town.roadNodeById.get(edge.a), nb = town.roadNodeById.get(edge.b);
+    const horiz = Math.abs(na.y - nb.y) < 1;
+    const hw = edge.halfWidth;
+    const x1 = Math.min(na.x, nb.x), x2 = Math.max(na.x, nb.x);
+    const y1 = Math.min(na.y, nb.y), y2 = Math.max(na.y, nb.y);
+    if (!edge.seam) {
+      if (horiz) {
+        rect(ctx, x1 + 25, y1 - 28, Math.max(0, x2 - x1 - 50), 28 - hw, slate);
+        rect(ctx, x1 + 25, y1 + hw, Math.max(0, x2 - x1 - 50), 23 - hw, slate);
+        rect(ctx, x1 + 25, y1 - hw - 5, Math.max(0, x2 - x1 - 50), 5, wall);
+        rect(ctx, x1 + 25, y1 + hw, Math.max(0, x2 - x1 - 50), 4, wall);
+      } else {
+        rect(ctx, x1 - 25, y1 + 23, 25 - hw, Math.max(0, y2 - y1 - 51), slate);
+        rect(ctx, x1 + hw, y1 + 23, 25 - hw, Math.max(0, y2 - y1 - 51), slate);
+        rect(ctx, x1 - hw - 3, y1 + 23, 3, Math.max(0, y2 - y1 - 51), wall);
+        rect(ctx, x1 + hw, y1 + 23, 3, Math.max(0, y2 - y1 - 51), wall);
+      }
+    }
+    const bx = horiz ? x1 : x1 - hw;
+    const by = horiz ? y1 - hw : y1;
+    const bw = horiz ? x2 - x1 : hw * 2;
+    const bh = horiz ? hw * 2 : y2 - y1;
+    rect(ctx, bx, by, bw, bh, setts);
+    const grad = horiz ? ctx.createLinearGradient(0, by, 0, by + bh) : ctx.createLinearGradient(bx, 0, bx + bw, 0);
+    grad.addColorStop(0, "#17111fd0");
+    grad.addColorStop(0.22, "#1c152735");
+    grad.addColorStop(0.78, "#1c152735");
+    grad.addColorStop(1, "#17111fd0");
+    rect(ctx, bx, by, bw, bh, grad);
+    const len = horiz ? bw : bh;
+    for (let d = 35; d < len - 25; d += 70) {
+      const lx = horiz ? x1 + d : x1;
+      const ly = horiz ? y1 : y1 + d;
+      const glow = ctx.createRadialGradient(lx, ly, 1, lx, ly, 11);
+      glow.addColorStop(0, "#f5be6b2e");
+      glow.addColorStop(1, "#f5be6b00");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 11, 0, TAU);
+      ctx.fill();
+    }
+    const drawBollards = (mx, my, horizontalEdge) => {
+      for (const side of [-1, 1]) {
+        const px = horizontalEdge ? mx : mx + side * 4.8;
+        const py = horizontalEdge ? my + side * 4.8 : my;
+        ctx.fillStyle = "#181320";
+        ctx.beginPath();
+        ctx.arc(px, py, 1.45, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#a8896f";
+        ctx.beginPath();
+        ctx.arc(px, py - 0.3, 0.75, 0, TAU);
+        ctx.fill();
+      }
+    };
+    const naWide = (town.roadAdj.get(edge.a) || []).some((s) => s.edge.class !== "alley");
+    const nbWide = (town.roadAdj.get(edge.b) || []).some((s) => s.edge.class !== "alley");
+    if (naWide) {
+      const off = edge.seam ? 24 : 27;
+      drawBollards(horiz ? na.x + Math.sign(nb.x - na.x) * off : na.x, horiz ? na.y : na.y + Math.sign(nb.y - na.y) * off, horiz);
+    }
+    if (nbWide) {
+      const off = edge.seam ? 24 : 27;
+      drawBollards(horiz ? nb.x + Math.sign(na.x - nb.x) * off : nb.x, horiz ? nb.y : nb.y + Math.sign(na.y - nb.y) * off, horiz);
+    }
+  }
+  function drawRoundabout(ctx, rb) {
+    const { x, y, radius, outerRadius } = rb;
+    const circR = roundaboutCircRadius(rb);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, outerRadius + 2.2, 0, TAU);
+    ctx.fillStyle = "#1b1625";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, outerRadius + 0.8, 0, TAU);
+    ctx.fillStyle = edgeStone;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, outerRadius - 0.6, 0, TAU);
+    ctx.fillStyle = asphalt;
+    ctx.fill();
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.beginPath();
+    ctx.arc(x, y, outerRadius - 1.5, 0, TAU);
+    ctx.fillStyle = setts;
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.setLineDash([7, 7]);
+    ctx.arc(x, y, circR, 0, TAU);
+    ctx.strokeStyle = "#8d7b8c9c";
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      ctx.save();
+      ctx.translate(x + Math.cos(a) * (outerRadius - 2), y + Math.sin(a) * (outerRadius - 2));
+      ctx.rotate(a + Math.PI / 2);
+      for (let u = -11; u <= 11; u += 4.4) rect(ctx, u - 1, -2.5, 2, 5, "#9c8d9480");
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.arc(x, y + 1.8, radius + 1.8, 0, TAU);
+    ctx.fillStyle = "#14101db0";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, radius + 0.8, 0, TAU);
+    ctx.fillStyle = "#1e1928";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, radius - 0.3, 0, TAU);
+    ctx.fillStyle = edgeStone;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, radius - 2.1, 0, TAU);
+    ctx.fillStyle = setts;
+    ctx.fill();
+    if (rb.col !== 3 && rb.col !== 6) {
+      ctx.beginPath();
+      ctx.arc(x, y, radius - 5.5, 0, TAU);
+      ctx.fillStyle = "#213a31";
+      ctx.fill();
+      ctx.strokeStyle = "#16211e";
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+      const glow = ctx.createRadialGradient(x, y, 1, x, y, radius * 0.9);
+      glow.addColorStop(0, "#ffd48255");
+      glow.addColorStop(1, "#ffd48200");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.9, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawParkBlock(ctx, park2, visible) {
+    const left2 = X(park2.cols[0]) - CELL_W / 2 + 26;
+    const right = X(park2.cols[1]) + CELL_W / 2 - 26;
+    const top2 = Y(park2.rows[0]) - CELL_H / 2 + 24;
+    const bottom = Y(park2.rows[1]) + CELL_H / 2 - 24;
+    if (!visible(left2 - 20, top2 - 20, right - left2 + 40, bottom - top2 + 40)) return;
+    for (let r = park2.rows[0]; r <= park2.rows[1]; r++) {
+      for (let c = park2.cols[0]; c <= park2.cols[1]; c++) {
+        const cx = X(c), cy = Y(r);
+        const quads = [
+          [cx - CELL_W / 2 + 4, cy - CELL_H / 2 + 4, CELL_W / 2 - 31, CELL_H / 2 - 33],
+          [cx + 27, cy - CELL_H / 2 + 4, CELL_W / 2 - 31, CELL_H / 2 - 33],
+          [cx - CELL_W / 2 + 4, cy + 25, CELL_W / 2 - 31, CELL_H / 2 - 29],
+          [cx + 27, cy + 25, CELL_W / 2 - 31, CELL_H / 2 - 29]
+        ];
+        for (const [qx, qy, qw, qh] of quads) {
+          rect(ctx, qx, qy, qw, qh, "#1a2b24");
+          ctx.strokeStyle = "#11191a";
+          ctx.lineWidth = 1.1;
+          ctx.strokeRect(qx, qy, qw, qh);
+          rect(ctx, qx + qw / 2 - 3.5, qy + 3, 7, qh - 6, "#362f3e");
+          rect(ctx, qx + 3, qy + qh / 2 - 3.5, qw - 6, 7, "#362f3e");
+          const trees = [
+            [qx + qw * 0.23, qy + qh * 0.28, 12],
+            [qx + qw * 0.77, qy + qh * 0.28, 11],
+            [qx + qw * 0.25, qy + qh * 0.75, 13],
+            [qx + qw * 0.76, qy + qh * 0.74, 12]
+          ];
+          for (const [tx, ty, tr] of trees) {
+            ctx.fillStyle = "#111a18";
+            ctx.beginPath();
+            ctx.arc(tx + 2, ty + 3, tr, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = "#233f34";
+            ctx.beginPath();
+            ctx.arc(tx, ty, tr, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = "#2f5343";
+            ctx.beginPath();
+            ctx.arc(tx - 2.5, ty - 2.5, tr * 0.62, 0, TAU);
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+  function drawPolygon(ctx, poly, fill, stroke, lineWidth = 1.2) {
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    }
+  }
+  function drawMonumentGround(ctx, m, visible) {
+    const xs = m.footprint.map((p2) => p2[0]), ys = m.footprint.map((p2) => p2[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    if (!visible(minX - 24, minY - 40, maxX - minX + 48, maxY - minY + 64)) return;
+    ctx.save();
+    if (m.style === "tower") {
+      rect(ctx, m.x - 42, m.y - 40, 84, 80, "#241d2e55");
+      for (const pier of m.piers || []) {
+        const px = pier[0][0], py = pier[0][1], pw = pier[1][0] - px, ph = pier[2][1] - py;
+        rect(ctx, px + 1.5, py + 2, pw, ph, "#120e18a8");
+        rect(ctx, px, py, pw, ph, "#3d3342");
+        rect(ctx, px + 2.2, py + 2.2, pw - 4.4, ph - 4.4, "#594853");
+        ctx.strokeStyle = "#191321";
+        ctx.lineWidth = 1.3;
+        ctx.strokeRect(px, py, pw, ph);
+        const glow = ctx.createRadialGradient(px + pw / 2, py + ph / 2, 1, px + pw / 2, py + ph / 2, 14);
+        glow.addColorStop(0, "#ffcb7744");
+        glow.addColorStop(1, "#ffcb7700");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(px + pw / 2, py + ph / 2, 14, 0, TAU);
+        ctx.fill();
+      }
+    } else if (m.style === "arch") {
+      drawPolygon(ctx, m.footprint, "#4c4352", "#1c1524", 1.6);
+      const glow = ctx.createRadialGradient(m.x, m.y, 2, m.x, m.y, 19);
+      glow.addColorStop(0, "#ffd38248");
+      glow.addColorStop(1, "#ffd38200");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, 19, 0, TAU);
+      ctx.fill();
+      rect(ctx, m.x - 12, m.y - 8, 7, 15, "#8b7f7c");
+      rect(ctx, m.x + 5, m.y - 8, 7, 15, "#8b7f7c");
+      rect(ctx, m.x - 13, m.y - 12, 26, 7, "#a3968e");
+      ctx.strokeStyle = "#201727";
+      ctx.lineWidth = 1.1;
+      ctx.strokeRect(m.x - 13, m.y - 12, 26, 7);
+    } else if (m.style === "obelisk") {
+      drawPolygon(ctx, m.footprint, "#59505e", "#1d1624", 1.4);
+      ctx.fillStyle = "#16111e85";
+      ctx.beginPath();
+      ctx.moveTo(m.x - 3, m.y);
+      ctx.lineTo(m.x + 3, m.y);
+      ctx.lineTo(m.x + 16, m.y - 11);
+      ctx.lineTo(m.x + 12, m.y - 14);
+      ctx.closePath();
+      ctx.fill();
+      rect(ctx, m.x - 5.5, m.y - 5.5, 11, 11, "#8d8078");
+      ctx.strokeStyle = "#1e1726";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(m.x - 5.5, m.y - 5.5, 11, 11);
+    } else if (m.style === "opera") {
+      drawPolygon(ctx, m.footprint, "#4a404f", "#1a1423", 1.6);
+      rect(ctx, minX + 4, minY + 5, maxX - minX - 8, maxY - minY - 14, "#665963");
+      ctx.fillStyle = "#2c5a55";
+      ctx.beginPath();
+      ctx.ellipse(m.x, m.y - 4, 17, 13, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "#19262a";
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      ctx.fillStyle = "#488178";
+      ctx.beginPath();
+      ctx.ellipse(m.x - 4, m.y - 7, 9, 6, 0, 0, TAU);
+      ctx.fill();
+      rect(ctx, minX + 10, maxY - 10, maxX - minX - 20, 9, "#a98f7c");
+      for (let sx = minX + 14; sx <= maxX - 16; sx += 9) rect(ctx, sx, maxY - 10, 2.2, 6, "#f0c986");
+      rect(ctx, minX + 18, maxY - 1, maxX - minX - 36, 4.5, "#876f68");
+    } else if (m.style === "basilica") {
+      drawPolygon(ctx, m.footprint, "#8f888b", "#201929", 1.6);
+      rect(ctx, m.x - 24, maxY - 1, 48, 8, "#aba29b");
+      for (let sy = maxY; sy < maxY + 7; sy += 2.2) rect(ctx, m.x - 22, sy, 44, 0.7, "#3a3140");
+      for (const [dx, dy, r] of [
+        [-28, 2, 13],
+        [28, 2, 13],
+        [0, -4, 19]
+      ]) {
+        ctx.fillStyle = "#cfc7bf";
+        ctx.beginPath();
+        ctx.arc(m.x + dx, m.y + dy, r, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = "#2a2232";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.fillStyle = "#efe6d8";
+        ctx.beginPath();
+        ctx.arc(m.x + dx - r * 0.25, m.y + dy - r * 0.25, r * 0.45, 0, TAU);
+        ctx.fill();
+      }
+    } else if (m.style === "palais") {
+      drawPolygon(ctx, m.footprint, "#4c4454", "#1b1524", 1.5);
+      rect(ctx, minX + 6, minY + 6, maxX - minX - 12, maxY - minY - 14, "#6f646e");
+      rect(ctx, minX + 16, minY + 14, maxX - minX - 32, maxY - minY - 22, "#2f2939");
+      ctx.fillStyle = "#e6b868";
+      ctx.beginPath();
+      ctx.arc(m.x, m.y - 3, 3.2, 0, TAU);
+      ctx.fill();
+    } else if (m.style === "cathedral") {
+      drawPolygon(ctx, m.footprint, "#4b4352", "#1a1423", 1.6);
+      rect(ctx, minX + 14, m.y - 16, maxX - minX - 20, 32, "#635a68");
+      rect(ctx, m.x - 10, minY + 6, 20, maxY - minY - 12, "#736976");
+      rect(ctx, minX + 2, m.y - 24, 16, 16, "#887e82");
+      rect(ctx, minX + 2, m.y + 8, 16, 16, "#887e82");
+      ctx.strokeStyle = "#1d1626";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(minX + 2, m.y - 24, 16, 16);
+      ctx.strokeRect(minX + 2, m.y + 8, 16, 16);
+      const rose = ctx.createRadialGradient(minX + 6, m.y, 1, minX + 6, m.y, 11);
+      rose.addColorStop(0, "#ffcf77aa");
+      rose.addColorStop(0.5, "#e06d9455");
+      rose.addColorStop(1, "#e06d9400");
+      ctx.fillStyle = rose;
+      ctx.beginPath();
+      ctx.arc(minX + 6, m.y, 11, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawOverheadMonuments(ctx, ox, oy) {
+    const endX = ox + game.vw + 60, endY = oy + game.vh + 80;
+    for (const m of town.monuments) {
+      if (m.x < ox - 70 || m.x > endX || m.y < oy - 70 || m.y > endY) continue;
+      ctx.save();
+      if (m.style === "tower") {
+        const deckY = m.y - 34;
+        const piers = (m.piers || []).map((p2) => ({
+          x: (p2[0][0] + p2[1][0]) / 2,
+          y: (p2[0][1] + p2[2][1]) / 2
+        }));
+        ctx.strokeStyle = "#1b1422";
+        ctx.lineWidth = 4.5;
+        for (const [a, b] of [
+          [0, 1],
+          [2, 3],
+          [0, 2],
+          [1, 3]
+        ]) {
+          if (!piers[a] || !piers[b]) continue;
+          ctx.beginPath();
+          ctx.moveTo(piers[a].x, piers[a].y);
+          ctx.quadraticCurveTo(
+            (piers[a].x + piers[b].x) / 2,
+            (piers[a].y + piers[b].y) / 2 - 22,
+            piers[b].x,
+            piers[b].y
+          );
+          ctx.stroke();
+        }
+        ctx.strokeStyle = "#7c676c";
+        ctx.lineWidth = 2.2;
+        for (const [a, b] of [
+          [0, 1],
+          [2, 3],
+          [0, 2],
+          [1, 3]
+        ]) {
+          if (!piers[a] || !piers[b]) continue;
+          ctx.beginPath();
+          ctx.moveTo(piers[a].x, piers[a].y);
+          ctx.quadraticCurveTo(
+            (piers[a].x + piers[b].x) / 2,
+            (piers[a].y + piers[b].y) / 2 - 22,
+            piers[b].x,
+            piers[b].y
+          );
+          ctx.stroke();
+        }
+        for (const pr of piers) {
+          ctx.strokeStyle = "#1b1422";
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.moveTo(pr.x, pr.y);
+          ctx.lineTo(m.x + (pr.x - m.x) * 0.34, deckY + (pr.y - m.y) * 0.25);
+          ctx.stroke();
+          ctx.strokeStyle = "#8a706e";
+          ctx.lineWidth = 3.2;
+          ctx.beginPath();
+          ctx.moveTo(pr.x, pr.y);
+          ctx.lineTo(m.x + (pr.x - m.x) * 0.34, deckY + (pr.y - m.y) * 0.25);
+          ctx.stroke();
+        }
+        rect(ctx, m.x - 17, deckY - 12, 34, 24, "#241d2d");
+        rect(ctx, m.x - 15, deckY - 10, 30, 20, "#4c3e4c");
+        ctx.strokeStyle = "#c99b6d";
+        ctx.lineWidth = 1.1;
+        ctx.strokeRect(m.x - 15, deckY - 10, 30, 20);
+        ctx.fillStyle = "#31273a";
+        ctx.beginPath();
+        ctx.moveTo(m.x - 10, deckY - 4);
+        ctx.lineTo(m.x + 10, deckY - 4);
+        ctx.lineTo(m.x + 2.5, deckY - 38);
+        ctx.lineTo(m.x - 2.5, deckY - 38);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = "#b58b67";
+        ctx.lineWidth = 0.9;
+        ctx.stroke();
+        const beacon = ctx.createRadialGradient(m.x, deckY - 38, 0.5, m.x, deckY - 38, 9);
+        beacon.addColorStop(0, "#ffe48f");
+        beacon.addColorStop(0.4, "#ffae5477");
+        beacon.addColorStop(1, "#ffae5400");
+        ctx.fillStyle = beacon;
+        ctx.beginPath();
+        ctx.arc(m.x, deckY - 38, 9, 0, TAU);
+        ctx.fill();
+      } else if (m.style === "obelisk") {
+        ctx.fillStyle = "#a3948b";
+        ctx.strokeStyle = "#1c1523";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(m.x - 3.6, m.y - 2);
+        ctx.lineTo(m.x + 3.6, m.y - 2);
+        ctx.lineTo(m.x + 1.8, m.y - 34);
+        ctx.lineTo(m.x - 1.8, m.y - 34);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#ffd66b";
+        ctx.beginPath();
+        ctx.moveTo(m.x - 1.8, m.y - 34);
+        ctx.lineTo(m.x + 1.8, m.y - 34);
+        ctx.lineTo(m.x, m.y - 40);
+        ctx.closePath();
+        ctx.fill();
+      } else if (m.style === "arch") {
+        rect(ctx, m.x - 14, m.y - 24, 28, 12, "#9a8d86");
+        rect(ctx, m.x - 15, m.y - 26, 30, 3.2, "#c2b3a6");
+        ctx.strokeStyle = "#1c1524";
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(m.x - 14, m.y - 24, 28, 12);
+      }
+      ctx.restore();
+    }
+  }
+  function drawRiverAndIslands(ctx, visible, firstCol, lastCol) {
+    const river2 = town.river;
+    const top2 = river2.top, bottom = river2.bottom, waterH = bottom - top2;
+    const northQuayTop = Y(canalRow) + 16;
+    const southQuayBot = Y(town.riverSouthRow) - 15;
+    const bridgeSet = new Set(river2.bridges.map((b) => b.col));
+    for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
+      const x = X(i), left2 = x - CELL_W / 2;
+      if (!visible(left2, northQuayTop - 16, CELL_W, southQuayBot - northQuayTop + 32)) continue;
+      const northKey = cellPlateKey(i, canalRow);
+      const approach2 = northApproaches[northKey] || northApproaches.square;
+      ctx.drawImage(approach2, left2, Y(canalRow), CELL_W, 26);
+      ctx.drawImage(plates.northQuay, left2, northQuayTop, CELL_W + 0.05, top2 - northQuayTop + 2);
+      const tileH = 135;
+      for (let wy = top2; wy < bottom; wy += tileH) {
+        const h = Math.min(tileH + 0.5, bottom - wy + 0.5);
+        ctx.drawImage(plates.riverWater, 0, 0, plates.riverWater.width, h / tileH * plates.riverWater.height, left2, wy, CELL_W + 0.05, h);
+      }
+      ctx.drawImage(plates.southQuay, left2, bottom - 2, CELL_W + 0.05, southQuayBot - bottom + 6);
+      ctx.strokeStyle = "#221c2c";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(left2, top2);
+      ctx.lineTo(left2 + CELL_W, top2);
+      ctx.moveTo(left2, bottom);
+      ctx.lineTo(left2 + CELL_W, bottom);
+      ctx.stroke();
+      ctx.strokeStyle = edgeStone;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    for (const bridge of river2.bridges) {
+      if (bridge.col < firstCol - 1 || bridge.col > lastCol + 1) continue;
+      const bx = bridge.x, hw = bridge.halfWidth;
+      if (!visible(bx - hw - 6, northQuayTop - 10, (hw + 6) * 2, southQuayBot - northQuayTop + 20)) continue;
+      const bTop = northQuayTop + 4, bBot = southQuayBot - 2;
+      ctx.drawImage(plates.riverBridge, bx - hw, bTop, hw * 2, bBot - bTop);
+      for (const side of [-1, 1]) {
+        const px = bx + side * (hw - 1);
+        rect(ctx, px - 1.2, bTop, 2.4, bBot - bTop, "#251f30");
+        rect(ctx, px - 0.5, bTop, 1, bBot - bTop, edgeStone);
+      }
+      markLane(ctx, bx, bTop, true, 14, bBot - bTop - 24, 19, 10);
+    }
+    for (const isl of river2.islands) {
+      if (!visible(isl.left - 24, isl.top - 16, isl.right - isl.left + 48, isl.bottom - isl.top + 32)) continue;
+      const iw = isl.right - isl.left, ih = isl.bottom - isl.top;
+      const prow = 24;
+      const islandPath = () => {
+        ctx.beginPath();
+        ctx.moveTo(isl.left + prow, isl.top);
+        ctx.lineTo(isl.right - prow, isl.top);
+        ctx.lineTo(isl.right, (isl.top + isl.bottom) / 2);
+        ctx.lineTo(isl.right - prow, isl.bottom);
+        ctx.lineTo(isl.left + prow, isl.bottom);
+        ctx.lineTo(isl.left, (isl.top + isl.bottom) / 2);
+        ctx.closePath();
+      };
+      ctx.save();
+      ctx.translate(0, 4);
+      islandPath();
+      ctx.fillStyle = "#101924aa";
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      islandPath();
+      ctx.clip();
+      rect(ctx, isl.left, isl.top, iw, ih, setts);
+      for (let col = Math.max(0, firstCol); col <= lastCol; col++) {
+        const cx = X(col) - CELL_W / 2, cy = Y(town.riverRow) - CELL_H / 2;
+        if (cx + CELL_W < isl.left || cx > isl.right) continue;
+        ctx.drawImage(plates[cellPlateKey(col, town.riverRow)], cx, cy, CELL_W + 0.03, CELL_H + 0.03);
+      }
+      rect(ctx, isl.left + 16, Y(town.riverRow) - 18, iw - 32, 36, asphalt);
+      rect(ctx, isl.left, isl.top, iw, 16, setts);
+      rect(ctx, isl.left, isl.bottom - 16, iw, 16, setts);
+      for (const bCol of [8, 10]) {
+        if (bridgeSet.has(bCol)) rect(ctx, X(bCol) - 20, isl.top, 40, ih, asphalt);
+      }
+      markLane(ctx, X(8), Y(town.riverRow), false, 30, X(10) - X(8) - 60, 19, 10);
+      ctx.restore();
+      ctx.save();
+      islandPath();
+      ctx.strokeStyle = "#1f1929";
+      ctx.lineWidth = 3.2;
+      ctx.stroke();
+      ctx.strokeStyle = edgeStone;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    for (const m of river2.moorings) {
+      if (!visible(m.x - 24, m.y - 24, 48, 48)) continue;
+      const isNorthFace = m.y > m.quay.y;
+      const edgeY = isNorthFace ? m.quay.y + 11 : m.quay.y - 11;
+      rect(ctx, m.x - 16, edgeY - 2, 32, 4, "#3b2824");
+      rect(ctx, m.x - 15, edgeY - 1.2, 30, 2.2, "#7c5845");
+      rect(ctx, m.quay.x - 12, m.quay.y - 5, 24, 10, "#463d4f");
+      ctx.strokeStyle = "#1d1626";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(m.quay.x - 12, m.quay.y - 5, 24, 10);
+      for (const dx of [-10, 10]) {
+        ctx.fillStyle = "#1a1423";
+        ctx.beginPath();
+        ctx.arc(m.quay.x + dx, edgeY, 1.8, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#d9a96c";
+        ctx.beginPath();
+        ctx.arc(m.quay.x + dx, edgeY - 0.3, 0.9, 0, TAU);
+        ctx.fill();
+      }
+      const glow = ctx.createRadialGradient(m.quay.x, m.quay.y, 1, m.quay.x, m.quay.y, 12);
+      glow.addColorStop(0, "#6de5cf48");
+      glow.addColorStop(1, "#6de5cf00");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(m.quay.x, m.quay.y, 12, 0, TAU);
+      ctx.fill();
     }
   }
   function drawTown(ox, oy, ctx, width2, height2) {
     const { firstCol, lastCol, firstRow, lastRow } = town.visibleCells(ox, oy, width2, height2, CELL_W / 2);
     const endX = ox + width2 + 1, endY = oy + height2 + 1;
     const visible = (x, y, w, h) => x + w >= ox && x <= endX && y + h >= oy && y <= endY;
-    for (let j = Math.max(0, firstRow); j <= lastRow; j++)
+    for (let j = Math.max(0, firstRow); j <= lastRow; j++) {
+      if (j === town.riverRow) continue;
       for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
         const x = X(i) - CELL_W / 2, y = Y(j) - CELL_H / 2;
         if (visible(x, y, CELL_W, CELL_H))
-          ctx.drawImage(plates[city[j][i]], x, y, CELL_W + 0.03, CELL_H + 0.03);
+          ctx.drawImage(plates[cellPlateKey(i, j)], x, y, CELL_W + 0.03, CELL_H + 0.03);
       }
-    for (let j = Math.max(0, firstRow); j <= lastRow; j++)
+    }
+    for (let j = Math.max(0, firstRow); j <= lastRow; j++) {
+      if (j === town.riverRow) continue;
       for (let i = Math.max(1, firstCol); i <= lastCol; i++) {
-        const x = X(i) - CELL_W / 2, y = Y(j), l = city[j][i - 1], r = city[j][i];
+        const x = X(i) - CELL_W / 2, y = Y(j);
         if (!visible(x - 14, y - CELL_H / 2, 28, CELL_H)) continue;
-        const road = getJoin("road:" + l + r, plates[l], plates[r], true, CELL_H / 2 - 21, 42, 14);
-        ctx.drawImage(road, x - 14, y - 21, 28, 42);
+        const l = cellPlateKey(i - 1, j), r = cellPlateKey(i, j);
+        const lMeta = town.cellMeta(i - 1, j);
+        if (lMeta.wideArms.e) {
+          const road = getJoin("road:" + l + r, plates[l], plates[r], true, CELL_H / 2 - 21, 42, 14);
+          ctx.drawImage(road, x - 14, y - 21, 28, 42);
+        }
         sideAlley(ctx, x, y, l, r, false);
         drawAlleyMouth(ctx, x, y, l, r);
         sideAlley(ctx, x, y, l, r, true);
       }
-    for (let j = Math.max(1, firstRow); j <= lastRow; j++)
+    }
+    for (let j = Math.max(1, firstRow); j <= lastRow; j++) {
+      if (j === town.riverRow || j === town.riverSouthRow) continue;
       for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
-        if (j === canalRow + 1) continue;
-        const x = X(i), y = Y(j) - CELL_H / 2, n = city[j - 1][i], s = city[j][i];
+        const x = X(i), y = Y(j) - CELL_H / 2;
         if (!visible(x - CELL_W / 2, y - 12, CELL_W, 24)) continue;
-        const road = getJoin(
-          "cross:" + n + s,
-          plates[n],
-          plates[s],
-          false,
-          CELL_W / 2 - kerbX - 5,
-          2 * (kerbX + 5),
-          12
-        );
-        ctx.drawImage(road, x - kerbX - 5, y - 12, 2 * (kerbX + 5), 24);
+        const n = cellPlateKey(i, j - 1), s = cellPlateKey(i, j);
+        const nMeta = town.cellMeta(i, j - 1);
+        if (nMeta.wideArms.s) {
+          const road = getJoin(
+            "cross:" + n + s,
+            plates[n],
+            plates[s],
+            false,
+            CELL_W / 2 - kerbX - 5,
+            2 * (kerbX + 5),
+            12
+          );
+          ctx.drawImage(road, x - kerbX - 5, y - 12, 2 * (kerbX + 5), 24);
+        }
         backLane(ctx, x, y);
       }
-    if (visible(0, canalTop - 5, W, canalBottom - canalTop + 11)) drawCanal(ctx, visible, firstCol, lastCol);
-    for (let j = Math.max(0, firstRow); j <= lastRow; j++)
-      for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
-        const x = X(i), y = Y(j);
-        if (visible(x + 50, y - 1, CELL_W - 100, 2)) markLane(ctx, x, y, false, 55, 235, 19, 10);
-        if (j !== canalRow && visible(x - 1, y + 34, 2, CELL_H - 68))
-          markLane(ctx, x, y, true, 36, 191, 19, 10);
-        if (j === 0 && visible(x - 1, 0, 2, y - 34)) markLane(ctx, x, 0, true, 5, y - 34, 19, 10);
-        if (j === canalRow && visible(x - 1, y + 29, 2, CELL_H - 58))
-          markLane(ctx, x, y, true, 30, 198, 19, 10);
-      }
-  }
-  function northQuayPath(ctx, x, top2, side) {
-    const end = x + side * CELL_W / 2;
-    ctx.moveTo(end, top2);
-    ctx.lineTo(x + side * 26, top2);
-    ctx.quadraticCurveTo(x + side * 14, top2, x + side * 13, top2 + 10);
-  }
-  function drawCanal(ctx, visible, firstCol, lastCol) {
-    const canal = plates.canal, top2 = canalTop, ht = canalBottom - canalTop + 5;
-    const northRow = canalRow, southRow = canalRow + 1, remaining = ht - 10;
-    for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
-      const x = X(i), left2 = x - CELL_W / 2, north = Y(northRow), south = Y(southRow);
-      if (!visible(left2, top2 - 10, CELL_W, ht + 13)) continue;
-      const northKey = city[northRow][i], southKey = city[southRow][i];
-      const approach2 = northApproaches[northKey], southPlate = plates[southKey];
-      ctx.drawImage(approach2, left2, north, CELL_W, 26);
-      ctx.drawImage(
-        canal,
-        0,
-        10 * plateScale,
-        canal.width,
-        remaining * plateScale,
-        left2,
-        top2 + 10,
-        CELL_W + 0.03,
-        remaining
-      );
-      for (const side of [-1, 1]) {
-        const end = x + side * CELL_W / 2;
-        ctx.save();
-        ctx.beginPath();
-        northQuayPath(ctx, x, top2, side);
-        ctx.lineTo(end, top2 + 10);
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(canal, 0, 0, canal.width, 10 * plateScale, left2, top2, CELL_W + 0.03, 10.05);
-        ctx.restore();
-        ctx.save();
-        ctx.beginPath();
-        northQuayPath(ctx, x, top2, side);
-        ctx.strokeStyle = "#242031";
-        ctx.lineWidth = 2.2;
-        ctx.stroke();
-        ctx.strokeStyle = edgeStone;
-        ctx.lineWidth = 1.15;
-        ctx.stroke();
-        ctx.restore();
-      }
-      const entry = getJoin(
-        "bridge-entry:" + northKey,
-        approach2,
-        canal,
-        false,
-        CELL_W / 2 - 12.6,
-        25.2,
-        3.6,
-        10
-      );
-      ctx.drawImage(entry, x - 12.6, top2 + 6.4, 25.2, 7.2);
-      const exit = getJoin(
-        "bridge-exit:" + southKey,
-        canal,
-        southPlate,
-        false,
-        0,
-        CELL_W,
-        3.9,
-        CELL_H / 2 + top2 + ht - south
-      );
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(left2, top2 + ht - 3.9);
-      ctx.lineTo(x - 31, top2 + ht - 3.9);
-      ctx.lineTo(x - 23, top2 + ht);
-      ctx.lineTo(x + 23, top2 + ht);
-      ctx.lineTo(x + 31, top2 + ht - 3.9);
-      ctx.lineTo(left2 + CELL_W, top2 + ht - 3.9);
-      ctx.lineTo(left2 + CELL_W, top2 + ht + 3.9);
-      ctx.lineTo(left2, top2 + ht + 3.9);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(exit, left2, top2 + ht - 3.9, CELL_W, 7.8);
-      ctx.restore();
     }
-    const seam = getJoin("canal", canal, canal, true, 0, ht, 10);
-    for (let i = Math.max(1, firstCol); i <= lastCol; i++) {
-      const x = X(i) - CELL_W / 2;
-      if (!visible(x - 13, top2 - 9, 26, ht + 12)) continue;
-      const l = city[canalRow][i - 1], r = city[canalRow][i];
-      const waterRoad = getJoin("quayside:" + l + r, northApproaches[l], northApproaches[r], true, 0, 16, 13);
-      ctx.drawImage(waterRoad, x - 13, Y(canalRow), 26, 16);
-      ctx.drawImage(seam, 0, 1 * plateScale, seam.width, (ht - 4) * plateScale, x - 10, top2 + 1, 20, ht - 4);
+    for (const park2 of town.parks || []) drawParkBlock(ctx, park2, visible);
+    const parkCell = (c, r) => (town.parks || []).some((pk) => c >= pk.cols[0] && c <= pk.cols[1] && r >= pk.rows[0] && r <= pk.rows[1]);
+    for (let j = Math.max(0, firstRow); j <= lastRow; j++) {
+      if (j === town.riverRow) continue;
+      for (let i = Math.max(0, firstCol); i <= lastCol; i++) {
+        const meta = town.cellMeta(i, j);
+        const cx = X(i), cy = Y(j);
+        const isPk = parkCell(i, j);
+        if (!meta.allArms.n && j > 0 && j !== town.riverSouthRow) drawMissingArmCover(ctx, cx, cy, "n", isPk);
+        if (!meta.allArms.s && j < town.rows - 1 && j !== canalRow) drawMissingArmCover(ctx, cx, cy, "s", isPk);
+        if (!meta.allArms.w && i > 0) drawMissingArmCover(ctx, cx, cy, "w", isPk);
+        if (!meta.allArms.e && i < town.cols - 1) drawMissingArmCover(ctx, cx, cy, "e", isPk);
+      }
+    }
+    if (visible(0, Y(canalRow) - 10, W, Y(town.riverSouthRow) - Y(canalRow) + 20))
+      drawRiverAndIslands(ctx, visible, firstCol, lastCol);
+    for (const edge of town.roads.edges) {
+      if (edge.class !== "alley") continue;
+      const na = town.roadNodeById.get(edge.a), nb = town.roadNodeById.get(edge.b);
+      const minX = Math.min(na.x, nb.x) - 28, minY = Math.min(na.y, nb.y) - 28;
+      const bw = Math.abs(nb.x - na.x) + 56, bh = Math.abs(nb.y - na.y) + 56;
+      if (visible(minX, minY, bw, bh)) drawAlleyOverlay(ctx, edge);
+    }
+    const roundabouts = town.roads.nodes.filter((n) => n.kind === "roundabout");
+    for (const rb of roundabouts) {
+      if (visible(rb.x - rb.outerRadius - 8, rb.y - rb.outerRadius - 8, (rb.outerRadius + 8) * 2, (rb.outerRadius + 8) * 2))
+        drawRoundabout(ctx, rb);
+    }
+    for (const m of town.monuments) drawMonumentGround(ctx, m, visible);
+    for (const edge of town.roads.edges) {
+      if (edge.class === "alley" || edge.bridge) continue;
+      const na = town.roadNodeById.get(edge.a), nb = town.roadNodeById.get(edge.b);
+      if (na.row === town.riverRow && nb.row === town.riverRow) continue;
+      const horiz = Math.abs(na.y - nb.y) < 1;
+      const dbl = edge.class === "avenue";
+      if (horiz) {
+        const leftN = na.x < nb.x ? na : nb, rightN = na.x < nb.x ? nb : na;
+        const startOff = leftN.kind === "roundabout" ? leftN.outerRadius + 10 : 48;
+        const endOff = rightN.kind === "roundabout" ? rightN.outerRadius + 10 : 48;
+        const span = rightN.x - leftN.x;
+        if (span > startOff + endOff && visible(leftN.x + startOff, leftN.y - 2, span - startOff - endOff, 4))
+          markLane(ctx, leftN.x, leftN.y, false, startOff, span - endOff, 19, 10, dbl);
+      } else {
+        const topN = na.y < nb.y ? na : nb, botN = na.y < nb.y ? nb : na;
+        const startOff = topN.kind === "roundabout" ? topN.outerRadius + 10 : 36;
+        const endOff = botN.kind === "roundabout" ? botN.outerRadius + 10 : 36;
+        const span = botN.y - topN.y;
+        if (span > startOff + endOff && visible(topN.x - 2, topN.y + startOff, 4, span - startOff - endOff))
+          markLane(ctx, topN.x, topN.y, true, startOff, span - endOff, 19, 10, dbl);
+      }
     }
   }
   var propSprites = /* @__PURE__ */ new WeakMap();
@@ -5971,65 +8325,27 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
 
   // src/world/navigation.js
-  function streetAnchor(point) {
-    const i = town.cellAt(point.x, 0).col, j = town.cellAt(0, point.y).row;
-    const horizontal = Math.abs(point.y - Y(j)) < Math.abs(point.x - X(i));
-    const a = horizontal ? { x: point.x, y: Y(j) } : { x: X(i), y: point.y };
-    const raw = horizontal ? (point.x - X(0)) / CELL_W : (point.y - Y(0)) / CELL_H;
-    const ends = [
-      .../* @__PURE__ */ new Set([
-        clamp(Math.floor(raw), 0, (horizontal ? town.cols : town.rows) - 1),
-        clamp(Math.ceil(raw), 0, (horizontal ? town.cols : town.rows) - 1)
-      ])
-    ].map((k) => horizontal ? { x: X(k), y: Y(j) } : { x: X(i), y: Y(k) });
-    return { a, ends, horizontal };
-  }
   var routeCache;
   function directions(origin = p) {
     const end = goal();
     if (!end) return null;
-    if (routeCache && routeCache.vehicle === game.ride && routeCache.end === end && dist(routeCache.start, origin) < 3 && dist(routeCache.lastEnd, end) < 2)
+    const onFoot = !game.ride;
+    const vehicleHalfWidth = game.ride?.halfWidth ?? sedanHalfWidth;
+    if (routeCache && routeCache.vehicle === game.ride && routeCache.end === end && routeCache.vehicleHalfWidth === vehicleHalfWidth && dist(routeCache.start, origin) < 3 && dist(routeCache.lastEnd, end) < 2)
       return routeCache;
-    const start = { x: origin.x, y: origin.y }, finish = { x: end.x, y: end.y }, a = streetAnchor(start), b = streetAnchor(finish);
-    let options = [];
-    if (a.horizontal && b.horizontal && a.a.y === b.a.y || !a.horizontal && !b.horizontal && a.a.x === b.a.x)
-      options.push([start, a.a, b.a, finish]);
-    for (const u of a.ends)
-      for (const v of b.ends)
-        for (const bend of [
-          { x: u.x, y: v.y },
-          { x: v.x, y: u.y }
-        ])
-          options.push([start, a.a, u, bend, v, b.a, finish]);
-    const distanceToDoor = dist(start, finish);
-    if (distanceToDoor < 37) options = [[start, finish]];
-    else if (!game.ride && distanceToDoor < 115) {
-      let clear = true;
-      const samples = Math.ceil(distanceToDoor / 3);
-      for (let i = 1; i < samples; i++) {
-        const f = i / samples;
-        if (blocked(start.x + (finish.x - start.x) * f, start.y + (finish.y - start.y) * f, 2.6)) {
-          clear = false;
-          break;
-        }
-      }
-      if (clear) options = [[start, finish]];
-    }
-    let bestDistance = Infinity, path;
-    for (const candidate of options) {
-      const clean = [candidate[0]];
-      for (const node of candidate.slice(1)) if (dist(node, clean[clean.length - 1]) > 0.1) clean.push(node);
-      const length = clean.slice(1).reduce((sum, node, i) => sum + dist(node, clean[i]), 0);
-      if (length < bestDistance) {
-        bestDistance = length;
-        path = clean;
-      }
-    }
-    routeCache = { start, end, vehicle: game.ride, lastEnd: finish, path };
+    const start = { x: origin.x, y: origin.y }, finish = { x: end.x, y: end.y };
+    const path = findRoute(town, start, finish, { onFoot, vehicleHalfWidth, isBlocked: blocked });
+    routeCache = { start, end, vehicle: game.ride, vehicleHalfWidth, lastEnd: finish, path };
     return routeCache;
   }
 
   // src/world/rail.js
+  function drawRingTrains(ctx, ring2, ox, oy) {
+    void ctx;
+    void ring2;
+    void ox;
+    void oy;
+  }
   var leftPier = 602;
   var rightPier = 898;
   var bay;
@@ -6166,9 +8482,16 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     streetSpans.set(section, strip);
     return strip;
   }
-  function drawRailLayer(row, firstCol, lastCol, overhead, ox) {
+  function drawHorizontalLeg(row, firstCol, lastCol, overhead) {
+    const ring2 = town.ring;
+    const minC = Math.max(firstCol, ring2.minCol), maxC = Math.min(lastCol, ring2.maxCol);
+    if (minC > maxC) return;
     const top2 = Y(row) - CELL_H / 2, start = overhead ? railTop : deckBottom, end = overhead ? deckBottom : foot, y = top2 + start * railScaleY, height2 = (end - start) * railScaleY;
-    for (let col = firstCol; col <= lastCol; col++) {
+    g.save();
+    g.beginPath();
+    g.rect(ring2.left + ring2.cornerR - 2, y - 4, ring2.right - ring2.left - 2 * ring2.cornerR + 4, height2 + 8);
+    g.clip();
+    for (let col = minC; col <= maxC; col++) {
       const x = X(col) - CELL_W / 2;
       if (town.blocks[row][col] === "market") {
         const rail = marketForeground();
@@ -6188,23 +8511,188 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         g.drawImage(strip, 0, start - railTop, strip.width, end - start, x, y, CELL_W + 0.02, height2);
       }
     }
-    if (!overhead) return;
-    const { head, carLength, gap, count } = trainPosition(town.lines.get(row), town.width, game.time);
-    const h = carLength * artwork.metro.height / artwork.metro.width;
-    for (let i = 0; i < count; i++) {
-      const x = head - carLength - i * (carLength + gap);
-      if (x + carLength >= ox && x <= ox + game.vw) g.drawImage(artwork.metro, x, y + 1.5 - h, carLength, h);
+    g.restore();
+  }
+  function drawVerticalPier(pier) {
+    const deckLift = town.ring.deckLift;
+    const topY = pier.y - deckLift + 6;
+    const h = pier.y - topY;
+    rect(g, pier.x - 4.5, pier.y - 2.6, 9, 5.2, "#171220b8");
+    rect(g, pier.x - 3.6, pier.y - 3.6, 7.2, 4.4, "#4b4050");
+    rect(g, pier.x - 2.8, topY, 5.6, h - 2.5, "#241d2e");
+    rect(g, pier.x - 1.9, topY, 3.8, h - 2.5, "#423647");
+    rect(g, pier.x - 1.7, topY, 0.9, h - 2.5, "#876b64");
+    g.strokeStyle = "#191323";
+    g.lineWidth = 0.7;
+    g.beginPath();
+    for (let sy = topY + 4; sy < pier.y - 8; sy += 9) {
+      g.moveTo(pier.x - 2, sy);
+      g.lineTo(pier.x + 2, sy + 7);
+      g.moveTo(pier.x + 2, sy);
+      g.lineTo(pier.x - 2, sy + 7);
+    }
+    g.stroke();
+  }
+  function drawStationGround(st) {
+    const sx = st.street.x, sy = st.street.y;
+    rect(g, sx - 11, sy - 5, 22, 10, "#243531cc");
+    g.strokeStyle = "#5cb88a";
+    g.lineWidth = 0.9;
+    g.strokeRect(sx - 11, sy - 5, 22, 10);
+    const dx = st.stop.x - sx, dy = st.stop.y - town.ring.deckLift - sy;
+    g.strokeStyle = "#1a1424";
+    g.lineWidth = 5.5;
+    g.beginPath();
+    g.moveTo(sx, sy);
+    g.lineTo(sx + dx * 0.45, sy + dy * 0.45);
+    g.stroke();
+    g.strokeStyle = "#7c696d";
+    g.lineWidth = 3.2;
+    g.stroke();
+    const glow = g.createRadialGradient(sx, sy, 0.5, sx, sy, 10);
+    glow.addColorStop(0, "#76e8b055");
+    glow.addColorStop(1, "#76e8b000");
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(sx, sy, 10, 0, TAU);
+    g.fill();
+  }
+  function drawStationOverhead(st) {
+    const ring2 = town.ring;
+    const x = st.stop.x, y = st.stop.y - ring2.deckLift;
+    const horiz = Math.abs(st.stop.y - ring2.top) < 10 || Math.abs(st.stop.y - ring2.bottom) < 10;
+    const pw = horiz ? 56 : 18, ph = horiz ? 17 : 56;
+    rect(g, x - pw / 2, y - ph / 2, pw, ph, "#1b2829");
+    rect(g, x - pw / 2 + 1.2, y - ph / 2 + 1.2, pw - 2.4, ph - 2.4, "#2d4c46");
+    g.strokeStyle = "#8ab49d";
+    g.lineWidth = 0.85;
+    g.strokeRect(x - pw / 2 + 1.2, y - ph / 2 + 1.2, pw - 2.4, ph - 2.4);
+    for (const off of [-16, 0, 16]) {
+      const lx = horiz ? x + off : x, ly = horiz ? y : y + off;
+      const glow = g.createRadialGradient(lx, ly, 0.5, lx, ly, 7);
+      glow.addColorStop(0, "#ffe49499");
+      glow.addColorStop(1, "#ffe49400");
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(lx, ly, 7, 0, TAU);
+      g.fill();
+    }
+  }
+  function drawVerticalAndCornerDeck(ox, oy) {
+    const ring2 = town.ring;
+    const lift = ring2.deckLift;
+    const viewLeft = ox - 40, viewRight = ox + game.vw + 40;
+    const viewTop = oy - 50, viewBottom = oy + game.vh + 70;
+    const pts = ring2.points;
+    const drawDeckStroke = (points, width2, color) => {
+      g.beginPath();
+      g.moveTo(points[0].x, points[0].y - lift);
+      for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y - lift);
+      g.strokeStyle = color;
+      g.lineWidth = width2;
+      g.lineCap = "butt";
+      g.lineJoin = "round";
+      g.stroke();
+    };
+    const isStraightHoriz = (a, b) => Math.abs(a.y - b.y) < 0.5 && Math.min(a.x, b.x) >= ring2.left + ring2.cornerR - 1 && Math.max(a.x, b.x) <= ring2.right - ring2.cornerR + 1;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (isStraightHoriz(a, b)) continue;
+      const minX = Math.min(a.x, b.x) - 16, maxX = Math.max(a.x, b.x) + 16;
+      const minY = Math.min(a.y, b.y) - lift - 20, maxY = Math.max(a.y, b.y) - lift + 26;
+      if (maxX < viewLeft || minX > viewRight || maxY < viewTop || minY > viewBottom) continue;
+      g.save();
+      g.translate(0, 7);
+      drawDeckStroke([a, b], 15, "#191322");
+      g.translate(0, -2.5);
+      drawDeckStroke([a, b], 13.5, "#362c3e");
+      g.restore();
+      drawDeckStroke([a, b], 14.5, "#1c1626");
+      drawDeckStroke([a, b], 11.6, "#3a3044");
+      drawDeckStroke([a, b], 8.6, "#2a2234");
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      for (const side of [-2.4, 2.4]) {
+        g.beginPath();
+        g.moveTo(a.x + nx * side, a.y - lift + ny * side);
+        g.lineTo(b.x + nx * side, b.y - lift + ny * side);
+        g.strokeStyle = "#8f8394";
+        g.lineWidth = 0.85;
+        g.stroke();
+      }
+      for (const side of [-6.3, 6.3]) {
+        g.beginPath();
+        g.moveTo(a.x + nx * side, a.y - lift + ny * side);
+        g.lineTo(b.x + nx * side, b.y - lift + ny * side);
+        g.strokeStyle = side < 0 ? "#9c7c71" : "#221a2d";
+        g.lineWidth = 1;
+        g.stroke();
+      }
+      const river2 = town.river;
+      if (river2 && Math.abs(a.x - b.x) < 1) {
+        const segTop = Math.min(a.y, b.y), segBot = Math.max(a.y, b.y);
+        if (segBot > river2.top && segTop < river2.bottom) {
+          const bx = a.x;
+          const rTop = Math.max(segTop, river2.top) - lift;
+          const rBot = Math.min(segBot, river2.bottom) - lift;
+          g.strokeStyle = "#7a6368";
+          g.lineWidth = 1.3;
+          for (const side of [-7.2, 7.2]) {
+            g.beginPath();
+            for (let ry = rTop; ry < rBot; ry += 18) {
+              g.moveTo(bx + side, ry);
+              g.lineTo(bx + side, Math.min(rBot, ry + 18));
+              g.moveTo(bx + side, ry);
+              g.lineTo(bx + side * 0.55, Math.min(rBot, ry + 9));
+            }
+            g.stroke();
+          }
+        }
+      }
     }
   }
   function visibleRails(ox, oy) {
-    const { firstRow, lastRow, firstCol, lastCol } = town.visibleCells(ox, oy - 18, game.vw, game.vh + 36);
+    const ring2 = town.ring;
+    if (!ring2) return [];
+    const { firstCol, lastCol } = town.visibleCells(ox, oy - 24, game.vw, game.vh + 64);
     const rails = [];
-    for (let row = firstRow; row <= lastRow; row++) {
+    for (const row of [ring2.northRow, ring2.southRow]) {
+      if (row == null) continue;
       const y = Y(row) + pierDepth;
-      if (!town.lines.has(row) || y < oy || Y(row) - CELL_H / 2 + railTop * railScaleY - 18 > oy + game.vh)
-        continue;
-      rails.push({ y, draw: (overhead) => drawRailLayer(row, firstCol, lastCol, overhead, ox) });
+      if (y < oy - 12 || Y(row) - CELL_H / 2 + railTop * railScaleY - 22 > oy + game.vh) continue;
+      rails.push({
+        y,
+        draw: (overhead) => drawHorizontalLeg(row, firstCol, lastCol, overhead)
+      });
     }
+    for (const pier of ring2.piers || []) {
+      if (pier.orientation !== "vertical") continue;
+      if (pier.x < ox - 16 || pier.x > ox + game.vw + 16 || pier.y < oy - 12 || pier.y - ring2.deckLift > oy + game.vh + 16)
+        continue;
+      rails.push({
+        y: pier.y,
+        draw: (overhead) => {
+          if (!overhead) drawVerticalPier(pier);
+        }
+      });
+    }
+    for (const st of ring2.stations || []) {
+      const sx = st.stop.x, sy = st.stop.y;
+      if (sx < ox - 50 || sx > ox + game.vw + 50 || sy < oy - 60 || sy - ring2.deckLift > oy + game.vh + 60)
+        continue;
+      rails.push({
+        y: st.street.y - 3,
+        draw: (overhead) => overhead ? drawStationOverhead(st) : drawStationGround(st)
+      });
+    }
+    rails.push({
+      y: -1e9,
+      draw: (overhead) => {
+        if (!overhead) return;
+        drawVerticalAndCornerDeck(ox, oy);
+        drawRingTrains(g, ring2, ox, oy);
+      }
+    });
     return rails;
   }
 
@@ -6290,8 +8778,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     const width2 = g.measureText(s).width + 5;
     const center = Math.max(viewportLeft + width2 / 2 + 1, Math.min(x, viewportLeft + game.vw - width2 / 2 - 1));
     for (const marker of markers.sort((a, b) => b.y - a.y))
-      if (Math.abs(marker.x - center) < width2 / 2 + 6 && Math.abs(marker.y - y) < 11)
-        y = marker.y - 11;
+      if (Math.abs(marker.x - center) < width2 / 2 + 6 && Math.abs(marker.y - y) < 11) y = marker.y - 11;
     rect(g, center - width2 / 2, y - 5, width2, 7, "#201728");
     rect(g, center - width2 / 2 + 0.45, y - 4.55, width2 - 0.9, 6.1, "#ffe7bc");
     g.fillStyle = "#ffe7bc";
@@ -6305,7 +8792,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     g.restore();
   }
   function pin(j, x, y, small = false) {
-    let r = small ? 1.3 : 3.4;
+    const r = small ? 1.35 : 3.4;
     g.fillStyle = "#191825";
     g.beginPath();
     g.arc(x, y, r + 0.55, 0, TAU);
@@ -6322,37 +8809,105 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function map(left2, top2, w, h, full, origin = p) {
     rect(g, left2 - 2, top2 - 2, w + 4, h + 4, "#d3b991");
-    rect(g, left2, top2, w, h, "#363343");
-    const inset = full ? 5 : 2;
+    rect(g, left2, top2, w, h, "#302d3d");
+    const inset = full ? 5 : 1.5;
     const scale = Math.min((w - 2 * inset) / W, (h - 2 * inset) / H);
     const mw = W * scale, mh = H * scale;
     const x = left2 + (w - mw) / 2, y = top2 + (h - mh) / 2;
     g.save();
-    const roadWidth = full ? 1.4 : 0.45;
-    for (const rx of roadsX) rect(g, x + rx * scale - roadWidth / 2, top2, roadWidth, h, "#8a8390");
-    for (const ry of roadsY) rect(g, left2, y + ry * scale - roadWidth / 2, w, roadWidth, "#8a8390");
-    rect(g, left2, y + (canalTop + 23) * scale, w, (canalBottom - canalTop - 49) * scale, "#397483");
-    const bridgeWidth = Math.max(1, 28 * scale);
-    for (const rx of roadsX)
-      rect(
-        g,
-        x + rx * scale - bridgeWidth / 2,
-        y + (canalTop + 23) * scale,
-        bridgeWidth,
-        (canalBottom - canalTop - 49) * scale,
-        "#a39a99"
-      );
+    for (const pk of town.parks || []) {
+      const px2 = x + (X(pk.cols[0]) - CELL_W / 2) * scale;
+      const py2 = y + (Y(pk.rows[0]) - CELL_H / 2) * scale;
+      const pw = (pk.cols[1] - pk.cols[0] + 1) * CELL_W * scale;
+      const ph = (pk.rows[1] - pk.rows[0] + 1) * CELL_H * scale;
+      rect(g, px2, py2, pw, ph, "#244236");
+    }
+    const river2 = town.river;
+    if (river2) {
+      rect(g, left2, y + river2.top * scale, w, (river2.bottom - river2.top) * scale, "#2f6c7d");
+      for (const isl of river2.islands) {
+        rect(
+          g,
+          x + isl.left * scale,
+          y + isl.top * scale,
+          (isl.right - isl.left) * scale,
+          (isl.bottom - isl.top) * scale,
+          "#484354"
+        );
+      }
+    }
+    for (const [cls, width2, color] of [
+      ["alley", full ? 0.55 : 0.22, "#655f70"],
+      ["street", full ? 1.15 : 0.38, "#8a8390"],
+      ["avenue", full ? 1.75 : 0.55, "#aba4b0"]
+    ]) {
+      g.beginPath();
+      for (const e of town.roads.edges) {
+        if (e.class !== cls) continue;
+        const na = town.roadNodeById.get(e.a), nb = town.roadNodeById.get(e.b);
+        g.moveTo(x + na.x * scale, y + na.y * scale);
+        g.lineTo(x + nb.x * scale, y + nb.y * scale);
+      }
+      g.strokeStyle = color;
+      g.lineWidth = width2;
+      g.lineCap = "round";
+      g.stroke();
+    }
+    for (const node of town.roads.nodes) {
+      if (node.kind !== "roundabout") continue;
+      const rx = x + node.x * scale, ry = y + node.y * scale;
+      g.beginPath();
+      g.arc(rx, ry, Math.max(full ? 2.4 : 0.9, node.outerRadius * scale), 0, TAU);
+      g.fillStyle = "#b3acb8";
+      g.fill();
+      g.beginPath();
+      g.arc(rx, ry, Math.max(full ? 1.1 : 0.4, node.radius * scale), 0, TAU);
+      g.fillStyle = "#342f40";
+      g.fill();
+    }
+    if (town.ring?.points?.length) {
+      g.beginPath();
+      const pts = town.ring.points;
+      g.moveTo(x + pts[0].x * scale, y + pts[0].y * scale);
+      for (let i = 1; i < pts.length; i++) g.lineTo(x + pts[i].x * scale, y + pts[i].y * scale);
+      g.strokeStyle = "#56a882";
+      g.lineWidth = full ? 1.05 : 0.35;
+      g.stroke();
+      if (full) {
+        g.fillStyle = "#a5f0c5";
+        for (const st of town.ring.stations) {
+          g.beginPath();
+          g.arc(x + st.stop.x * scale, y + st.stop.y * scale, 1.45, 0, TAU);
+          g.fill();
+        }
+      }
+    }
+    if (full) {
+      for (const m of town.monuments) {
+        if (!m.footprint?.length) continue;
+        g.beginPath();
+        g.moveTo(x + m.footprint[0][0] * scale, y + m.footprint[0][1] * scale);
+        for (let i = 1; i < m.footprint.length; i++)
+          g.lineTo(x + m.footprint[i][0] * scale, y + m.footprint[i][1] * scale);
+        g.closePath();
+        g.fillStyle = "#e8be7288";
+        g.fill();
+        g.strokeStyle = "#ffdf99cc";
+        g.lineWidth = 0.55;
+        g.stroke();
+      }
+    }
     const nav = directions(origin);
     if (nav) {
       g.beginPath();
       g.moveTo(x + origin.x * scale, y + origin.y * scale);
       for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
       g.strokeStyle = "#ffe080";
-      g.lineWidth = full ? 1.1 : 0.42;
+      g.lineWidth = full ? 1.15 : 0.45;
       g.stroke();
     }
     for (const j of jobs) if (!done.has(j.id)) pin(j, x + j.x * scale, y + j.y * scale, !full);
-    let q = goal();
+    const q = goal();
     if (q) {
       g.strokeStyle = "#ffe18a";
       g.lineWidth = full ? 1 : 0.45;
@@ -6381,14 +8936,34 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     rect(g, 0, 0, game.vw, game.vh, "#151521eb");
     const area = $("#mapWindow").getBoundingClientRect();
     const unit2 = game.vw / innerWidth;
-    const w = Math.min(area.width * unit2, area.height * unit2 * W / H, 225);
+    const w = Math.min(area.width * unit2, area.height * unit2 * W / H, 235);
     const h = w * H / W;
     const x = (area.left + area.width / 2) * unit2 - w / 2;
     const y = (area.top + area.height / 2) * unit2 - h / 2;
     map(x, y, w, h, true, origin);
   }
+  function districtKey(x, y) {
+    const river2 = town.river;
+    if (river2 && y >= river2.top && y <= river2.bottom) {
+      for (const isl of river2.islands)
+        if (x >= isl.left && x <= isl.right && y >= isl.top && y <= isl.bottom) return "districtIle";
+      return "districtFerre";
+    }
+    const { col, row } = town.cellAt(x, y);
+    if (row <= town.canalRow) {
+      if (row <= 1 && col >= 5 && col <= 10) return "districtButte";
+      if (col <= 4) return row <= 4 ? "districtArc" : "districtQuaisOuest";
+      if (col <= 8) return row <= 4 ? "districtOpera" : "districtContrainte";
+      if (col >= 11 && row <= 3) return "districtParcNord";
+      if (col >= 14) return "districtFaubourgEst";
+      return "districtMarais";
+    }
+    if (col <= 5) return "districtTour";
+    if (col <= 10) return "districtRiveGauche";
+    return "districtDocks";
+  }
   function district() {
-    return p.y < canalTop ? p.x < 548 ? "Les Abattoirs" : p.x < 1030 ? "Centre-Ville" : "Quartier des Pr\xEAts" : p.y < canalBottom ? "Canal Saint-Proc\xE8s" : p.x < 825 ? "Les Docks" : "La Foire";
+    return t(districtKey(p.x, p.y));
   }
   function draw() {
     if (interior) {
@@ -6459,6 +9034,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       else dude(a.o, a.o === p);
     }
     for (const rail of rails) rail.draw(true);
+    drawOverheadMonuments(g, ox, oy);
     if (end && !game.viewMap) {
       if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
       if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
@@ -6482,7 +9058,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     }
     g.restore();
     const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
-    const mw = compact ? 27 : 33, mh = mw * H / W;
+    const mw = compact ? 31 : 40, mh = mw * H / W;
     routeHUD(end);
     if (game.viewMap) {
       drawFullMap(end, p);
@@ -6493,17 +9069,13 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     hud("#district", district() + "  /  Port-Fer");
     hud(
       "#stats",
-      "\u20AC" + game.wallet + "  \xB7  " + t("health") + " " + p.hp + "/5  \xB7  " + t("heat") + " " + Math.ceil(game.heat) + "/3" + (game.ride ? (
-        // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
-        "\u3000" + Math.round(Math.abs(game.ride.speed) * 0.53) + "\xA0km/h\xA0\xA0\xB7\xA0\xA0" + t("vehicle") + "\xA0" + game.ride.condition + "%"
-      ) : "")
+      "\u20AC" + game.wallet + "  \xB7  " + t("health") + " " + p.hp + "/5  \xB7  " + t("heat") + " " + Math.ceil(game.heat) + "/3" + (game.ride ? "\u3000" + Math.round(Math.abs(game.ride.speed) * 0.53) + "\xA0km/h\xA0\xA0\xB7\xA0\xA0" + t("vehicle") + "\xA0" + game.ride.condition + "%" : "")
     );
     const j = jobs.find((j2) => dist(j2, p) < 36);
     const nearJob = j ? t("jobKey") + " \xB7 " + t(j.name) : "";
     let hint = game.viewMap ? t("mapHint") : game.ride ? nearJob || t("outHint") : nearestCar() ? t("enterHint") + (nearJob ? "\u3000/\u3000" + nearJob : "") : nearJob || t("footHint");
     if (!game.viewMap && recoveryCar()) hint = t("callRecovery") + (game.ride ? "\u3000/\u3000" + t("outHint") : "");
-    if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
-      hint = t("medicKeys");
+    if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0) hint = t("medicKeys");
     $("#reportBtn").hidden = !nearbyPatient();
     hud("#hint", hint);
     hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));

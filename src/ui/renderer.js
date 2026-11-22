@@ -4,10 +4,10 @@ import { interior, drawInterior } from "../scenes/interiors.js";
 import { t } from "./dialogs.js";
 import { cars, dist, done, fx, game, p, people, trails } from "../core/state.js";
 import { $, g, hud, label, rect } from "../platform/canvas.js";
-import { H, TAU, W, canalBottom, canalTop, jobs, roadsX, roadsY } from "../world/town.js";
+import { CELL_H, CELL_W, H, TAU, W, X, Y, jobs, town } from "../world/town.js";
 import { directions } from "../world/navigation.js";
 import { goal, nextFile } from "../game/cases.js";
-import { drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
+import { drawOverheadMonuments, drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
 import { drawAmbulance, drawCrew } from "../art/emergency.js";
@@ -27,10 +27,8 @@ function speech(s, x, y, viewportLeft, markers) {
   g.textAlign = "center";
   const width = g.measureText(s).width + 5;
   const center = Math.max(viewportLeft + width / 2 + 1, Math.min(x, viewportLeft + game.vw - width / 2 - 1));
-  // Move past the lowest marker first when a door pin and route arrow are stacked.
   for (const marker of markers.sort((a, b) => b.y - a.y))
-    if (Math.abs(marker.x - center) < width / 2 + 6 && Math.abs(marker.y - y) < 11)
-      y = marker.y - 11;
+    if (Math.abs(marker.x - center) < width / 2 + 6 && Math.abs(marker.y - y) < 11) y = marker.y - 11;
   rect(g, center - width / 2, y - 5, width, 7, "#201728");
   rect(g, center - width / 2 + 0.45, y - 4.55, width - 0.9, 6.1, "#ffe7bc");
   g.fillStyle = "#ffe7bc";
@@ -43,8 +41,9 @@ function speech(s, x, y, viewportLeft, markers) {
   g.fillText(s, center, y + 0.1);
   g.restore();
 }
+
 function pin(j, x, y, small = false) {
-  let r = small ? 1.3 : 3.4;
+  const r = small ? 1.35 : 3.4;
   g.fillStyle = "#191825";
   g.beginPath();
   g.arc(x, y, r + 0.55, 0, TAU);
@@ -59,39 +58,130 @@ function pin(j, x, y, small = false) {
     g.textAlign = "left";
   }
 }
+
 function map(left, top, w, h, full, origin = p) {
   rect(g, left - 2, top - 2, w + 4, h + 4, "#d3b991");
-  rect(g, left, top, w, h, "#363343");
-  const inset = full ? 5 : 2;
+  rect(g, left, top, w, h, "#302d3d");
+  const inset = full ? 5 : 1.5;
   const scale = Math.min((w - 2 * inset) / W, (h - 2 * inset) / H);
-  const mw = W * scale, mh = H * scale;
-  const x = left + (w - mw) / 2, y = top + (h - mh) / 2;
+  const mw = W * scale,
+    mh = H * scale;
+  const x = left + (w - mw) / 2,
+    y = top + (h - mh) / 2;
+
   g.save();
-  const roadWidth = full ? 1.4 : 0.45;
-  for (const rx of roadsX) rect(g, x + rx * scale - roadWidth / 2, top, roadWidth, h, "#8a8390");
-  for (const ry of roadsY) rect(g, left, y + ry * scale - roadWidth / 2, w, roadWidth, "#8a8390");
-  rect(g, left, y + (canalTop + 23) * scale, w, (canalBottom - canalTop - 49) * scale, "#397483");
-  const bridgeWidth = Math.max(1, 28 * scale);
-  for (const rx of roadsX)
-    rect(
-      g,
-      x + rx * scale - bridgeWidth / 2,
-      y + (canalTop + 23) * scale,
-      bridgeWidth,
-      (canalBottom - canalTop - 49) * scale,
-      "#a39a99",
-    );
+  // Parks.
+  for (const pk of town.parks || []) {
+    const px = x + (X(pk.cols[0]) - CELL_W / 2) * scale;
+    const py = y + (Y(pk.rows[0]) - CELL_H / 2) * scale;
+    const pw = (pk.cols[1] - pk.cols[0] + 1) * CELL_W * scale;
+    const ph = (pk.rows[1] - pk.rows[0] + 1) * CELL_H * scale;
+    rect(g, px, py, pw, ph, "#244236");
+  }
+
+  // River la Ferre.
+  const river = town.river;
+  if (river) {
+    rect(g, left, y + river.top * scale, w, (river.bottom - river.top) * scale, "#2f6c7d");
+    for (const isl of river.islands) {
+      rect(
+        g,
+        x + isl.left * scale,
+        y + isl.top * scale,
+        (isl.right - isl.left) * scale,
+        (isl.bottom - isl.top) * scale,
+        "#484354",
+      );
+    }
+  }
+
+  // Road network rendered by class (alleys, streets, avenues) + roundabouts.
+  for (const [cls, width, color] of [
+    ["alley", full ? 0.55 : 0.22, "#655f70"],
+    ["street", full ? 1.15 : 0.38, "#8a8390"],
+    ["avenue", full ? 1.75 : 0.55, "#aba4b0"],
+  ]) {
+    g.beginPath();
+    for (const e of town.roads.edges) {
+      if (e.class !== cls) continue;
+      const na = town.roadNodeById.get(e.a),
+        nb = town.roadNodeById.get(e.b);
+      g.moveTo(x + na.x * scale, y + na.y * scale);
+      g.lineTo(x + nb.x * scale, y + nb.y * scale);
+    }
+    g.strokeStyle = color;
+    g.lineWidth = width;
+    g.lineCap = "round";
+    g.stroke();
+  }
+
+  // Roundabouts on map.
+  for (const node of town.roads.nodes) {
+    if (node.kind !== "roundabout") continue;
+    const rx = x + node.x * scale,
+      ry = y + node.y * scale;
+    g.beginPath();
+    g.arc(rx, ry, Math.max(full ? 2.4 : 0.9, node.outerRadius * scale), 0, TAU);
+    g.fillStyle = "#b3acb8";
+    g.fill();
+    g.beginPath();
+    g.arc(rx, ry, Math.max(full ? 1.1 : 0.4, node.radius * scale), 0, TAU);
+    g.fillStyle = "#342f40";
+    g.fill();
+  }
+
+  // Petite Ceinture ring railway & stations.
+  if (town.ring?.points?.length) {
+    g.beginPath();
+    const pts = town.ring.points;
+    g.moveTo(x + pts[0].x * scale, y + pts[0].y * scale);
+    for (let i = 1; i < pts.length; i++) g.lineTo(x + pts[i].x * scale, y + pts[i].y * scale);
+    g.strokeStyle = "#56a882";
+    g.lineWidth = full ? 1.05 : 0.35;
+    g.stroke();
+    if (full) {
+      g.fillStyle = "#a5f0c5";
+      for (const st of town.ring.stations) {
+        g.beginPath();
+        g.arc(x + st.stop.x * scale, y + st.stop.y * scale, 1.45, 0, TAU);
+        g.fill();
+      }
+    }
+  }
+
+  // Monuments highlighted softly in warm gold on full map.
+  if (full) {
+    for (const m of town.monuments) {
+      if (!m.footprint?.length) continue;
+      g.beginPath();
+      g.moveTo(x + m.footprint[0][0] * scale, y + m.footprint[0][1] * scale);
+      for (let i = 1; i < m.footprint.length; i++)
+        g.lineTo(x + m.footprint[i][0] * scale, y + m.footprint[i][1] * scale);
+      g.closePath();
+      g.fillStyle = "#e8be7288";
+      g.fill();
+      g.strokeStyle = "#ffdf99cc";
+      g.lineWidth = 0.55;
+      g.stroke();
+    }
+  }
+
+  // Active navigation route.
   const nav = directions(origin);
   if (nav) {
     g.beginPath();
     g.moveTo(x + origin.x * scale, y + origin.y * scale);
     for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
     g.strokeStyle = "#ffe080";
-    g.lineWidth = full ? 1.1 : 0.42;
+    g.lineWidth = full ? 1.15 : 0.45;
     g.stroke();
   }
+
+  // Case pins.
   for (const j of jobs) if (!done.has(j.id)) pin(j, x + j.x * scale, y + j.y * scale, !full);
-  let q = goal();
+
+  // Pulsing goal ring.
+  const q = goal();
   if (q) {
     g.strokeStyle = "#ffe18a";
     g.lineWidth = full ? 1 : 0.45;
@@ -100,6 +190,8 @@ function map(left, top, w, h, full, origin = p) {
     g.arc(x + q.x * scale, y + q.y * scale, full ? 5 + pulse : 2.05 + pulse * 0.2, 0, TAU);
     g.stroke();
   }
+
+  // Player diamond.
   const px = x + origin.x * scale,
     py = y + origin.y * scale;
   const radius = full ? 2.5 : 1.05;
@@ -116,30 +208,44 @@ function map(left, top, w, h, full, origin = p) {
   g.fill();
   g.restore();
 }
+
 function drawFullMap(end, origin) {
   showMapSheet(end);
   rect(g, 0, 0, game.vw, game.vh, "#151521eb");
   const area = $("#mapWindow").getBoundingClientRect();
   const unit = game.vw / innerWidth;
-  const w = Math.min(area.width * unit, area.height * unit * W / H, 225);
-  const h = w * H / W;
+  const w = Math.min(area.width * unit, (area.height * unit * W) / H, 235);
+  const h = (w * H) / W;
   const x = (area.left + area.width / 2) * unit - w / 2;
   const y = (area.top + area.height / 2) * unit - h / 2;
   map(x, y, w, h, true, origin);
 }
-function district() {
-  return p.y < canalTop
-    ? p.x < 548
-      ? "Les Abattoirs"
-      : p.x < 1030
-        ? "Centre-Ville"
-        : "Quartier des Prêts"
-    : p.y < canalBottom
-      ? "Canal Saint-Procès"
-      : p.x < 825
-        ? "Les Docks"
-        : "La Foire";
+
+function districtKey(x, y) {
+  const river = town.river;
+  if (river && y >= river.top && y <= river.bottom) {
+    for (const isl of river.islands)
+      if (x >= isl.left && x <= isl.right && y >= isl.top && y <= isl.bottom) return "districtIle";
+    return "districtFerre";
+  }
+  const { col, row } = town.cellAt(x, y);
+  if (row <= town.canalRow) {
+    if (row <= 1 && col >= 5 && col <= 10) return "districtButte";
+    if (col <= 4) return row <= 4 ? "districtArc" : "districtQuaisOuest";
+    if (col <= 8) return row <= 4 ? "districtOpera" : "districtContrainte";
+    if (col >= 11 && row <= 3) return "districtParcNord";
+    if (col >= 14) return "districtFaubourgEst";
+    return "districtMarais";
+  }
+  if (col <= 5) return "districtTour";
+  if (col <= 10) return "districtRiveGauche";
+  return "districtDocks";
 }
+
+function district() {
+  return t(districtKey(p.x, p.y));
+}
+
 function draw() {
   if (interior) {
     const room = interior.room;
@@ -186,7 +292,6 @@ function draw() {
     if (done.has(j.id) || !visible(j)) continue;
     const y = j.y - addressPinHeight + Math.sin(game.time * 3) * 0.5;
     pin(j, j.x, y);
-    // Speech clears the top of the pin's bob, so a displaced bubble holds still.
     markers.push({ x: j.x, y: j.y - addressPinHeight - 0.5 });
   }
   const actors = cars.filter(visible).map((o) => ({ o, car: true, medical: o.medical }));
@@ -211,6 +316,7 @@ function draw() {
     else dude(a.o, a.o === p);
   }
   for (const rail of rails) rail.draw(true);
+  drawOverheadMonuments(g, ox, oy);
   if (end && !game.viewMap) {
     if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
     if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
@@ -234,7 +340,7 @@ function draw() {
   }
   g.restore();
   const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
-  const mw = compact ? 27 : 33,
+  const mw = compact ? 31 : 40,
     mh = (mw * H) / W;
   routeHUD(end);
   if (game.viewMap) {
@@ -258,8 +364,7 @@ function draw() {
       Math.ceil(game.heat) +
       "/3" +
       (game.ride
-        ? // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
-          "　" +
+        ? "　" +
           Math.round(Math.abs(game.ride.speed) * 0.53) +
           "\u00a0km/h\u00a0\u00a0·\u00a0\u00a0" +
           t("vehicle") +
@@ -278,8 +383,7 @@ function draw() {
         ? t("enterHint") + (nearJob ? "　/　" + nearJob : "")
         : nearJob || t("footHint");
   if (!game.viewMap && recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
-  if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
-    hint = t("medicKeys");
+  if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0) hint = t("medicKeys");
   $("#reportBtn").hidden = !nearbyPatient();
   hud("#hint", hint);
   hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));

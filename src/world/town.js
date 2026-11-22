@@ -57,21 +57,31 @@ const blocks = [
   ["docks", "garage", "market", "square", "market", "garage", "market", "square", "market", "garage", "square", "market", "docks", "market", "garage", "docks"], // r11 Petite Ceinture South
 ];
 
-// Semantic cell kinds so future paintings from art-src/scenery/manifest.json map cleanly onto the grid.
+// Semantic cell kinds matching art-src/scenery/manifest.json keys for drop-in painting integration.
 const cellKinds = blocks.map((row, r) =>
   row.map((key, c) => {
-    if (r === RIVER_ROW) return c >= 8 && c <= 10 ? "island" : "river";
-    if (ROUNDABOUTS.has(`c${c}r${r}`)) return c === 3 && r === 3 ? "star-roundabout" : "roundabout";
-    if (c === 3 && r === 8) return "iron-tower";
+    if (r === RIVER_ROW) {
+      if (c === 8) return "palaisJustice";
+      if (c === 9) return "islandWest";
+      if (c === 10) return "islandCathedral";
+      return BRIDGE_SET.has(c) ? "riverBridge" : "river";
+    }
+    if (c === 3 && r === 3) return "starArch";
+    if (c === 6 && r === 5) return "obeliskSquare";
+    if (ROUNDABOUTS.has(`c${c}r${r}`)) return "boulevard";
+    if (c === 3 && r === 8) return "towerBase";
     if (c === 7 && r === 3) return "opera";
     if (c === 8 && r === 0) return "basilica";
     if ((c === 3 || c === 4) && r === 9) return "park";
     if (c === 14 && (r === 3 || r === 4)) return "park";
     if (c === 7 && r === 9) return "park";
-    if (c >= 9 && c <= 12 && r >= 3 && r <= 5) return "marais";
-    if (r === 1 || r === 11) return "viaduct";
-    if (r === 6 || r === 8) return "quay";
+    if (c >= 10 && c <= 11 && r === 4) return "alleyCross";
+    if (c >= 9 && c <= 12 && r >= 3 && r <= 5) return "haussmannCafe";
+    if (r === 1) return "ringNorth";
+    if (r === 11) return "ringSouth";
+    if (r === 6 || r === 8) return "boulevard";
     if (r === 2 || r === 10 || c === 2 || c === 13) return "boulevard";
+    if (key === "square") return (c + r) % 3 === 0 ? "haussmannCafe" : "haussmann";
     return key;
   }),
 );
