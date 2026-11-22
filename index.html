@@ -8454,13 +8454,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       ctx.closePath();
       ctx.clip();
       const plate = plates[item.key];
-      ctx.drawImage(
-        plate,
-        -CELL_W / 2,
-        item.key === "canal" ? 16 : -CELL_H / 2,
-        plate.width / plateScale2,
-        plate.height / plateScale2
-      );
+      ctx.drawImage(plate, -CELL_W / 2, -CELL_H / 2, plate.width / plateScale2, plate.height / plateScale2);
       sprite = { image, dx: left2 - item.x, dy: top2 - item.y };
       propSprites.set(item, sprite);
     }

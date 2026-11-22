@@ -452,13 +452,7 @@ export function drawStreetProp({ x, y, item }) {
     ctx.closePath();
     ctx.clip();
     const plate = plates[item.key];
-    ctx.drawImage(
-      plate,
-      -CELL_W / 2,
-      item.key === "canal" ? 16 : -CELL_H / 2,
-      plate.width / plateScale,
-      plate.height / plateScale,
-    );
+    ctx.drawImage(plate, -CELL_W / 2, -CELL_H / 2, plate.width / plateScale, plate.height / plateScale);
     sprite = { image, dx: left - item.x, dy: top - item.y };
     propSprites.set(item, sprite);
   }
