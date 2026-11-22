@@ -6,7 +6,7 @@
 // screenshot at gameplay scale with the player, the street's pedestrians and traffic in it.
 import { town, X, Y } from "../../../../src/world/town.js";
 import { blockedIn } from "../../../../src/world/collision.js";
-import { brakeToStop, driveRouteTo } from "./big-city.mjs";
+import { brakeToStop, driveRouteTo, turnSlowly } from "./big-city.mjs";
 
 export const meta = { feature: "street-scenery", needs: "probe" };
 
@@ -44,9 +44,13 @@ export default async function (d) {
   await arrive("place-de-la-contrainte", { x: X(6) + 70, y: Y(5) + 6 }, "sedan beside the obelisk roundabout");
   await arrive("arc-des-saisies", { x: X(3) + 76, y: Y(3) + 6 }, "sedan beside Arc des Saisies");
 
-  // Regroup in the southbound lane before crossing la Ferre. This keeps the route
-  // following the avenue after the turn at the Arc, even if traffic forces a sidestep.
-  await arrive("north-bank-bridge-approach", { x: X(3) - 6, y: Y(6) - 45 }, "sedan on the north approach to Pont de Fer");
+  // Turn on the east arm where the road is wide, then take the next bridge south.
+  // The tour stops beside the Arc for its painting. The big-city journey covers circulation.
+  await d.step("turn-east-from-the-arc", async () => {
+    const { ride } = await turnSlowly(d, 0, 12);
+    d.expect(Math.abs(ride.a) < 0.35 && ride.condition > 0, "sedan turned toward the next bridge", ride);
+  });
+  await arrive("north-bank-bridge-approach", { x: X(4) - 6, y: Y(6) - 45 }, "sedan on the north bridge approach");
   const tower = town.monuments.find((m) => m.id === "tour-fer");
   await arrive("tour-de-fer-underpass", { x: tower.x + 60, y: tower.y - 6 }, "sedan beneath Tour de Fer");
   await d.step("tour-de-fer-on-foot", async () => {
