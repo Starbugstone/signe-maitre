@@ -109,10 +109,15 @@ export default async (d) => {
   await d.step("take the moored barge", async () => {
     const barge = initial.boats.find((b) => b.model === "barge" && b.mooring);
     const berth = initial.river.moorings.find((m) => m.id === barge.mooring);
-    // Patrol the north promenade in stretches so each crossing gets a fresh detour allowance.
+    // Break up the north promenade at bridge crossings. Scale the time allowance to
+    // each stretch so slower touch frames still have time to reach the next crossing.
+    const walkPromenade = async (x) => {
+      const { p } = await d.state();
+      await d.walkTo({ x, y: berth.quay.y }, { tol: 5, timeout: 15000 + 80 * Math.abs(x - p.x) });
+    };
     for (const b of initial.river.bridges.filter((b) => b.x > home.x && b.x < berth.x))
-      await d.walkTo({ x: b.x + 44, y: berth.quay.y }, { tol: 5, timeout: 22000 });
-    await d.walkTo(berth.quay, { tol: 5, timeout: 22000 });
+      await walkPromenade(b.x + 44);
+    await walkPromenade(berth.quay.x);
     await d.press("car");
     const result = await d.waitFor("barge theft", ({ state }) => state.ride?.model === "barge" && state.heat > 0);
     d.expect(result.state.heat < 1, "Taking the barge raises heat by less than a level", result.state.heat);
