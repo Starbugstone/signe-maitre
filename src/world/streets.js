@@ -188,6 +188,32 @@ function blit(ctx, plate, left, top, w, h, dx, dy, dw = w, dh = h) {
   );
 }
 
+// The same copy with its cut edges faded out over `soft` units, so that a pasted frontage
+// melts into the painting around it. `edges` names the faded sides: l, r, t, b.
+const scrap = document.createElement("canvas"),
+  scrapContext = scrap.getContext("2d");
+function blitSoft(ctx, plate, left, top, w, h, dx, dy, edges, soft = 5) {
+  const pw = Math.round(w * plateScale),
+    ph = Math.round(h * plateScale),
+    f = soft * plateScale;
+  scrap.width = pw;
+  scrap.height = ph;
+  scrapContext.drawImage(plate, (left + CELL_W / 2) * plateScale, (top + CELL_H / 2) * plateScale, pw, ph, 0, 0, pw, ph);
+  scrapContext.globalCompositeOperation = "destination-in";
+  for (const edge of edges) {
+    const across = edge === "l" || edge === "r",
+      far = edge === "r" || edge === "b";
+    const size = across ? pw : ph;
+    const fade = scrapContext.createLinearGradient(0, 0, across ? pw : 0, across ? 0 : ph);
+    fade.addColorStop(far ? 1 - f / size : 0, far ? "#000" : "#0000");
+    fade.addColorStop(far ? 1 : f / size, far ? "#0000" : "#000");
+    scrapContext.fillStyle = fade;
+    scrapContext.fillRect(0, 0, pw, ph);
+  }
+  scrapContext.globalCompositeOperation = "source-over";
+  ctx.drawImage(scrap, dx, dy, w, h);
+}
+
 // A painting shows four road arms. Where the road graph has none, the block closes over the
 // arm with a stretch of the painting's own frontage: the kerb and pavement run on unbroken.
 const capHalf = 25.6;
@@ -203,15 +229,17 @@ function drawArmCaps(ctx, col, row) {
   // North and south: a slice from the middle of a neighbouring block, moved along the street.
   const slice = (col + row) % 2 ? 74 : -74;
   if (!arms.n && shows("n") && row !== town.riverSouthRow)
-    blit(ctx, plate, 74 - capHalf, -CELL_H / 2, 2 * capHalf, CELL_H / 2 - 16.3, cx - capHalf, cy - CELL_H / 2);
+    blitSoft(ctx, plate, 74 - capHalf - 3, -CELL_H / 2, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy - CELL_H / 2, "lr");
   if (!arms.s && shows("s"))
-    blit(ctx, plate, slice - capHalf, 16.3, 2 * capHalf, CELL_H / 2 - 16.3, cx - capHalf, cy + 16.3);
+    blitSoft(ctx, plate, slice - capHalf - 3, 16.3, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy + 16.3, "lr");
   // East and west: the block to the south, with its pavement on the cross street, moved up
   // across the roadway. Its roof stands in front of the shopfronts behind, as roofs do.
   const from = painting.capFrom ?? 46,
     depth = CELL_H / 2 - from;
-  if (!arms.e && shows("e")) blit(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth);
-  if (!arms.w && shows("w")) blit(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth);
+  if (!arms.e && shows("e"))
+    blitSoft(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbl");
+  if (!arms.w && shows("w"))
+    blitSoft(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbr");
 }
 
 // Painted ruelle strips. Both repeat along their length, one cell per repeat.
@@ -451,8 +479,10 @@ export function drawStreetProp({ x, y, item }) {
     for (const [px, py] of item.outline) ctx.lineTo(px, py);
     ctx.closePath();
     ctx.clip();
-    const plate = plates[item.key];
-    ctx.drawImage(plate, -CELL_W / 2, -CELL_H / 2, plate.width / plateScale, plate.height / plateScale);
+    // A river plate hangs from the Quai Nord kerb, the others from their cell's top edge.
+    const plate = plates[item.key],
+      plateTop = paintings[item.key]?.river ? riverPlate.top : -CELL_H / 2;
+    ctx.drawImage(plate, -CELL_W / 2, plateTop, plate.width / plateScale, plate.height / plateScale);
     sprite = { image, dx: left - item.x, dy: top - item.y };
     propSprites.set(item, sprite);
   }
@@ -465,14 +495,25 @@ export function drawStreetProp({ x, y, item }) {
   );
 }
 
+// Props whose silhouette reaches into the view; a tall one counts while only its top shows.
+const propReach = 60;
 export function visibleStreetProps(ox, oy) {
-  const area = town.visibleCells(ox, oy, game.vw, game.vh + 52);
+  const area = town.visibleCells(ox, oy, game.vw, game.vh + propReach);
   const result = [];
   for (let row = area.firstRow; row <= area.lastRow; row++)
     for (let col = area.firstCol; col <= area.lastCol; col++)
-      for (const prop of streetProps(town, col, row))
-        if (prop.x >= ox - 3 && prop.x <= ox + game.vw + 3 && prop.y >= oy && prop.y <= oy + game.vh + 52)
+      for (const prop of streetProps(town, col, row)) {
+        const item = prop.item;
+        item.rise ??= item.y - Math.min(...item.outline.map((point) => point[1]));
+        item.half ??= Math.max(...item.outline.map((point) => Math.abs(point[0] - item.x)));
+        if (
+          prop.x + item.half >= ox &&
+          prop.x - item.half <= ox + game.vw &&
+          prop.y >= oy &&
+          prop.y - item.rise <= oy + game.vh
+        )
           result.push(prop);
+      }
   return result;
 }
 
@@ -506,6 +547,7 @@ function streetLayer(ox, oy) {
     streetContext.setTransform(scale, 0, 0, scale, -cachedX * scale, -cachedY * scale);
     rect(streetContext, cachedX, cachedY, width, height, "#201c29");
     drawTown(cachedX, cachedY, streetContext, width, height);
+    overFresh = false;
   }
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -513,32 +555,58 @@ function streetLayer(ox, oy) {
   g.restore();
 }
 
-// Restore the painted decks and island where they occlude hulls, reflections and wakes.
-export function drawBridgeDecks(ox, oy) {
+// What stands in front of the river traffic: bridge decks, parapets, bastions, ironwork, the
+// island with its skyline and the quay lanterns. tools/art/bake-scenery.mjs bakes a mask of
+// them for every river plate; the street layer is drawn again through those masks, over
+// hulls, reflections and wakes.
+const over = document.createElement("canvas"),
+  overContext = over.getContext("2d");
+const masks = document.createElement("canvas"),
+  maskContext = masks.getContext("2d");
+let overFresh = false,
+  overEmpty = true;
+
+function buildOver() {
+  overFresh = true;
+  const scale = groundScale,
+    width = streets.width / scale,
+    height = streets.height / scale;
   const row = town.riverRow,
-    cy = Y(row);
-  const { firstCol, lastCol } = town.visibleCells(ox, oy, game.vw, game.vh, CELL_W / 2);
+    top = Y(row) + riverPlate.top;
+  overEmpty = row == null || cachedY + height < top || cachedY > top + riverPlate.height;
+  if (overEmpty) return;
+  for (const c of [over, masks])
+    if (c.width !== streets.width || c.height !== streets.height) {
+      c.width = streets.width;
+      c.height = streets.height;
+    }
+  maskContext.setTransform(1, 0, 0, 1, 0, 0);
+  maskContext.clearRect(0, 0, masks.width, masks.height);
+  maskContext.setTransform(scale, 0, 0, scale, -cachedX * scale, -cachedY * scale);
+  const { firstCol, lastCol } = town.visibleCells(cachedX, cachedY, width, height, CELL_W / 2);
+  for (let col = Math.max(0, firstCol); col <= Math.min(town.cols - 1, lastCol); col++) {
+    const mask = artwork[cellPlateKey(col, row) + "Over"];
+    if (mask) maskContext.drawImage(mask, X(col) - CELL_W / 2, top, CELL_W, riverPlate.height);
+    // Tour de Fer's rear gardens stand on the quay, in front of the water.
+    const gardens = paintings[cellPlateKey(col, town.riverSouthRow)]?.gardens;
+    if (gardens) {
+      maskContext.beginPath();
+      for (const garden of gardens) trace(maskContext, garden, X(col), Y(town.riverSouthRow));
+      maskContext.fill();
+    }
+  }
+  overContext.globalCompositeOperation = "copy";
+  overContext.drawImage(streets, 0, 0);
+  overContext.globalCompositeOperation = "destination-in";
+  overContext.drawImage(masks, 0, 0);
+}
+
+export function drawBridgeDecks(ox, oy) {
+  if (!overFresh) buildOver();
+  if (overEmpty) return;
   g.save();
-  g.beginPath();
-  for (let col = Math.max(0, firstCol - 1); col <= Math.min(town.cols - 1, lastCol + 1); col++) {
-    const painting = paintings[cellPlateKey(col, row)],
-      cx = X(col);
-    if (painting.deck) trace(g, painting.deck, cx, cy);
-    for (const deck of painting.decks || []) trace(g, deck, cx, cy);
-  }
-  // The island's quay wall, as painted; wound like the decks so that overlaps stay filled.
-  const west = town.cellKinds[row].indexOf("islandWest"),
-    east = town.cellKinds[row].indexOf("islandEast");
-  if (west >= 0 && east >= 0) {
-    const wall = [
-      ...paintings.islandWest.outline.map(([x, y]) => [X(west) + x, cy + y]),
-      ...paintings.islandEast.outline.map(([x, y]) => [X(east) + x, cy + y]),
-    ];
-    trace(g, wall.reverse());
-  }
-  g.clip("nonzero");
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.drawImage(streets, Math.round((cachedX - ox) * groundScale), Math.round((cachedY - oy) * groundScale));
+  g.drawImage(over, Math.round((cachedX - ox) * groundScale), Math.round((cachedY - oy) * groundScale));
   g.restore();
 }
 

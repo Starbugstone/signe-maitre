@@ -170,8 +170,13 @@ export function buildRingPiers(layout) {
     ["east", right],
   ]) {
     const support = sideSupports[side];
+    // The supports stand on the kerbs of a cross street; where the block is built over
+    // there is none, and the deck spans on to the next street.
+    const west = Math.floor((vx - X(0)) / CELL_W);
+    const crossStreet = (row) =>
+      !layout.roads || layout.roads.edges.some((e) => [e.a, e.b].sort().join() === [`c${west}r${row}`, `c${west + 1}r${row}`].sort().join());
     for (let row = northRow + 1; row < southRow; row++) {
-      if (row === layout.riverRow) continue;
+      if (row === layout.riverRow || !crossStreet(row)) continue;
       for (const dy of support.feet)
         for (const dx of [support.dx].flat()) {
           const x = vx + dx,

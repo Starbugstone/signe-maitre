@@ -1,5 +1,5 @@
 import { CELL_W, CELL_H, X, Y } from "./layout.js";
-import { paintings } from "./paintings.js";
+import { fromRiver, fromSource, lantern, paintings, riverMarks } from "./paintings.js";
 
 export const kerbX = 17.6,
   kerbY = 16.8;
@@ -119,15 +119,40 @@ export function registerSceneryManifest(entries) {
   }
 }
 
-// Monuments and street furniture that stand up out of the later paintings: anyone behind
-// their foot line is covered by the painted silhouette. They have no base of their own to
-// bump into; the painting's solids (src/world/paintings.js) do that.
+// A lantern of the later paintings, hand-marked [x, finial, foot] in source pixels: its
+// silhouette covers whoever is behind its foot, and its post stops a walker or a bumper.
+function lanternProp(key, map, [x, top, foot]) {
+  const h = foot - top;
+  const right = lantern.map(([f, w]) => map.point([x + w * h, top + f * h])),
+    left = lantern.map(([f, w]) => map.point([x - w * h, top + f * h])).reverse();
+  return {
+    key,
+    x: map.x(x),
+    y: map.y(foot),
+    radius: Math.min(1.8, (right.at(-1)[0] - left[0][0]) / 2),
+    outline: [...right, ...left],
+    painted: true,
+  };
+}
+
+// Monuments, trees and street furniture that stand up out of the later paintings: anyone
+// behind their foot line is covered by the painted silhouette. Apart from the lanterns they
+// have no base of their own to bump into; the painting's solids (src/world/paintings.js) do that.
 for (const [key, painting] of Object.entries(paintings)) {
-  if (!painting.tall) continue;
-  props[key] = painting.tall.map(({ outline, foot }) => {
+  const items = (painting.tall || []).map(({ outline, foot }) => {
     const xs = outline.map((p) => p[0]);
     return { key, x: (Math.min(...xs) + Math.max(...xs)) / 2, y: foot, radius: 0, outline, tall: true };
   });
+  if (painting.river) {
+    for (const lamp of riverMarks[key].lamps || []) items.push(lanternProp(key, fromRiver(key), lamp));
+  } else if (painting.lamps) {
+    // A ring-row plate is registered on its viaduct painting, or on two of them.
+    const { source = key, east } = painting.viaduct || {},
+      ring = !!painting.viaduct;
+    for (const lamp of painting.lamps) items.push(lanternProp(key, fromSource(source, { ring }), lamp));
+    for (const lamp of painting.eastLamps || []) items.push(lanternProp(key, fromSource(east, { ring }), lamp));
+  }
+  if (items.length) props[key] = items;
 }
 
 const canalHeight = CELL_H - 31 + 5;
@@ -179,18 +204,29 @@ export function streetProps(layout, col, row) {
   if (cache.has(id)) return cache.get(id);
 
   const key = layout.cellKinds?.[row]?.[col] ?? layout.blocks[row][col];
-  const cellProps = props[key] || [];
   const result = [];
   const cx = X(col),
     cy = Y(row);
   const meta = layout.cellMeta?.(col, row);
   const river = layout.river;
 
-  // River row outside islands holds open water only — never base-plate bollards.
-  if (meta?.isRiverRow && !meta.isIsland) {
+  // A river plate reaches over the quay halves of both bank rows. What stands on it belongs
+  // to the cell it stands in.
+  const riverKey = layout.cellKinds?.[layout.riverRow]?.[col];
+  if (paintings[riverKey]?.river && Math.abs(row - layout.riverRow) <= 1)
+    for (const item of props[riverKey] || []) {
+      const wy = Y(layout.riverRow) + item.y;
+      if (layout.cellAt(cx, wy).row !== row) continue;
+      // A painted lantern at a boarding point still stands in front of the walker, but lets them by.
+      const boarding = item.radius && river.moorings.some((m) => Math.hypot(cx + item.x - m.quay.x, wy - m.quay.y) < 9);
+      result.push({ x: cx + item.x, y: wy, item: boarding ? { ...item, radius: 0 } : item });
+    }
+  // The river row itself holds nothing else.
+  if (meta?.isRiverRow) {
     cache.set(id, result);
     return result;
   }
+  const cellProps = props[key] || [];
 
   // Cells with no wide street/avenue (pure alley hubs or park cores) omit wide kerb furniture.
   if (meta && !meta.hasWideRoad) {
@@ -200,6 +236,9 @@ export function streetProps(layout, col, row) {
 
   const keepProp = (wx, wy, item) => {
     if (item.tall) return true;
+    // The river plate covers the quay side of both bank rows, and whatever stood there.
+    if (item.painted && river && ((row === layout.canalRow && item.y > kerbY) || (row === layout.riverSouthRow && item.y < -kerbY)))
+      return false;
     if (river) {
       if (row === layout.canalRow && item.y > 26) return false;
       if (row === layout.riverSouthRow && item.y < -11) return false;

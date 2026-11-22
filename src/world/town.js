@@ -313,6 +313,15 @@ const river = {
   bottom: riverBottom,
   islands: [island],
   bridges: BRIDGE_COLS.map((col) => ({ col, x: X(col), halfWidth: 22, clearance: true })),
+  // Painted masonry in the water: abutments, pier bases and bank turrets of the stone bridges.
+  piers: BRIDGE_COLS.flatMap((col) =>
+    paintings[cellKinds[RIVER_ROW][col]].piers.map((pier) => ({
+      left: X(col) + pier.left,
+      right: X(col) + pier.right,
+      top: Y(RIVER_ROW) + pier.top,
+      bottom: Y(RIVER_ROW) + pier.bottom,
+    })),
+  ),
   // Smooth west-to-east navigation centreline curving through the wide 108-unit south channel around Île de la Ferre.
   centreline: [
     { x: 0, y: Y(RIVER_ROW) },
@@ -482,8 +491,8 @@ const monuments = [
     name: { fr: "Notre-Dame-du-Port", en: "Our Lady of the Port" },
     col: 9,
     row: 7,
-    x: X(9) + 11,
-    y: Y(7) - 73,
+    x: X(9),
+    y: Y(7) - 55,
     footprint: at(9, 7, paintings.islandCathedral.cathedral),
     piers: paintings.islandCathedral.solids.map((poly) => at(9, 7, poly)),
     style: "cathedral",
@@ -491,7 +500,7 @@ const monuments = [
 ];
 
 // Painted obstacles outside the monuments: roundabout islands wider than their traffic
-// circle, and the water at the four corners of the island's bounding box.
+// circle, the faces of the quay walls, and the gardens, trees and buildings of the island.
 const solids = [];
 for (const [r, row] of cellKinds.entries())
   for (const [c, key] of row.entries()) {
@@ -517,8 +526,8 @@ export const definition = {
   ring,
   monuments,
   solids,
-  // Painted bridge decks are wider than the 44-unit navigation span boats steer by.
-  bridgeDeck: (col) => (col >= 8 && col <= 10 ? 23 : IRON_BRIDGES.has(col) ? 28 : 34),
+  // Half the width between the painted parapets of each bridge.
+  bridgeDeck: (col) => paintings[cellKinds[RIVER_ROW][col]].walk,
   parks,
   railways: [],
   // 5 case addresses relocated to central Paris-Port-Fer landmarks (all verified clear of props & obstacles).

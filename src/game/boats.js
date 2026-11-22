@@ -164,7 +164,9 @@ function berthFleet(river, office) {
 // the centreline offset, but scout nearby water for island and pier clearances.
 function makeLane(river, moored, sign) {
   const hull = makeBoat("barge", {});
-  hull.halfWidth = Math.max(hull.halfWidth, boatTypes.riverboat.beam * metre / 2);
+  // Two units wider than the widest hull: a lane that grazes a pier or a wall holds up
+  // whichever boat samples that stone a little differently from the scout.
+  hull.halfWidth = Math.max(hull.halfWidth, boatTypes.riverboat.beam * metre / 2) + 2;
   const knots = river.centreline;
   if (knots.length < 2) return [];
   const west = knots[0].x + hull.halfLength + 2;
@@ -189,7 +191,9 @@ function makeLane(river, moored, sign) {
       for (let offset = i ? -12 : 0; offset <= (i ? 12 : 0); offset += 2) {
         const p = i ? previous.get(y + offset) : { x: x - 16, y, cost: 0 };
         if (!p) continue;
-        const nextCost = p.cost + weight + Math.abs(offset) * 0.24;
+        // A bend costs by the square of its step, so a lane swings wide of a pier over
+        // several lengths instead of jinking beside it: long hulls cannot follow a jink.
+        const nextCost = p.cost + weight + offset * offset * 0.15;
         if (nextCost >= cost) continue;
         const angle = Math.atan2(y - p.y, x - p.x);
         if (!hullOnWater(river, hull, x, y, angle) || contactAt(hull, x, y, angle, moored)) continue;

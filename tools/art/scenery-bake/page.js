@@ -1,6 +1,7 @@
 // Recipes for tools/art/bake-scenery.mjs. Runs inside headless Chromium.
-// Source coordinates are pixels of the 1500 × 1000 paintings in art-src/scenery, as measured
-// in its manifest.json. Plate coordinates are 5 px per world unit, a cell being 290 × 228 units.
+// Source coordinates are pixels of the paintings in art-src/scenery (1500 × 1000, the river
+// 1500 × 2130), as measured in its manifest.json and marked in src/world/paintings.js.
+// Plate coordinates are 5 px per world unit, a cell being 290 × 228 units.
 (() => {
   const P = 5,
     CW = 290,
@@ -203,6 +204,22 @@
     );
     return grade(plate, "alley");
   };
+  // A seam strip lies over the join of two paintings. Its long edges fade out over 5 units,
+  // so that the lane's back walls melt into the facades they cover.
+  function softEdges(strip, vertical, soft = 5 * P) {
+    const ctx = strip.getContext("2d"),
+      size = vertical ? strip.width : strip.height;
+    const fade = ctx.createLinearGradient(0, 0, vertical ? size : 0, vertical ? 0 : size);
+    fade.addColorStop(0, "#0000");
+    fade.addColorStop(soft / size, "#000");
+    fade.addColorStop(1 - soft / size, "#000");
+    fade.addColorStop(1, "#0000");
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, strip.width, strip.height);
+    ctx.globalCompositeOperation = "source-over";
+    return strip;
+  }
   // Seam strips at their painted scale, lane centred.
   recipes.alleyStripV = async () => {
     const [left, centre, right] = entry("alleyStripV").kerbs.x;
@@ -215,7 +232,7 @@
       [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
       [0, CH],
     );
-    return grade(strip, "alley");
+    return softEdges(grade(strip, "alley"), true);
   };
   recipes.alleyStripH = async () => {
     const [top, centre, bottom] = entry("alleyStripH").kerbs.y;
@@ -228,7 +245,7 @@
       [0, CW],
       [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
     );
-    return grade(strip, "alley");
+    return softEdges(grade(strip, "alley"), false);
   };
 
   // Horizontal ring viaduct. Railheads and pier feet land on town.ring (deck 40 above the feet).
@@ -269,182 +286,38 @@
 
 
   // ---------------------------------------------------------------------------------------
-  // La Ferre. The paintings show a river one cell deep; the published river (town.river) is
-  // 372 units from bank to bank with a 156-unit island. Banks, bridge ends, island edges, trees,
-  // lamps and the cathedral keep their painted scale. Only open water, bridge mid-spans, island
-  // asphalt and bare paving are lengthened. A river plate runs from the south kerb of Quai Nord
-  // (a band of clean quay setts, then the painted cap 27 units south of the centre line) to
-  // the Quai Sud kerb.
-  const RIVER_TOP = -211, // plate top, world units from the river row's centre line
-    RIVER_H = 422.2;
-  const ry = (u) => Math.round((u - RIVER_TOP) * P);
-  const BANK_N = ry(-201), // the north quay cap (source row 150)
-    WATER_N = ry(-186), // north water edge (source row 225)
-    WATER_S = ry(186), // 1935: south water edge (source row 813)
-    ISLE_N = ry(-78),
-    ISLE_S = ry(78),
-    KERB_N = ry(-KY),
-    KERB_S = ry(KY),
-    PLATE_H = Math.round(RIVER_H * P);
+  // La Ferre at its true depth. Each river painting is 1500 × 2130 px for 290 × 412.2 units,
+  // from 27 units south of Quai Nord's centre line to the Quai Sud kerb. A plate starts 10
+  // units farther north, at the Quai Nord kerb: that band is quay setts, and a bridge runs
+  // through it. Rows are never stretched; a through road is registered on its kerbs.
+  const RIVER_H = 422.2,
+    PLATE_H = Math.round(RIVER_H * P),
+    APPROACH = 10 * P,
+    TALL = [1500, 2130];
+  let marks = {},
+    lantern = [];
 
-  // Lift bright paint within `reach` pixels of a line, like clearMarkings but in pixels.
-  function liftDashes(c, across, centre, reach, from, to) {
-    const ctx = context(c);
-    const x = across ? from : centre - reach,
-      y = across ? centre - reach : from;
-    const w = across ? to - from : 2 * reach + 1,
-      h = across ? 2 * reach + 1 : to - from;
-    const slice = ctx.getImageData(x, y, w, h),
-      d = slice.data;
-    const index = (u, v) => (across ? v * w + u : u * w + v) * 4;
-    for (let u = 0; u < to - from; u++) {
-      const a = index(u, 0),
-        b = index(u, 2 * reach);
-      for (let v = 1; v < 2 * reach; v++) {
-        const k = index(u, v);
-        const paint = Math.min(1, Math.max(0, (d[k + 1] - 69) / 27));
-        for (let ch = 0; ch < 3; ch++)
-          d[k + ch] += (d[a + ch] + ((d[b + ch] - d[a + ch]) * v) / (2 * reach) - d[k + ch]) * paint;
-      }
+  async function riverSource(key) {
+    const image = await load(key + "Tall");
+    const road = marks[key].kerbs;
+    const xs = road ? [0, ...road, TALL[0]] : [0, TALL[0]],
+      xt = road ? XT : [0, CW];
+    const c = canvas(CW * P, PLATE_H - APPROACH),
+      ctx = context(c);
+    ctx.imageSmoothingQuality = "high";
+    for (let i = 0; i < xs.length - 1; i++) {
+      const [x, x2] = xt.slice(i, i + 2).map((n) => Math.round(n * P));
+      ctx.drawImage(image, xs[i], 0, xs[i + 1] - xs[i], TALL[1], x, 0, x2 - x, c.height);
     }
-    ctx.putImageData(slice, x, y);
+    const mx = mapper(xs, xt);
+    return { c, x: (v) => mx(v) * P, y: (v) => APPROACH + (v * c.height) / TALL[1] };
   }
-
-  // Register a river painting across its width only; rows stay in source pixels.
-  async function riverSource(key, xs, xt) {
-    const image = await load(key);
-    xs ||= entry(key).kind === "river" || key === "islandCathedral" ? [0, 1500] : kerbStops(key).xs;
-    xt ||= xs.length === 2 ? [0, CW] : XT;
-    const c = register(image, xs, [0, 1000], xt, [0, 1000 / P]);
-    return { c, x: (v) => Math.round(mapper(xs, xt)(v) * P) };
-  }
-  // Copy source rows [sy0, sy1) of columns [x0, x1) to plate rows [dy0, dy1).
-  function rows(target, source, sy0, sy1, dy0, dy1, x0 = 0, x1 = source.width) {
-    target.getContext("2d").drawImage(source, x0, sy0, x1 - x0, sy1 - sy0, x0, dy0, x1 - x0, dy1 - dy0);
-  }
-  // Repeat source rows down the plate; `mirror` flips alternate copies so any texture joins.
-  function repeatRows(target, source, sy0, sy1, dy0, dy1, { x0 = 0, x1 = source.width, mirror = false } = {}) {
-    const ctx = target.getContext("2d"),
-      h = sy1 - sy0;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x0, dy0, x1 - x0, dy1 - dy0);
-    ctx.clip();
-    for (let y = dy0, i = 0; y < dy1; y += h, i++) {
-      if (mirror && i % 2) {
-        ctx.save();
-        ctx.translate(0, y + h);
-        ctx.scale(1, -1);
-        ctx.drawImage(source, x0, sy0, x1 - x0, h, x0, 0, x1 - x0, h);
-        ctx.restore();
-      } else ctx.drawImage(source, x0, sy0, x1 - x0, h, x0, y, x1 - x0, h);
-    }
-    ctx.restore();
-  }
-  // Draw `draw(ctx)` through a polygon given in plate pixels, grown by `grow` and softened.
-  function throughPolygon(target, polygon, draw, { grow = 0, inset = 0, soften = 0 } = {}) {
-    const layer = canvas(target.width, target.height),
-      ctx = layer.getContext("2d");
-    draw(ctx);
-    const mask = canvas(target.width, target.height),
-      m = mask.getContext("2d");
-    if (soften) m.filter = "blur(" + soften + "px)";
-    const shape = canvas(target.width, target.height),
-      s = shape.getContext("2d");
-    s.beginPath();
-    for (const [x, y] of polygon) s.lineTo(x, y);
-    s.closePath();
-    s.fill();
-    s.lineJoin = "round";
-    if (grow) {
-      s.lineWidth = 2 * grow;
-      s.stroke();
-    }
-    if (inset) {
-      s.globalCompositeOperation = "destination-out";
-      s.lineWidth = 2 * inset;
-      s.stroke();
-    }
-    m.drawImage(shape, 0, 0);
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.drawImage(mask, 0, 0);
-    target.getContext("2d").drawImage(layer, 0, 0);
-  }
-
-  let waterLayer;
-  // Open water for every river plate: lamp reflections off the north quay, then deep water.
-  async function water() {
-    if (waterLayer) return waterLayer;
-    const { c } = await riverSource("river");
-    const plate = canvas(CW * P, PLATE_H);
-    rows(plate, c, 226, 600, WATER_N, WATER_N + 748);
-    // Rows 612-736 carry no reflection of either bank.
-    repeatRows(plate, c, 612, 736, WATER_N + 748, WATER_S - 76, { mirror: true });
-    rows(plate, c, 736, 812, WATER_S - 76, WATER_S);
-    return (waterLayer = plate);
-  }
-  // Both banks at their painted scale. The upper north walk is the Quai Nord pavement of the
-  // district painting; the south promenade ends at the Quai Sud kerb.
-  function banks(plate, c, key, tile, road) {
-    // Quai Nord's south pavement, in the setts of the quays; a bridge's road runs through it.
-    const ctx = plate.getContext("2d");
-    ctx.fillStyle = ctx.createPattern(tile, "repeat");
-    ctx.fillRect(0, 0, plate.width, BANK_N);
-    if (road) rows(plate, c, 150 - BANK_N, 150, 0, BANK_N, road[0], road[1]);
-    rows(plate, c, 150, 232, BANK_N, BANK_N + 82);
-    const lamps = entry(key).bankForeground?.southLamps;
-    const end = Math.min(999, Math.max(939, (lamps?.footY ?? 0) + 8));
-    rows(plate, c, 735, 865, WATER_S - 78, WATER_S + 52);
-    rows(plate, c, 865, end, WATER_S + 52, PLATE_H);
-  }
-  function finishRiver(plate) {
-    return grade(plate, "river");
-  }
-
-  recipes.river = async () => {
-    const { c } = await riverSource("river");
-    const plate = canvas(CW * P, PLATE_H);
-    rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, "river", await paving());
-    return finishRiver(plate);
-  };
-
-  // A road bridge: both painted ends rigid, the mid-span repeated between them.
-  async function bridge(key, { northEnd, southStart, deck }) {
-    const { c, x } = await riverSource(key);
-    liftDashes(c, false, x(entry(key).kerbs.x[1]), 12, 0, 1000);
-    const plate = canvas(CW * P, PLATE_H);
-    rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, key, await paving(), [x(636), x(874)]);
-    const outline = Object.values(entry(key).outlineEnvelopes)[0];
-    const north = (y) => y - 225 + WATER_N,
-      south = (y) => y - 813 + WATER_S;
-    throughPolygon(
-      plate,
-      outline.map(([px, py]) => [x(px), north(py)]),
-      (ctx) => ctx.drawImage(c, 0, 232, c.width, northEnd - 232, 0, north(232), c.width, northEnd - 232),
-      { grow: 5 },
-    );
-    throughPolygon(
-      plate,
-      outline.map(([px, py]) => [x(px), south(py)]),
-      (ctx) => ctx.drawImage(c, 0, southStart, c.width, 735 - southStart, 0, south(southStart), c.width, 735 - southStart),
-      { grow: 5 },
-    );
-    repeatRows(plate, c, deck[2], deck[3], north(northEnd), south(southStart), { x0: x(deck[0]), x1: x(deck[1]) });
-    return finishRiver(plate);
-  }
-  recipes.riverBridge = () => bridge("riverBridge", { northEnd: 340, southStart: 500, deck: [566, 954, 350, 490] });
-  recipes.riverIronBridge = () => bridge("riverIronBridge", { northEnd: 345, southStart: 590, deck: [598, 908, 352, 582] });
-
-  // Île de la Ferre. Edge bands (walls, trees, lamps, the cathedral) are rigid; the street is
-  // widened to the road graph's 33.6 units and the aprons are paved from a clean sample.
-  const ISLAND = { top: 380, bottom: 655, street: [469.5, 529.5] };
+  // Clean quay setts, from the first island painting, mirrored so that they repeat.
   let pavingSample;
   async function paving() {
     if (pavingSample) return pavingSample;
-    const { c } = await riverSource("islandWest", [0, 1500], [0, CW]);
-    const tile = canvas(2 * 400, 2 * 64),
+    const image = await load("islandWest");
+    const tile = canvas(800, 128),
       ctx = tile.getContext("2d");
     for (const [i, j] of [
       [0, 0],
@@ -455,165 +328,169 @@
       ctx.save();
       ctx.translate(i ? 800 : 0, j ? 128 : 0);
       ctx.scale(i ? -1 : 1, j ? -1 : 1);
-      ctx.drawImage(c, Math.round((196 * CW * P) / 1500), 438, 400, 64, 0, 0, 400, 64);
+      ctx.drawImage(image, 196, 438, 414, 64, 0, 0, 400, 64);
       ctx.restore();
     }
     return (pavingSample = tile);
   }
-  // `nose`: "west" | "east" | null. `road`: source columns of the through road, if any.
-  async function island(key, { nose, xs, xt, road, cathedral }) {
-    const { c, x } = await riverSource(key, xs, xt);
-    const mid = Math.round((ISLAND.street[0] + ISLAND.street[1]) / 2);
-    const streetCols = nose === "west" ? [x(road[1]), c.width] : nose === "east" ? [0, x(road[0])] : [0, c.width];
-    liftDashes(c, true, mid, 9, streetCols[0], streetCols[1]);
-    if (road) liftDashes(c, false, x(entry(key).kerbs.x[1]), 12, 0, 1000);
-    const plate = canvas(CW * P, PLATE_H);
-    rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, key, await paving(), road && [x(road[0]), x(road[1])]);
-
-    const nTop = 300,
-      nEnd = 458,
-      sStart = 545,
-      sNose = 505,
-      sEnd = 690;
-    const yN = (y) => y - ISLAND.top + ISLE_N, // rigid north band
-      yS = (y) => y - ISLAND.bottom + ISLE_S; // rigid south band
-    const scale = (KERB_S - KERB_N) / (ISLAND.street[1] - ISLAND.street[0]);
-    const yM = (y) => Math.round(KERB_N + (y - ISLAND.street[0]) * scale); // widened street band
-    const mTop = 463,
-      mEnd = 535;
-
-    // Bridge decks over both channels.
-    if (road) {
-      const [r0, r1] = [x(road[0]), x(road[1])];
-      repeatRows(plate, c, 244, 300, BANK_N + 82, yN(nTop), { x0: r0, x1: r1 });
-      repeatRows(plate, c, sEnd, 735, yS(sEnd), WATER_S - 78, { x0: r0, x1: r1 });
+  // The painting's top edge cuts through the quay terrace and its posts. Setts run from the
+  // Quai Nord kerb down to the cap of the quay wall instead (source row 24).
+  const TERRACE = 24;
+  async function riverPlate(key) {
+    const { c, x, y } = await riverSource(key);
+    const mark = marks[key];
+    const plate = canvas(CW * P, PLATE_H),
+      ctx = plate.getContext("2d");
+    ctx.drawImage(c, 0, APPROACH);
+    const cap = Math.round(y(TERRACE)),
+      soft = 4;
+    const band = canvas(plate.width, cap + soft),
+      b = band.getContext("2d");
+    b.fillStyle = b.createPattern(await paving(), "repeat");
+    b.fillRect(0, 0, band.width, band.height);
+    const fade = b.createLinearGradient(0, cap - soft, 0, cap + soft);
+    fade.addColorStop(0, "#000");
+    fade.addColorStop(1, "#0000");
+    b.globalCompositeOperation = "destination-in";
+    b.fillStyle = fade;
+    b.fillRect(0, 0, band.width, band.height);
+    ctx.drawImage(band, 0, 0);
+    for (const [x0, x1, row] of mark.clear || []) {
+      const left = Math.round(x(x0)),
+        w = Math.round(x(x1)) - left,
+        h = Math.round(y(row)) - cap;
+      ctx.drawImage(await paving(), left % 800, cap % 128, w, h, left, cap, w, h);
     }
-    // Columns with the island street (and the through road).
-    const [m0, m1] = road ? (nose === "west" ? [x(road[0]), c.width] : [0, x(road[1])]) : [0, c.width];
-    // The southern trees reach up over the street in the painting. Their crowns are lifted off
-    // the painted kerb and asphalt row by row and set back on the trunks in the rigid band.
-    const crowns = [];
-    for (const [tx, ty] of entry(key).islandTreeFeet || []) {
-      const cx = x(tx);
-      if (ty < 560 || cx < m0 + 60 || cx > m1 - 60) continue;
-      const half = 58,
-        top = 498,
-        h = sStart + 3 - top;
-      const ctx = context(c);
-      const crown = ctx.getImageData(cx - half, top, 2 * half, h),
-        d = crown.data;
-      const left = ctx.getImageData(cx - half - 34, top, 30, h).data,
-        right = ctx.getImageData(cx + half + 4, top, 30, h).data;
-      for (let j = 0; j < h; j++) {
-        const back = [0, 0, 0];
-        for (let i = 0; i < 30; i++)
-          for (let k = 0; k < 3; k++) back[k] += (left[(j * 30 + i) * 4 + k] + right[(j * 30 + i) * 4 + k]) / 60;
-        for (let i = 0; i < 2 * half; i++) {
-          const o = (j * 2 * half + i) * 4;
-          const away = Math.max(Math.abs(d[o] - back[0]), Math.abs(d[o + 1] - back[1]), Math.abs(d[o + 2] - back[2]));
-          const inside = ((i - half) / 50) ** 2 + ((j - h) / 40) ** 2 < 1;
-          d[o + 3] = inside && away > 42 ? 255 : 0;
-        }
-      }
-      const sprite = canvas(2 * half, h);
-      sprite.getContext("2d").putImageData(crown, 0, 0);
-      crowns.push([sprite, cx - half, yS(top)]);
-      // Leave bare kerb and asphalt where the crown was, so the widened street stays clean.
-      const bare = ctx.getImageData(cx - half, top, 2 * half, h),
-        b = bare.data;
-      for (let j = 0; j < h; j++)
-        for (let i = 0; i < 2 * half; i++) {
-          const o = (j * 2 * half + i) * 4;
-          if (!d[o + 3]) continue;
-          const from = (j * 30 + (i % 30)) * 4;
-          for (let k = 0; k < 3; k++) b[o + k] = i < half ? left[from + k] : right[from + k];
-        }
-      ctx.putImageData(bare, cx - half, top);
+    if (mark.deck) {
+      // A bridge runs on to the kerb: its first rows again, turned about the painting's top edge.
+      const [d0, d1] = mark.deck.map((v) => Math.round(x(v)));
+      ctx.drawImage(c, d0, 0, d1 - d0, cap + soft, d0, APPROACH, d1 - d0, cap + soft);
+      ctx.save();
+      ctx.translate(0, APPROACH);
+      ctx.scale(1, -1);
+      ctx.drawImage(c, d0, 0, d1 - d0, APPROACH, d0, 0, d1 - d0, APPROACH);
+      ctx.restore();
     }
-    rows(plate, c, nTop, nEnd, yN(nTop), yN(nEnd), m0, m1);
-    rows(plate, c, nEnd, mTop, yN(nEnd), yM(mTop), m0, m1);
-    rows(plate, c, mTop, mEnd, yM(mTop), yM(mEnd), m0, m1);
-    rows(plate, c, mEnd, sStart, yM(mEnd), yS(sStart), m0, m1);
-    // The through road keeps its grain across both aprons: its own asphalt, repeated.
-    if (road) {
-      const [r0, r1] = [x(road[0]), x(road[1])];
-      repeatRows(plate, c, 396, 440, yN(nEnd), yM(mTop), { x0: r0, x1: r1, mirror: true });
-      repeatRows(plate, c, 552, 600, yM(mEnd), yS(sStart), { x0: r0, x1: r1, mirror: true });
-    }
-    rows(plate, c, sStart, sEnd, yS(sStart), yS(sEnd), m0, m1);
-    // The pointed end: its wall follows the painted curve, drawn out between the rigid bands.
-    if (nose) {
-      const [n0, n1] = nose === "west" ? [0, x(road[0])] : [x(road[1]), c.width];
-      rows(plate, c, nTop, nEnd, yN(nTop), yN(nEnd), n0, n1);
-      rows(plate, c, nEnd, sNose, yN(nEnd), yS(sNose), n0, n1);
-      rows(plate, c, sNose, sEnd, yS(sNose), yS(sEnd), n0, n1);
-    }
-    // Aprons: clean setts inside the quay wall, outside the rigid bands, street and road.
-    const yNose = mapper([0, nEnd, sNose, 1000], [yN(0), yN(nEnd), yS(sNose), yS(1000)]);
-    // The outline runs on into the neighbouring island plates; only real quay walls are inset.
-    const outline = entry(key).islandOutline.map(([px, py]) => [px <= 0 ? -200 : px >= 1499 ? c.width + 200 : x(px), yNose(py)]);
-    const tile = await paving();
-    const fade = 14;
-    throughPolygon(
-      plate,
-      outline,
-      (ctx) => {
-        ctx.fillStyle = ctx.createPattern(tile, "repeat");
-        const band = (x0, x1, y0, y1) => {
-          if (x1 <= x0 || y1 <= y0) return;
-          const part = canvas(x1 - x0, y1 - y0),
-            p = part.getContext("2d");
-          p.fillStyle = p.createPattern(tile, "repeat");
-          p.translate(-x0, -y0);
-          p.fillRect(x0, y0, x1 - x0, y1 - y0);
-          p.setTransform(1, 0, 0, 1, 0, 0);
-          const g = p.createLinearGradient(0, 0, 0, y1 - y0);
-          g.addColorStop(0, "#0000");
-          g.addColorStop(fade / (y1 - y0), "#000");
-          g.addColorStop(1 - fade / (y1 - y0), "#000");
-          g.addColorStop(1, "#0000");
-          p.globalCompositeOperation = "destination-in";
-          p.fillStyle = g;
-          p.fillRect(0, 0, x1 - x0, y1 - y0);
-          ctx.drawImage(part, x0, y0);
-        };
-        const cols = road
-          ? nose === "west"
-            ? { nose: [0, x(road[0]) - 4], street: [x(road[1]) + 4, c.width] }
-            : { nose: [x(road[1]) + 4, c.width], street: [0, x(road[0]) - 4] }
-          : { street: [0, c.width] };
-        band(...cols.street, yN(nEnd) - fade, yM(mTop) + fade);
-        band(...cols.street, yM(mEnd) - fade, yS(sStart) + fade);
-        if (cols.nose) band(...cols.nose, yN(nEnd) - fade, yS(sNose) + fade);
-      },
-      { inset: 30, soften: 3 },
-    );
-    for (const [sprite, sx, sy] of crowns) plate.getContext("2d").drawImage(sprite, sx, sy);
-    if (cathedral) {
-      const shape = entry(key).outlineEnvelopes["cathedral outline"].map(([px, py]) => [x(px), yN(py)]);
-      throughPolygon(plate, shape, (ctx) => ctx.drawImage(c, 0, 0, c.width, nTop + 2, 0, yN(0), c.width, nTop + 2), {
-        grow: 3,
-      });
-    }
-    return finishRiver(plate);
+    return grade(plate, "river");
   }
-  const noseAt = 145 - 108; // the island ends 108 units beyond its bridge centre lines
-  recipes.islandWest = () =>
-    island("islandWest", {
-      nose: "west",
-      xs: [0, 82, 666, 752, 839, 1500],
-      xt: [0, noseAt, ...XT.slice(1)],
-      road: [636, 866],
-    });
-  recipes.islandEast = () =>
-    island("islandEast", {
-      nose: "east",
-      xs: [0, 665, 754, 843, 1398, 1500],
-      xt: [...XT.slice(0, 4), CW - noseAt, CW],
-      road: [636, 872],
-    });
-  recipes.islandCathedral = () => island("islandCathedral", { cathedral: true });
+  // A standing lantern's silhouette, in source pixels: [x, finial, foot].
+  function lanternOutline([lx, top, foot]) {
+    const h = foot - top;
+    const right = lantern.map(([f, w]) => [lx + w * h, top + f * h]),
+      left = lantern.map(([f, w]) => [lx - w * h, top + f * h]).reverse();
+    return [...right, ...left];
+  }
+  const isWater = (r, g, b) => r < 22 && b > g + 4 && b >= 18;
+  // What stands in front of passing boats, as a half-size alpha mask over the plate.
+  async function riverOver(key) {
+    const { c, x, y } = await riverSource(key);
+    const mark = marks[key];
+    const mask = canvas(CW * P, PLATE_H),
+      m = mask.getContext("2d");
+    const trace = (ctx, points) => {
+      ctx.beginPath();
+      for (const [px, py] of points) ctx.lineTo(x(px), y(py));
+      ctx.closePath();
+    };
+    m.fillStyle = "#fff";
+    if (mark.deck) m.fillRect(x(mark.deck[0]), 0, x(mark.deck[1]) - x(mark.deck[0]), PLATE_H);
+    if (mark.island) {
+      trace(m, mark.island);
+      m.fill();
+    }
+    for (const lamp of mark.lamps || []) {
+      trace(m, lanternOutline(lamp));
+      m.fill();
+    }
+    const keyed = mark.over?.keyed || [];
+    if (keyed.length) {
+      const layer = canvas(mask.width, mask.height),
+        k = context(layer);
+      k.save();
+      k.beginPath();
+      for (const shape of keyed) {
+        k.moveTo(x(shape[0][0]), y(shape[0][1]));
+        for (const [px, py] of shape.slice(1)) k.lineTo(x(px), y(py));
+        k.closePath();
+      }
+      k.clip();
+      k.drawImage(c, 0, APPROACH);
+      k.restore();
+      const data = k.getImageData(0, 0, layer.width, layer.height),
+        d = data.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const solid = d[i + 3] > 128 && !isWater(d[i], d[i + 1], d[i + 2]);
+        d[i] = d[i + 1] = d[i + 2] = 255;
+        d[i + 3] = solid ? 255 : 0;
+      }
+      k.putImageData(data, 0, 0);
+      // Close pinholes in the ink and drop stray ripples: soften, then cut at half.
+      const closed = canvas(mask.width, mask.height),
+        cc = context(closed);
+      cc.filter = "blur(1.6px)";
+      cc.drawImage(layer, 0, 0);
+      cc.filter = "none";
+      const soft = cc.getImageData(0, 0, closed.width, closed.height),
+        s = soft.data;
+      for (let i = 3; i < s.length; i += 4) s[i] = s[i] > 118 ? 255 : 0;
+      cc.putImageData(soft, 0, 0);
+      m.drawImage(closed, 0, 0);
+    }
+    const half = canvas(mask.width / 2, Math.ceil(mask.height / 2)),
+      h = half.getContext("2d");
+    h.imageSmoothingQuality = "high";
+    h.drawImage(mask, 0, 0, half.width, half.height);
+    // Only the alpha matters: one flat colour under it keeps the file small.
+    const flat = h.getImageData(0, 0, half.width, half.height);
+    for (let i = 0; i < flat.data.length; i += 4) flat.data[i] = flat.data[i + 1] = flat.data[i + 2] = 255;
+    h.putImageData(flat, 0, 0);
+    half.lossless = true;
+    return half;
+  }
+  // For review: the plate with its mask in red, lanterns in cyan, boat solids in yellow and
+  // whatever the caller marks in green (plate pixels).
+  async function riverReview(key, shapes = []) {
+    const plate = await riverPlate(key),
+      over = await riverOver(key);
+    const { x, y } = await riverSource(key);
+    const ctx = plate.getContext("2d");
+    const tint = canvas(plate.width, plate.height),
+      t = tint.getContext("2d");
+    t.drawImage(over, 0, 0, plate.width, plate.height);
+    t.globalCompositeOperation = "source-in";
+    t.fillStyle = "#ff2040";
+    t.fillRect(0, 0, tint.width, tint.height);
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(tint, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2;
+    const mark = marks[key];
+    ctx.strokeStyle = "#20f0ff";
+    for (const lamp of mark.lamps || []) {
+      ctx.beginPath();
+      for (const [px, py] of lanternOutline(lamp)) ctx.lineTo(x(px), y(py));
+      ctx.closePath();
+      ctx.stroke();
+    }
+    for (const [lx, top, bottom, bracket] of mark.hanging || []) {
+      ctx.strokeRect(x(lx - 24), y(top), x(lx + 24) - x(lx - 24), y(bottom) - y(top));
+      ctx.strokeRect(x(lx - 30), y(bracket) - 1, x(lx + 30) - x(lx - 30), 2);
+    }
+    ctx.strokeStyle = "#ffe020";
+    for (const [l, tp, r, bt] of mark.piers || []) ctx.strokeRect(x(l), y(tp), x(r) - x(l), y(bt) - y(tp));
+    ctx.strokeStyle = "#40ff40";
+    for (const shape of shapes) {
+      ctx.beginPath();
+      for (const [px, py] of shape) ctx.lineTo(px, py);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    return plate;
+  }
+  for (const key of ["river", "riverBridge", "riverIronBridge", "islandWest", "islandCathedral", "islandEast"]) {
+    recipes[key] = () => riverPlate(key);
+    recipes[key + "Over"] = () => riverOver(key);
+  }
 
 
   // ---------------------------------------------------------------------------------------
@@ -919,18 +796,25 @@
   window.bake = {
     recipes,
     helpers: { P, CW, CH, KX, KY, XT, YT, RING_YT, load, canvas, context, mapper, register, grade, grades, paste, plateMap, kerbStops, entry, clearMarkings },
-    init(list) {
+    init(list, river) {
       manifest = Object.fromEntries(list.map((e) => [e.key, e]));
+      marks = river.marks;
+      lantern = river.lantern;
       return Object.keys(recipes);
     },
     async run(name, quality, png) {
       const c = await recipes[name]();
+      // Chromium writes lossless WebP at quality 1.
       return {
         width: c.width,
         height: c.height,
-        webp: c.toDataURL("image/webp", quality),
+        image: c.toDataURL("image/webp", c.lossless ? 1 : quality),
         png: png ? c.toDataURL("image/png") : null,
       };
+    },
+    // A review sheet of one river plate; `shapes` are polygons in plate pixels.
+    async review(key, shapes) {
+      return (await riverReview(key, shapes)).toDataURL("image/jpeg", 0.9);
     },
   };
 })();
