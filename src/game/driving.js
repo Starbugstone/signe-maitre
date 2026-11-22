@@ -197,13 +197,23 @@ function placed(path, lane) {
 const crossing = (o, a) => o.route && Math.abs(Math.cos(o.a - a)) < 0.5;
 
 // Last resort against any circle of cars waiting on each other (A on B on ... on A):
-// after three seconds the oldest car in the circle drives on as if the next were not there.
-function yieldsTo(c, o) {
-  if (!c.route || !o.route || c.route.wait < 3) return false;
+// after three seconds the oldest car in the circle latches priority long enough to clear the conflict.
+function inDeadlockCycle(c, o) {
   let x = o;
-  for (let k = 0; k < 5 && x?.route; k++) {
+  for (let k = 0; k < 6 && x?.route; k++) {
     x = x.route.heldBy;
     if (x === c) return c.route.id < o.route.id;
+  }
+  return false;
+}
+function yieldsTo(c, o) {
+  if (!c.route || !o.route) return false;
+  if (c.route.yieldTarget === o && game.time < (c.route.yieldUntil || 0)) return true;
+  if (c.route.wait < 3) return false;
+  if (inDeadlockCycle(c, o)) {
+    c.route.yieldTarget = o;
+    c.route.yieldUntil = game.time + 2.5;
+    return true;
   }
   return false;
 }
@@ -302,10 +312,12 @@ function honk(c, at) {
 
 function vehicleOnPath(c, route, lane, from, reach) {
   for (let d = Math.max(4, from); d <= reach; d += 4) {
-    const pose = placed(pathAt(route, d, lane), lane);
+    const p0 = pathAt(route, d, lane);
+    const pose = placed(p0, lane);
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
     for (const o of cars) {
-      if (o === c || crossing(o, pose.a) || oncoming(o, pose.a) || yieldsTo(c, o)) continue;
+      if (o === c || yieldsTo(c, o)) continue;
+      if (!p0.inRoundabout && (crossing(o, pose.a) || oncoming(o, pose.a))) continue;
       if (Math.abs(o.x - pose.x) > 26 || Math.abs(o.y - pose.y) > 26) continue;
       if (carContact(body, o) && !carContact({ ...c, halfLength: c.halfLength, halfWidth: c.halfWidth }, o))
         return { gap: d - 4, what: o };
@@ -339,15 +351,14 @@ function roundaboutBusy(c, rbEntry) {
   for (const o of cars) {
     if (o === c || yieldsTo(c, o)) continue;
     const dCenter = Math.hypot(o.x - rx, o.y - ry);
-    if (dCenter > outerRadius + 4) continue;
-    if (o.route && o.route.wait > 4) continue;
+    if (dCenter > outerRadius + 6) continue;
     if (o === game.ride && c.route.wait > 3) continue;
     // Immediately blocking the join zone.
-    if (Math.hypot(o.x - joinPt.x, o.y - joinPt.y) < 22) return o;
-    // Circulating upstream (anticlockwise means decreasing polar angle, so upstream is higher angle +0..+1.35 rad).
+    if (Math.hypot(o.x - joinPt.x, o.y - joinPt.y) < 26) return o;
+    // Circulating upstream (anticlockwise means decreasing polar angle, so upstream is higher angle +0..+1.75 rad).
     const oAngle = Math.atan2(o.y - ry, o.x - rx);
     const upstream = ((oAngle - joinAngle) % TAU + TAU) % TAU;
-    if (upstream < 1.35) return o;
+    if (upstream < 1.75) return o;
   }
   return null;
 }
@@ -429,20 +440,27 @@ function advanceTraffic(c, dt) {
     return null;
   };
 
+  const stopRem = rbEntry ? (rbEntry.stopOffset ?? 8) + (c.halfLength ?? sedanHalfLength) + 2 : 0;
+  const rbOutside = rbEntry ? probe.remaining >= stopRem - 2 : false;
+
   let exitCar = null;
+  let yieldCar = null;
   let occupied = false;
   if (rbEntry) {
-    // Yield on entry to roundabout traffic already circulating.
-    if (!ghost && probe.remaining < 26) {
+    // Yield outside the roundabout kerb (front bumper clear of outerRadius) to circulating traffic.
+    if (rbOutside && !ghost && probe.remaining < stopRem + 36) {
       const circulating = roundaboutBusy(c, rbEntry);
       if (circulating) {
         occupied = true;
-        desired = Math.min(desired, Math.max(0, (probe.remaining - 3) * 2.4));
+        yieldCar = circulating;
+        desired = Math.min(desired, Math.max(0, (probe.remaining - stopRem) * 2.5));
       }
     }
   } else if (junc) {
     exitCar = probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
-    occupied = outside && !ghost && (cars.some(holds) || !!exitCar);
+    const holdingCar = outside && !ghost ? cars.find(holds) : null;
+    yieldCar = holdingCar;
+    occupied = outside && !ghost && (!!holdingCar || !!exitCar);
     if (occupied) {
       const toLine = Math.max(Math.abs(c.x - junc.x), Math.abs(c.y - junc.y)) - 40 - 0.5;
       desired = Math.min(desired, Math.max(0, toLine * 2.5));
@@ -494,7 +512,14 @@ function advanceTraffic(c, dt) {
   function blockedAt(pose, moving) {
     if (!moving) return "still";
     if (!ghost && junc && outside && within(pose, 40) && cars.some(holds)) return "junction";
-    if (!ghost && rbEntry && probe.remaining < 10 && roundaboutBusy(c, rbEntry)) return "junction";
+    if (
+      !ghost &&
+      rbEntry &&
+      rbOutside &&
+      (path.segIndex !== route.segIndex || path.remaining < stopRem) &&
+      roundaboutBusy(c, rbEntry)
+    )
+      return "junction";
     if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
     if (
       !game.ride &&
@@ -567,7 +592,7 @@ function advanceTraffic(c, dt) {
   }
 
   route.blocker = obstructed ? other : null;
-  route.heldBy = other || (desired < 1 ? what || exitCar : null);
+  route.heldBy = other || (blocker === "junction" ? yieldCar : null) || (desired < 1 ? what || exitCar || yieldCar : null);
   stalledTimer(c, route, dt);
   if (obstructed) {
     route.speed = 0;

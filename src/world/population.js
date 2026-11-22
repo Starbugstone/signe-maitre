@@ -127,7 +127,10 @@ function populate(col, row, key) {
       y = Y(row) - 16;
     for (let offset = 0; offset < CELL_W / 2 - 48; offset++) {
       const x = [kerbX + offset, kerbX - offset].find(
-        (cand) => Math.abs(cand - X(col)) > 58 && !vehicleBlocked({ x: cand, y, a: Math.PI }),
+        (cand) =>
+          Math.abs(cand - X(col)) > 58 &&
+          !(town.ring?.stations || []).some((st) => Math.hypot(cand - st.street.x, y - st.street.y) < 28) &&
+          !vehicleBlocked({ x: cand, y, a: Math.PI }),
       );
       if (x !== undefined) {
         car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;

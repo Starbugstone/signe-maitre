@@ -62,6 +62,7 @@ function roundaboutFillet(cx, cy, R, armAngle, laneOffset, isEntry) {
     straightPt,
     ringPt,
     ringAngle,
+    vf,
     fillet: {
       type: "arc",
       cx: fcx,
@@ -126,6 +127,7 @@ export function compileNodeCycle(town, nodeIds, laneOffset = RIGHT_LANE) {
           y: curr.y,
           radius: curr.radius,
           outerRadius: curr.outerRadius,
+          stopOffset: Math.max(0, (curr.outerRadius ?? R + 12) - entry.vf),
           joinAngle: entry.ringAngle,
           joinPt: entry.ringPt,
         },

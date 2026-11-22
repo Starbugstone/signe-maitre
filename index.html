@@ -2455,6 +2455,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       straightPt,
       ringPt,
       ringAngle,
+      vf,
       fillet: {
         type: "arc",
         cx: fcx,
@@ -2510,6 +2511,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
             y: curr.y,
             radius: curr.radius,
             outerRadius: curr.outerRadius,
+            stopOffset: Math.max(0, (curr.outerRadius ?? R + 12) - entry.vf),
             joinAngle: entry.ringAngle,
             joinPt: entry.ringPt
           },
@@ -2960,7 +2962,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       const kerbX2 = X(col) + 112, y = Y(row) - 16;
       for (let offset = 0; offset < CELL_W / 2 - 48; offset++) {
         const x = [kerbX2 + offset, kerbX2 - offset].find(
-          (cand) => Math.abs(cand - X(col)) > 58 && !vehicleBlocked({ x: cand, y, a: Math.PI })
+          (cand) => Math.abs(cand - X(col)) > 58 && !(town.ring?.stations || []).some((st) => Math.hypot(cand - st.street.x, y - st.street.y) < 28) && !vehicleBlocked({ x: cand, y, a: Math.PI })
         );
         if (x !== void 0) {
           car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
@@ -4480,12 +4482,22 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     return { x: path.x - Math.sin(path.a) * lane, y: path.y + Math.cos(path.a) * lane, a: path.a };
   }
   var crossing = (o, a) => o.route && Math.abs(Math.cos(o.a - a)) < 0.5;
-  function yieldsTo(c, o) {
-    if (!c.route || !o.route || c.route.wait < 3) return false;
+  function inDeadlockCycle(c, o) {
     let x = o;
-    for (let k = 0; k < 5 && x?.route; k++) {
+    for (let k = 0; k < 6 && x?.route; k++) {
       x = x.route.heldBy;
       if (x === c) return c.route.id < o.route.id;
+    }
+    return false;
+  }
+  function yieldsTo(c, o) {
+    if (!c.route || !o.route) return false;
+    if (c.route.yieldTarget === o && game.time < (c.route.yieldUntil || 0)) return true;
+    if (c.route.wait < 3) return false;
+    if (inDeadlockCycle(c, o)) {
+      c.route.yieldTarget = o;
+      c.route.yieldUntil = game.time + 2.5;
+      return true;
     }
     return false;
   }
@@ -4560,10 +4572,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function vehicleOnPath(c, route, lane, from, reach) {
     for (let d = Math.max(4, from); d <= reach; d += 4) {
-      const pose = placed(pathAt(route, d, lane), lane);
+      const p0 = pathAt(route, d, lane);
+      const pose = placed(p0, lane);
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
       for (const o of cars) {
-        if (o === c || crossing(o, pose.a) || oncoming(o, pose.a) || yieldsTo(c, o)) continue;
+        if (o === c || yieldsTo(c, o)) continue;
+        if (!p0.inRoundabout && (crossing(o, pose.a) || oncoming(o, pose.a))) continue;
         if (Math.abs(o.x - pose.x) > 26 || Math.abs(o.y - pose.y) > 26) continue;
         if (carContact(body, o) && !carContact({ ...c, halfLength: c.halfLength, halfWidth: c.halfWidth }, o))
           return { gap: d - 4, what: o };
@@ -4592,13 +4606,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     for (const o of cars) {
       if (o === c || yieldsTo(c, o)) continue;
       const dCenter = Math.hypot(o.x - rx, o.y - ry);
-      if (dCenter > outerRadius + 4) continue;
-      if (o.route && o.route.wait > 4) continue;
+      if (dCenter > outerRadius + 6) continue;
       if (o === game.ride && c.route.wait > 3) continue;
-      if (Math.hypot(o.x - joinPt.x, o.y - joinPt.y) < 22) return o;
+      if (Math.hypot(o.x - joinPt.x, o.y - joinPt.y) < 26) return o;
       const oAngle = Math.atan2(o.y - ry, o.x - rx);
       const upstream = ((oAngle - joinAngle) % TAU3 + TAU3) % TAU3;
-      if (upstream < 1.35) return o;
+      if (upstream < 1.75) return o;
     }
     return null;
   }
@@ -4656,19 +4669,25 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       }
       return null;
     };
+    const stopRem = rbEntry ? (rbEntry.stopOffset ?? 8) + (c.halfLength ?? sedanHalfLength) + 2 : 0;
+    const rbOutside = rbEntry ? probe.remaining >= stopRem - 2 : false;
     let exitCar2 = null;
+    let yieldCar = null;
     let occupied = false;
     if (rbEntry) {
-      if (!ghost && probe.remaining < 26) {
+      if (rbOutside && !ghost && probe.remaining < stopRem + 36) {
         const circulating = roundaboutBusy(c, rbEntry);
         if (circulating) {
           occupied = true;
-          desired = Math.min(desired, Math.max(0, (probe.remaining - 3) * 2.4));
+          yieldCar = circulating;
+          desired = Math.min(desired, Math.max(0, (probe.remaining - stopRem) * 2.5));
         }
       }
     } else if (junc) {
       exitCar2 = probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
-      occupied = outside && !ghost && (cars.some(holds) || !!exitCar2);
+      const holdingCar = outside && !ghost ? cars.find(holds) : null;
+      yieldCar = holdingCar;
+      occupied = outside && !ghost && (!!holdingCar || !!exitCar2);
       if (occupied) {
         const toLine = Math.max(Math.abs(c.x - junc.x), Math.abs(c.y - junc.y)) - 40 - 0.5;
         desired = Math.min(desired, Math.max(0, toLine * 2.5));
@@ -4706,7 +4725,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     function blockedAt(pose, moving) {
       if (!moving) return "still";
       if (!ghost && junc && outside && within(pose, 40) && cars.some(holds)) return "junction";
-      if (!ghost && rbEntry && probe.remaining < 10 && roundaboutBusy(c, rbEntry)) return "junction";
+      if (!ghost && rbEntry && rbOutside && (path.segIndex !== route.segIndex || path.remaining < stopRem) && roundaboutBusy(c, rbEntry))
+        return "junction";
       if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
       if (!game.ride && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
         return p;
@@ -4757,7 +4777,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       return;
     }
     route.blocker = obstructed ? other : null;
-    route.heldBy = other || (desired < 1 ? what || exitCar2 : null);
+    route.heldBy = other || (blocker === "junction" ? yieldCar : null) || (desired < 1 ? what || exitCar2 || yieldCar : null);
     stalledTimer(c, route, dt);
     if (obstructed) {
       route.speed = 0;

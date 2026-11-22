@@ -16,25 +16,29 @@ const { game, p, cars, people, held } = await import("../src/core/state.js");
 const { update } = await import("../src/game/simulation.js");
 const { X, Y, CELL_W, CELL_H, town } = await import("../src/world/town.js");
 
-// Stand in key blocks (ordinary cross streets, Obelisk roundabout, and Star roundabout) and let
-// traffic run for five minutes: no car may lock up, on screen or off it.
-for (const [label, cx, cy] of [
-  ["central block 7,5", X(7) + CELL_W / 2, Y(5) + CELL_H / 2],
-  ["Obelisk roundabout 6,5", X(6), Y(5)],
-  ["Star roundabout 3,3", X(3), Y(3)],
+// Stand in key blocks (ordinary cross streets, all four roundabouts, and river bridges) and let
+// traffic run for over two minutes: no car may lock up, on screen or off it.
+for (const [label, cx, cy, px, py, seconds] of [
+  ["central block 7,5", X(7) + CELL_W / 2, Y(5) + CELL_H / 2, X(7) + CELL_W / 2, Y(5) + CELL_H / 2, 180],
+  ["Star roundabout 3,3", X(3), Y(3), X(3) + 60, Y(3) - 24, 150],
+  ["Obelisk roundabout 6,5", X(6), Y(5), X(6) + 60, Y(5) - 24, 150],
+  ["Timbre roundabout 13,2", X(13), Y(2), X(13) + 60, Y(2) - 24, 150],
+  ["Rive-Sud roundabout 10,10", X(10), Y(10), X(10) + 60, Y(10) - 24, 150],
+  ["Pont de la Contrainte bridge col 6", X(6), Y(7), X(6) + 60, Y(6) - 24, 150],
+  ["Île de la Ferre bridges cols 8 & 10", X(9), Y(7), X(9), Y(7) - 24, 150],
 ]) {
-  test(`traffic around ${label} never locks up over five minutes`, () => {
+  test(`traffic around ${label} never locks up over ${seconds} seconds`, () => {
     game.sound = false;
     game.ride = null;
-    p.x = cx;
-    p.y = cy;
-    game.camX = p.x;
-    game.camY = p.y;
-    game.vw = 300;
-    game.vh = 220;
+    p.x = px;
+    p.y = py;
+    game.camX = cx;
+    game.camY = cy;
+    game.vw = 360;
+    game.vh = 240;
     const stopped = new Map();
     let longest = 0;
-    for (let frame = 0; frame < 300 * 60; frame++) {
+    for (let frame = 0; frame < seconds * 60; frame++) {
       update(1 / 60);
       for (const c of cars) {
         if (!c.route) continue;
@@ -44,7 +48,7 @@ for (const [label, cx, cy] of [
       }
     }
     assert.ok(stopped.size >= 4, `only ${stopped.size} cars were simulated around ${label}`);
-    assert.ok(longest < 30, `a car stayed stopped for ${longest.toFixed(1)} s around ${label}`);
+    assert.ok(longest < 20, `a car stayed stopped for ${longest.toFixed(1)} s around ${label}`);
   });
 }
 
