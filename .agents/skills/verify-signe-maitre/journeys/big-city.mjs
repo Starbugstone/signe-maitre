@@ -8,7 +8,7 @@
 //    then exit on foot and walk straight through the same narrow cobblestone alley.
 // 6. Walk down avenue col 8 to Gare du Sud station under the Petite Ceinture ring viaduct.
 import { town, X, Y } from "../../../../src/world/town.js";
-import { findRoute } from "../../../../src/world/routes.js";
+import { compileNodeCycle, evalSegment, findRoute } from "../../../../src/world/routes.js";
 
 export const meta = { feature: "big-city", needs: "probe" };
 
@@ -108,7 +108,7 @@ function buildRightLaneRoute(from, dest, laneOffset = 6) {
 async function driveRouteTo(
   d,
   dest,
-  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null } = {},
+  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null, turnLookahead = 24 } = {},
 ) {
   const buildDense = (from) => (waypoints ? densifyPath([from, ...waypoints], 8) : buildRightLaneRoute(from, dest));
 
@@ -156,7 +156,7 @@ async function driveRouteTo(
     const curve = upcomingCurvature(dense, cursor, 72);
     const nearRb = isNearRoundabout(s.ride, 22);
     const tight = curve > 0.25 || nearRb;
-    const lookDist = tight ? 24 : 46;
+    const lookDist = tight ? turnLookahead : 46;
     let lookIdx = cursor,
       walked = 0;
     while (lookIdx < dense.length - 1 && walked < lookDist) {
@@ -220,7 +220,7 @@ async function driveRouteTo(
     }
 
     // Target speed slows smoothly for turns, roundabouts and final approach.
-    let vTarget = tight ? 38 : maxSpeed;
+    let vTarget = tight ? Math.min(38, maxSpeed) : maxSpeed;
     if (absErr > 0.7) vTarget = Math.min(vTarget, 30);
     if (stop && remDest < 68) vTarget = Math.min(vTarget, Math.max(16, remDest * 0.55));
 
@@ -320,16 +320,27 @@ export default async function (d) {
     const turned = await turnSlowly(d, Math.PI, 19);
     d.expect(Math.abs(turned.p.a) > 2.8, "The sedan faces west towards Place de la Contrainte", turned.p);
 
+    const exit = { x: rb.x - 6, y: rb.y + 68 };
+    // Follow the east entry, circulating lane and south exit used by street traffic.
+    const segments = compileNodeCycle(town, ["c6r5", "c6r6", "c7r6", "c7r5"]);
+    const approach = segments.findIndex((seg) => seg.roundaboutEntry?.id === rb.id);
+    const waypoints = segments.slice(approach, approach + 4).flatMap((seg) => {
+      const steps = Math.ceil(seg.length / 5);
+      return Array.from({ length: steps }, (_, i) => evalSegment(seg, (i * seg.length) / steps));
+    });
+    waypoints.push(exit);
     let sawNorth = false,
       sawWest = false;
     await driveRouteTo(
       d,
-      { x: rb.x - 10, y: rb.y + 62 },
+      exit,
       {
-        tol: 20,
+        tol: 14,
         stop: true,
-        timeout: 90000,
-        maxSpeed: 56,
+        timeout: 110000,
+        maxSpeed: 36,
+        turnLookahead: 15,
+        waypoints,
         onSample: ({ ride }) => {
           if (ride.y < rb.y - 16 && Math.abs(ride.x - rb.x) < rb.outerRadius + 6) sawNorth = true;
           if (ride.x < rb.x - 16 && Math.abs(ride.y - rb.y) < rb.outerRadius + 6) sawWest = true;

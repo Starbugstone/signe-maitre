@@ -64,16 +64,17 @@ export default async (d) => {
   });
   await d.step("board the launch and sound the horn", async () => {
     await d.press("car");
-    await d.waitFor("launch at the helm", ({ state }) => state.ride?.model === "launch");
+    await d.waitFor("launch at the helm with the cast-off ticker", ({ state, hud }) =>
+      state.ride?.model === "launch" && hud.ticker.includes(d.t("boatBoarded")),
+    );
     const button = d.device === "desktop" ? "#vehicleSignal" : "#touchSignal";
     d.expect(await d.page.locator(button).textContent() === d.t("shipHorn"), "The horn control takes the ship label");
     await Promise.all([
       d.hold(["horn"], 480),
       d.waitFor("ship horn held", ({ state }) => state.shipHorn, 2000),
     ]);
-    const { stats, ticker } = await d.hud();
+    const { stats } = await d.hud();
     d.expect(stats.includes(d.t("launch")) && stats.includes(d.t("knots")), "The helm shows knots and the launch name");
-    d.expect(ticker.includes(d.t("boatBoarded")), "The launch ticker confirms casting off");
   });
   await d.step("pass beneath the bridge", async () => {
     await lineUpForBridge(d, bridge);
