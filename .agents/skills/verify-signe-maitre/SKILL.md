@@ -21,7 +21,7 @@ npm run build              # refresh index.html from src/
 node .agents/skills/verify-signe-maitre/scripts/pf.mjs doctor
 ```
 
-Every `pf run` starts its own headless Chromium and opens the game in a new browser context, so `localStorage` starts empty. It stops that Chromium when it finishes. There is no server or port, so parallel runs do not share state. The game is ready when `#stats` contains `€`. The HUD is only written after the artwork has decoded, so a `€` in `#stats` means the street is drawn and accepts input. Each run waits for that.
+Every `pf run` starts its own headless Chromium. Each journey gets a fresh browser context and empty `localStorage`. Reloading within a journey retains its preferences. The runner closes Chromium after the last journey. Local builds open directly from disk. The game is ready when `#stats` contains `€`. The HUD is only written after the artwork has decoded, so a `€` in `#stats` means the street is drawn and accepts input. Each run waits for that.
 
 Two builds can be driven.
 
@@ -32,7 +32,7 @@ Use `--url <address>` to drive a deployed copy, such as `https://starbugstone.gi
 
 ## Doctor
 
-`pf doctor` is read-only. It exits 0 only if Node is version 22 or later, `playwright-core` imports, a Chromium binary exists and `index.html` matches `src/`. The game must also boot to `€0 · HP 5/5 · Heat 0/3` without page errors, and `.verify/runs/` must contain no stranded runs. With `--url`, doctor boots that address and skips the freshness check. Run doctor first, and again whenever a run behaves strangely.
+`pf doctor` is read-only. It exits 0 only if Node is version 22 or later, `playwright-core` imports, a Chromium binary exists and `index.html` matches `src/`. The game must also boot to `€0 · HP 5/5 · Heat 0/3` without page errors, and `.verify/runs/` must have no active or stranded run directories. With `--url`, doctor boots that address and skips the freshness check. Run doctor first, and again whenever a run behaves strangely.
 
 Chromium comes from `PF_CHROMIUM`, otherwise from the newest `~/.cache/ms-playwright/chromium*` install. If no binary exists, run `npx playwright-core install chromium-headless-shell`.
 
@@ -56,19 +56,19 @@ The driver `d` provides these calls.
 | `d.click(selector)` | Clicks or taps a toolbar button: `#help`, `#language`, `#sound`, `#mapBtn`, `#quip`, `#reportBtn`. |
 | `d.choose(stringKey)` | Chooses the dialog button whose text is exactly `t(stringKey)` in the current language. Use keys from `src/ui/strings.js`, such as `take`, `sign`, `goInside` or `back`. |
 | `d.t(key, lang?)` | Returns the localized string with control placeholders such as `{job}` filled with the keyboard labels the HUD shows, so one journey works in English and French. `pf doctor` checks these labels against `bindings` in `src/ui/dialogs.js`. |
-| `d.hud()` | Returns `district`, `stats`, `ticker`, `hint`, `route{type,place,action,distance,compass}` or `null`, `report`, `map`, `dialog{heading,copy,choices}` or `null`, and `lang`. |
+| `d.hud()` | Returns `district`, `stats`, `ticker`, `hint`, `route{type,title,brief,place,action,distance}` or `null`, `report`, `map`, `dialog{heading,copy,choices}` or `null`, and `lang`. |
 | `d.state()` | Probe only. Returns `window.__pf.snapshot()`. |
-| `d.walkTo({x,y}, {tol, run, until})` | Probe only. Steers on foot or indoors with real direction controls, using short pulses near the target. When blocked, it sidesteps up to three times before failing with `Stuck` and the position. |
+| `d.walkTo({x,y}, {tol, run, until})` | Probe only. Steers on foot or indoors with real direction controls, using short pulses near the target. It tries up to three detours per blockage before reporting `Stuck` and the position. |
 | `d.followRoute()` | Probe only. Walks the street route the game plans to the current objective and stops when the route card reads **On site**. |
 | `d.waitFor(what, ({hud, state}) => bool, ms)` | Polls for an observable result and includes the last value if it times out. |
 | `d.step(name, fn)` | Runs one user action and records the HUD before and after, a screenshot and, with the probe, a state snapshot. |
 | `d.expect(ok, message, data)` | Records a check, or fails the journey with the data. |
 
-The shipped journeys are `boot`, `map-view`, `office-interior`, `noise-case`, `home-visit`, `street-life` and `street-scenery`. Here is the full regression set on both devices and in both languages:
+Run the built-in gameplay journeys on keyboard and touch. The art journeys and their video review steps are in [Hero gait](features/hero-gait.md).
 
 ```sh
-pf run boot map-view office-interior noise-case home-visit --build probe --keep-going
-pf run boot map-view office-interior noise-case home-visit --build probe --device phone --lang fr --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --device phone --lang fr --keep-going
 ```
 
 Use `--keep-going` to continue to the next journey after a failure. Without it, the run stops at the first failure.
@@ -77,7 +77,7 @@ Use `--keep-going` to continue to the next journey after a failure. Without it, 
 
 Each run writes to `.verify/evidence/<run-id>/<journey>-<device>-<lang>/`. The `.verify/` folder is ignored by Git. A run contains:
 
-- `NN-<step>.png`, a screenshot after every step, plus `failure.png` if the journey failed;
+- `NN-<step>.png`, a screenshot after every step, plus `NN-failure.png` if the journey failed;
 - `journal.jsonl`, with one JSON line per step containing the HUD before and after, the screenshot name and, with the probe, state;
 - `summary.json`, with the result, error, device, language, mode, URL, build hash, commit (`+dirty` if `src/` or `index.html` has changes), duration and all checks;
 - `video.webm` with `--video`, recorded without sound. Use the project's capture pipeline when sound must be shown.
@@ -93,10 +93,10 @@ Proof standards:
 
 ## Cleanup
 
-`pf run` stops its own Chromium and removes its `.verify/runs/<id>/` state, even after a failure. If a run is killed, its PIDs stay in `.verify/runs/<id>/pids.json`. In that case, run:
+`pf run` stops its own Chromium and removes its `.verify/runs/<id>/` state, even after a failure. If a run is killed, its PIDs stay in `.verify/runs/<id>/pids.json`. After confirming that the recorded run has stopped, clean up that run by ID.
 
 ```sh
-pf cleanup [--run-id ID]
+pf cleanup --run-id ID
 ```
 
 This stops only the recorded PIDs and removes the run state. Evidence in `.verify/evidence/` is never removed. Never stop Chromium by name, because other tools on this machine run their own headless Chromium. `.verify/probe.html` is rebuilt on every probe run and can be deleted.
@@ -110,7 +110,8 @@ For a scenery edit, run `npm run test:scenery` and review the screenshots from i
 
 ## Known gaps
 
-- There is no `driveTo` yet. Repossession, car delivery, handbrake, crash damage and roadside repair need driving and do not have journeys. Their recipes are in the feature map.
-- Street incidents and ambulances do not have journeys yet. Knocking down a pedestrian through play depends on who walks past.
+- `street-life` checks boarding and departure before braking with Down and exiting. See [Vehicles](features/vehicles.md) for the known starter-sedan failure. GT delivery, handbrake behaviour, wreck repair and ambulance theft need manual drives.
+- `street-report` and `ambulance` exercise the two choices for an on-foot scuffle. Traffic injuries, outrage reports and multi-patient dispatch have separate preconditions in [Street incidents](features/street-incident.md).
+- The driver sends keyboard and touch input. Check Xbox prompts and controller navigation with a connected controller using [Boot and controls](features/boot-hud.md).
 - `walkTo` steers in straight lines between route nodes. A parked car or passing traffic can block it, and it reports that as `Stuck`. Rerun once. If it fails again, record the problem in the feature's Gotchas.
 - Journeys run in real time, so a busy machine slows them. Run `uptime` first. With a load average above the core count, phone journeys took 2–4 times longer, but they still passed. If a phone journey fails with `Stuck` while desktop passes, rerun it on a quieter machine before suspecting the game.

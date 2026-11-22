@@ -10,7 +10,7 @@ The garage and market share a railway above a pedestrian alley. The player can e
 
 ## How to get to it (user POV)
 
-Walk west from the étude along the north pavement. Enter the alley between the market and the garage, return to the pavement, then continue west to the garage gate.
+Walk west from the étude along the north pavement. Visit the garage gate, walk back east to the alley between the market and garage, then pass under the span and return to the pavement.
 
 ## Driving it with pf
 

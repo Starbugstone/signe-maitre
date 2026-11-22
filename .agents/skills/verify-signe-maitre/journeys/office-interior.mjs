@@ -17,8 +17,9 @@ export default async function (d) {
   });
   await d.step("inside", async () => {
     await d.choose("goInside");
-    const { state } = await d.waitFor("interior", ({ state }) => state.interior);
+    const { state, hud } = await d.waitFor("interior", ({ state, hud }) => state.interior && hud.route?.action === d.t("deskRoute"));
     d.expect(state.interior.door === "office", "the player is inside the étude", state.interior);
+    d.expect(hud.hint === d.t("leaveRoom"), "the entrance mat offers the street exit", hud.hint);
   });
   await d.step("at-desk", async () => {
     const { interior } = await d.state();
@@ -32,16 +33,27 @@ export default async function (d) {
       d.expect(hud.dialog.choices.includes(d.t(id)), "the desk lists the " + id + " file", hud.dialog.choices);
     d.expect(!hud.dialog.choices.includes(d.t("goInside")), "no Go inside while already inside", hud.dialog.choices);
   });
-  await d.step("desk-closed", async () => {
-    await d.choose("back");
-    await d.waitFor("dialog closed", ({ hud }) => !hud.dialog);
+  await d.step("file-taken", async () => {
+    await d.choose("noise");
+    await d.choose("take");
+    await d.waitFor("route to the street exit", ({ hud }) => hud.route?.action === d.t("exitRoute"));
+  });
+  await d.step("indoor-map", async () => {
+    await d.press("map");
+    const row = d.page.locator("#fileList li").first();
+    await row.waitFor();
+    d.expect(await row.locator("strong").textContent() === d.t("noise") &&
+      await row.locator("small").textContent() === d.t("currentCase"), "the active file comes first");
+    d.expect((await row.locator(".fileStep").textContent()).includes("Le Boum"), "the map names the active destination");
+    await d.press("map");
+    await d.waitFor("back at the desk", ({ state, hud }) => !state.viewMap && state.interior && hud.hint === d.t("caseDesk"));
   });
   await d.step("back-on-street", async () => {
     const { interior } = await d.state();
     await d.walkTo(interior.exit, { tol: 5, run: false });
     await d.waitFor("exit hint", ({ hud }) => hud.hint === d.t("leaveRoom"));
     await d.press("job");
-    const { state } = await d.waitFor("street", ({ state }) => !state.interior);
+    const { state } = await d.waitFor("street", ({ state, hud }) => !state.interior && state.active === "noise" && hud.route?.place === "Le Boum");
     d.expect(Math.hypot(state.p.x - street.x, state.p.y - street.y) < 1, "the player returns to the same street position", { street, now: state.p });
   });
 }

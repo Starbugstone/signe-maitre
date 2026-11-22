@@ -35,6 +35,7 @@ export default async function (d) {
     const { hud, state } = await d.waitFor("fee", ({ hud }) => /^€125 /.test(hud.stats));
     d.expect(state.done.includes("noise") && !state.active, "the case is closed", state);
     d.expect(hud.ticker.includes("+€125"), "the ticker announces the fee", hud.ticker);
-    d.expect(hud.route?.place !== "Le Boum", "the route card moves on to the next file", hud.route);
+    d.expect(hud.route?.type === d.t("nextCase") && hud.route.title === d.t("repo") && hud.route.place === "Crédit Sec",
+      "the route card moves on to the next unfinished pickup", hud.route);
   });
 }

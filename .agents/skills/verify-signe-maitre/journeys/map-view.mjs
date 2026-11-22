@@ -17,10 +17,19 @@ export default async function (d) {
   await d.step("map-ignores-movement", async () => {
     const before = await d.hud();
     // Phones hide the touch pad behind the map sheet, so there is nothing to press there.
-    if (d.device !== "desktop") return;
-    await d.hold(["right"], 500);
+    const stopped = d.mode === "probe" ? await d.state() : null;
+    if (d.device === "desktop") await d.hold(["right"], 500);
+    else {
+      d.expect(await d.page.locator("#touch").isHidden(), "the map hides the touch pad");
+      await d.page.waitForTimeout(500);
+    }
     const after = await d.hud();
-    d.expect(after.map === d.t("closeMap") && after.district === before.district, "walking keys do not close the map", { before, after });
+    d.expect(after.map === d.t("closeMap") && after.district === before.district, "the map stays open in the same district", { before, after });
+    if (stopped) {
+      const now = await d.state();
+      d.expect(now.time === stopped.time && now.p.x === stopped.p.x && now.p.y === stopped.p.y,
+        "the simulation clock and player position stay still on the map", { before: stopped.p, after: now.p });
+    }
   });
   await d.step("map-closed", async () => {
     await d.press("map");

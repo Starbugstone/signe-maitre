@@ -182,13 +182,14 @@ async function doctor(opts) {
   if (pw && chrome) {
     const browser = await pw.chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
     try {
-      const page = await browser.newPage(DEVICES.desktop);
+      const page = await browser.newPage({ ...DEVICES.desktop, locale: "en-US" });
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       const url = opts.url || pathToFileURL(join(root, "index.html")).href;
       await page.goto(url);
       await page.waitForFunction(() => document.querySelector("#stats")?.textContent.includes("€"), null, { timeout: 20000 });
-      check("game boots to a playable street", true, (await page.locator("#stats").innerText()) + " @ " + url);
+      const stats = (await page.locator("#stats").innerText()).replace(/\s+/g, " ").trim();
+      check("game boots to a playable street", stats === "€0 · HP 5/5 · Heat 0/3", stats + " @ " + url);
       check("no page errors during boot", errors.length === 0, errors.join(" | ") || "none");
     } catch (e) {
       check("game boots to a playable street", false, e.message.split("\n")[0]);
@@ -363,7 +364,10 @@ function driver({ page, out, mode, device, lang, words }) {
         hint: text("#hint"),
         route: q("#routeCard").hidden
           ? null
-          : { type: text("#routeType"), place: text("#routePlace"), action: text("#routeAction"), distance: text("#routeDistance"), compass: text("#compass") },
+          : {
+              type: text("#routeType"), title: text("#routeTitle"), brief: text("#routeBrief"),
+              place: text("#routePlace"), action: text("#routeAction"), distance: text("#routeDistance"),
+            },
         report: !q("#reportBtn").hidden,
         map: text("#mapBtn"),
         dialog: panel.open
@@ -476,7 +480,8 @@ function driver({ page, out, mode, device, lang, words }) {
       let best = Infinity,
         bestAt = Date.now(),
         ticksSinceBest = 0,
-        sidesteps = 0;
+        sidesteps = 0,
+        blockedDistance = Infinity;
       try {
         while (Date.now() < end) {
           const s = await state();
@@ -486,6 +491,7 @@ function driver({ page, out, mode, device, lang, words }) {
             dist = Math.hypot(dx, dy);
           if (dist <= tol) return s;
           if (until && (await until(await hud()))) return s;
+          if (dist < blockedDistance - 24) sidesteps = 0;
           if (dist < best - 0.5) {
             best = dist;
             bestAt = Date.now();
@@ -493,10 +499,13 @@ function driver({ page, out, mode, device, lang, words }) {
           } else if (++ticksSinceBest >= 6 && Date.now() - bestAt > 1500) {
             // Caught on a lamp post, bollard or parked car: step sideways and try again.
             if (++sidesteps > 3) throw Error(`Stuck ${dist.toFixed(1)} from ${JSON.stringify(point)} at ${JSON.stringify(s.p)}`);
+            blockedDistance = dist;
             const side = Math.abs(dx) > Math.abs(dy) ? (sidesteps % 2 ? "up" : "down") : sidesteps % 2 ? "left" : "right";
             d.note("sidestep " + side, { at: s.p, to: point });
             await setHeld([side]);
-            await page.waitForTimeout(350);
+            // Clear a vehicle's full width. On another attempt, cross the original
+            // line of travel to try the opposite side of the blockage.
+            await page.waitForTimeout(sidesteps === 1 ? 850 : 1750);
             await setHeld([]);
             bestAt = Date.now();
             ticksSinceBest = 0;

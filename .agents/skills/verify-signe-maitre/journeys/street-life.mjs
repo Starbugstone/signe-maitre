@@ -6,12 +6,20 @@ export const meta = { feature: "street-life", needs: "probe" };
 export default async function (d) {
   await d.step("board", async () => {
     await d.press("car");
-    const { state } = await d.waitFor("in the sedan", ({ state }) => state.ride?.model === "Étude 2000");
-    d.expect(!!state.ride, "the player is driving the sedan", state.ride);
+    await d.waitFor("in the sedan", ({ state, hud }) => state.ride?.model === "Étude 2000" && hud.stats.includes("km/h"));
+    if (d.device !== "desktop") {
+      const signal = d.page.locator("#touchSignal");
+      d.expect(await signal.isVisible() && await signal.innerText() === d.t("vehicleHorn"), "the Horn control appears");
+      d.expect(await d.page.locator("[data-key=action]").innerText() === d.t("touchBrake"), "the action button reads Brake");
+    }
   });
   await d.step("stop-in-lane", async () => {
+    const start = (await d.state()).ride;
     await d.hold(["up", "right"], 450);
     await d.hold(["up"], 450);
+    const driven = (await d.state()).ride;
+    d.expect(Math.hypot(driven.x - start.x, driven.y - start.y) > 2,
+      "the sedan pulls away from its parking spot", { start, driven });
     await d.hold(["down"], 700);
     const { state } = await d.waitFor("stopped", ({ state }) => Math.abs(state.ride?.speed ?? 99) < 2, 6000);
     d.expect(state.ride.condition > 0, "the sedan still runs", state.ride);
@@ -28,9 +36,7 @@ export default async function (d) {
     d.expect(Math.hypot(after.x - before.x, after.y - before.y) > 6, "the player walks away from the door", { before, after });
   });
   await d.step("traffic-flows", async () => {
-    // For 20 s, watch the lane around the parked sedan. A car may queue behind it for a
-    // moment, but must pull out and pass rather than wait there. Cars are matched by
-    // position from one sample to the next, not by list order.
+    // Sample stopped positions near the sedan. Moving samples can belong to the same car.
     let streak = 0,
       longest = 0,
       passing = 0,
@@ -46,8 +52,10 @@ export default async function (d) {
       previous = stopped;
       await new Promise((r) => setTimeout(r, 1000));
     }
-    d.expect(longest < 8, "no car waits behind the parked sedan for 8 s or more", { longest, passing });
+    d.note("traffic near the sedan", { longest, movingSamples: passing });
+    d.expect(longest < 8, "no stopped position persists across eight sample intervals", { longest });
     const { traffic } = await d.state();
-    d.expect(traffic.filter((c) => c.speed > 2).length >= traffic.length / 2, "most traffic is moving at the end", traffic.length);
+    d.expect(traffic.length > 0 && traffic.filter((c) => c.speed > 2).length >= traffic.length / 2,
+      "at least half the observed traffic is moving at the end", traffic);
   });
 }
