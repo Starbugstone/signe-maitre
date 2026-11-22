@@ -402,9 +402,10 @@ export default async function (d) {
     // Drive east along Quai Sud and turn south at the mouth of Ruelle des Écoles.
     const alleyX = X(9), quaiY = Y(8);
     await driveRouteTo(d, { x: alleyX - 39, y: quaiY + 6 }, { tol: 14, stop: true, timeout: 80000, maxSpeed: 65 });
-    const approach = { x: alleyX - 10, y: quaiY - 4 };
-    await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 18 });
-    const linedUp = await turnSlowly(d, Math.PI / 2, 12);
+    // Start the turn slightly farther west to leave room for the nose to swing.
+    const approach = { x: alleyX - 16, y: quaiY - 8 };
+    await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 15 });
+    const linedUp = await turnSlowly(d, Math.PI / 2, 11);
     d.expect(Math.abs(linedUp.ride.x - alleyX) < 15 && Math.abs(wrapAngle(linedUp.p.a - Math.PI / 2)) < 0.35,
       "The sedan faces the alley entrance", linedUp.ride);
     // Attempt to push the wide Étude 2000 (halfWidth 4.8 > 3.6) straight south into the narrow alley.

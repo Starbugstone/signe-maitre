@@ -150,12 +150,12 @@ window.__pf = Object.freeze({
 `;
 }
 
-async function buildFiles(mode) {
+async function buildFiles(mode, runDir) {
   const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
   if (mode === "probe") {
-    await mkdir(verifyDir, { recursive: true });
     const html = await renderGame({ entry: await probeEntry() });
-    const file = join(verifyDir, "probe.html");
+    await mkdir(runDir, { recursive: true });
+    const file = join(runDir, "probe.html");
     await writeFile(file, html);
     return file;
   }
@@ -259,7 +259,8 @@ async function run(opts) {
   const lang = opts.lang || "en";
   const mode = opts.url ? "url" : opts.build || "shipped";
   const id = opts["run-id"] || new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "-" + process.pid;
-  const file = mode === "url" ? null : await buildFiles(mode);
+  const runDir = join(runsRoot, id);
+  const file = mode === "url" ? null : await buildFiles(mode, runDir);
   if (mode === "shipped") {
     const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
     if (sha(await renderGame()) !== sha(await readFile(file, "utf8")))
@@ -267,7 +268,6 @@ async function run(opts) {
   }
   const url = opts.url || pathToFileURL(file).href;
   const build = file ? sha(await readFile(file, "utf8")).slice(0, 12) : "remote";
-  const runDir = join(runsRoot, id);
   await mkdir(runDir, { recursive: true });
   const server = await pw.chromium.launchServer({ executablePath: chrome, args: ["--no-sandbox"], headless: !opts.headed });
   await writeFile(join(runDir, "pids.json"), JSON.stringify({ harness: process.pid, chromium: server.process().pid }));
