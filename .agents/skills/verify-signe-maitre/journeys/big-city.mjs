@@ -6,7 +6,7 @@
 // 4. Drive south across Pont de la Contrainte over River la Ferre onto the South Bank.
 // 5. Try to drive the wide sedan into narrow Ruelle des Écoles and verify it is refused,
 //    then exit on foot and walk straight through the same narrow cobblestone alley.
-// 6. Drive down avenue col 8 to Petite Ceinture South and walk to Gare du Sud station under the ring viaduct.
+// 6. Walk down avenue col 8 to Gare du Sud station under the Petite Ceinture ring viaduct.
 import { town, X, Y } from "../../../../src/world/town.js";
 import { findRoute } from "../../../../src/world/routes.js";
 
@@ -220,7 +220,7 @@ async function driveRouteTo(
     }
 
     // Target speed slows smoothly for turns, roundabouts and final approach.
-    let vTarget = tight ? 29 : maxSpeed;
+    let vTarget = tight ? 38 : maxSpeed;
     if (absErr > 0.7) vTarget = Math.min(vTarget, 30);
     if (stop && remDest < 68) vTarget = Math.min(vTarget, Math.max(16, remDest * 0.55));
 
@@ -252,20 +252,27 @@ async function driveRouteTo(
   throw Error(`driveRouteTo timed out reaching ${JSON.stringify(dest)} from ${JSON.stringify(last.ride)}`);
 }
 
-// Aim the sedan cleanly at a heading using low-speed forward/reverse nudges.
-async function alignHeading(d, targetAngle, { tol = 0.22, timeout = 8000 } = {}) {
-  const end = Date.now() + timeout;
-  while (Date.now() < end) {
-    const s = await d.state();
-    const err = wrapAngle(targetAngle - s.p.a);
-    if (Math.abs(err) <= tol) {
-      await brakeToStop(d, 1200);
-      return d.state();
+// Turn with a small rolling radius and check the result after braking.
+async function turnSlowly(d, angle, speed) {
+  let lastError = Infinity, stalled = 0;
+  for (let i = 0; i < 54; i++) {
+    const { p, ride } = await d.state();
+    const error = wrapAngle(angle - p.a);
+    const remaining = Math.abs(error);
+    if (remaining < 0.17) break;
+    const steer = error > 0 ? "right" : "left";
+    stalled = lastError - remaining < 0.035 ? stalled + 1 : 0;
+    lastError = remaining;
+    if (stalled === 4) {
+      // A kerb can stop the front of the sedan before it clears the turn. Back the nose out.
+      await d.hold(["down", steer === "right" ? "left" : "right"], 320);
+      await brakeToStop(d, 1000);
+      stalled = 0;
+    } else {
+      await d.hold(ride.speed < speed ? ["up", steer] : [steer], 95);
     }
-    const steer = err > 0 ? "right" : "left";
-    await d.hold(["up", steer], Math.min(140, Math.max(65, Math.round(Math.abs(err) * 140))));
   }
-  return brakeToStop(d, 1200);
+  return brakeToStop(d);
 }
 
 export default async function (d) {
@@ -291,6 +298,10 @@ export default async function (d) {
   // Drive west along row 5 and circulate anticlockwise around Place de la Contrainte (col 6, row 5).
   const rb = town.roadNodeById.get("c6r5");
   await d.step("drive-around-roundabout", async () => {
+    // The parked sedan faces east. Turn at low speed within the width of the office street.
+    const turned = await turnSlowly(d, Math.PI, 19);
+    d.expect(Math.abs(turned.p.a) > 2.8, "The sedan faces west towards Place de la Contrainte", turned.p);
+
     let sawNorth = false,
       sawWest = false;
     await driveRouteTo(
@@ -300,7 +311,7 @@ export default async function (d) {
         tol: 20,
         stop: true,
         timeout: 90000,
-        maxSpeed: 76,
+        maxSpeed: 56,
         onSample: ({ ride }) => {
           if (ride.y < rb.y - 16 && Math.abs(ride.x - rb.x) < rb.outerRadius + 6) sawNorth = true;
           if (ride.x < rb.x - 16 && Math.abs(ride.y - rb.y) < rb.outerRadius + 6) sawWest = true;
@@ -388,26 +399,14 @@ export default async function (d) {
   });
 
   await d.step("wide-car-refused-by-alley", async () => {
-    // Drive east along Quai Sud to col 9, swing into the wide quay apron north of the mouth of
-    // Ruelle des Écoles (halfWidth 7), aim straight south down the alley, and verify the wide sedan is refused.
-    await driveRouteTo(d, { x: X(9) - 34, y: Y(8) + 6 }, { tol: 20, stop: true, timeout: 80000, maxSpeed: 74 });
-    await driveRouteTo(
-      d,
-      { x: X(9), y: Y(8) + 4 },
-      {
-        tol: 10,
-        stop: true,
-        timeout: 30000,
-        waypoints: [
-          { x: X(9) - 22, y: Y(8) - 22 },
-          { x: X(9) - 4, y: Y(8) - 22 },
-          { x: X(9), y: Y(8) - 8 },
-          { x: X(9), y: Y(8) + 4 },
-        ],
-        maxSpeed: 28,
-      },
-    );
-    await alignHeading(d, Math.PI / 2, { tol: 0.35 });
+    // Drive east along Quai Sud and turn south at the mouth of Ruelle des Écoles.
+    const alleyX = X(9), quaiY = Y(8);
+    await driveRouteTo(d, { x: alleyX - 39, y: quaiY + 6 }, { tol: 14, stop: true, timeout: 80000, maxSpeed: 65 });
+    const approach = { x: alleyX - 10, y: quaiY - 4 };
+    await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 18 });
+    const linedUp = await turnSlowly(d, Math.PI / 2, 12);
+    d.expect(Math.abs(linedUp.ride.x - alleyX) < 15 && Math.abs(wrapAngle(linedUp.p.a - Math.PI / 2)) < 0.35,
+      "The sedan faces the alley entrance", linedUp.ride);
     // Attempt to push the wide Étude 2000 (halfWidth 4.8 > 3.6) straight south into the narrow alley.
     await d.hold(["up"], 750);
     await brakeToStop(d, 1500);
