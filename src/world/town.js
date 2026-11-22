@@ -309,7 +309,7 @@ const river = {
     { id: "quai-contrainte", x: X(5), y: riverTop + 14, a: 0, quay: { x: X(5), y: riverTop - 12 } },
     { id: "quai-tour", x: X(2), y: riverBottom - 14, a: 0, quay: { x: X(2), y: riverBottom + 12 } },
     { id: "ile-parvis", x: X(9), y: island.bottom + 14, a: Math.PI, quay: { x: X(9), y: island.bottom - 12 } },
-    { id: "quai-marais", x: X(12) + 90, y: riverTop + 14, a: 0, quay: { x: X(12) + 90, y: riverTop - 12 } },
+    { id: "quai-marais", x: X(12) + 118, y: riverTop + 14, a: 0, quay: { x: X(12) + 118, y: riverTop - 12 } },
     { id: "quai-docks", x: X(13) + 90, y: riverBottom - 14, a: Math.PI, quay: { x: X(13) + 90, y: riverBottom + 12 } },
   ],
 };

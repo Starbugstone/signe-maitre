@@ -222,6 +222,10 @@ function checkRiverMoorings() {
     requireCheck(blocked(x, y, 2.6) && vehicleBlocked({ x, y, a: 0 }), "Land traffic admitted into the berth");
     actorLayers(quay.x, quay.y, false);
   }
+  for (const boat of boatFleet.boats.filter((b) => b.mooring)) {
+    const room = river.bridges.every((b) => Math.abs(boat.x - b.x) > boat.halfLength + b.halfWidth);
+    requireCheck(room, "A bridge obscures a moored " + boat.model);
+  }
 }
 
 function checkRoundaboutIsland() {
