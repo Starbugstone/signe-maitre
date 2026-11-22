@@ -7,6 +7,18 @@ export const meta = { feature: "fleet", needs: "probe" };
 const junctions = [75, 365, 655, 945, 1235, 1525];
 const turnTo = (want, a) => Math.atan2(Math.sin(want - a), Math.cos(want - a));
 const halfLengths = { sedan: 11, volta: 12, suv: 12.4, moto: 7, dumper: 19, bus: 28.5 };
+// Distance from a spot to a vehicle's body.
+function gap(c, spot) {
+  const dx = spot.x - c.x,
+    dy = spot.y - c.y,
+    cos = Math.cos(c.a),
+    sin = Math.sin(c.a);
+  const ahead = Math.abs(dx * cos + dy * sin) - halfLengths[c.model],
+    aside = Math.abs(dy * cos - dx * sin) - (c.model === "moto" ? 2.3 : 4.8);
+  return Math.hypot(Math.max(0, ahead), Math.max(0, aside));
+}
+// How near the game counts a vehicle when F is pressed (`reach` in src/game/boarding.js).
+const reach = (c, spot) => Math.min(Math.hypot(spot.x - c.x, spot.y - c.y), gap(c, spot) + 10.95);
 
 // Each model, the condition to crash it down to, the speed it must reach on the straight,
 // how fast it steers (rad/s), so a tap on the wheel is as long as the turn needs, and its
@@ -97,9 +109,11 @@ export default async function (d) {
       d.expect(!!car, `a seized ${model} stands at the étude's kerb`, parked.filter((c) => c.model !== "sedan"));
       parkedAt = car;
       // To the vehicle's door, from the pavement or the street side, whichever is open.
+      // The spot must be nearer this vehicle than any other, or F takes the wrong wheel.
       await walkAround((spot, cars) => {
         const now = cars.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14) || car;
-        return Math.abs(spot.x - now.x) < halfLengths[model] && Math.abs(spot.y - now.y) < 15;
+        const mine = reach(now, spot);
+        return mine < 19 && cars.every((c) => c === now || reach(c, spot) > mine + 3);
       }, `the ${model}`);
       d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
     });

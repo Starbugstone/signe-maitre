@@ -110,6 +110,7 @@ Finished atlases follow the ambulance format: 64 headings in an 8 × 8 sheet, cl
   leans?,                          // a two-wheeler: driving keeps `vehicle.lean` in -1..1
   sound: "petrol" | "electric" | "diesel" | "moto" | "boat",
   atlas: { intact, dented, wreck, ridden?, courier?, riddenHeadings? } | null, // artwork keys; null = the sedan's run-time wrap
+  tints?: { [vehicle.tint]: { intact, dented, wreck } }, // other colours of the same model (the red Volta)
   sprite: { frame, scale, cx, cy }, // atlas cell in px, px per world unit, ground centre in the cell
   traffic: { weight, parked, lanes: ["avenue", "street", "alley"?], pace, stops? } }
 ```

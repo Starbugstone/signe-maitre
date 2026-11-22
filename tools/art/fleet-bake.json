@@ -443,6 +443,36 @@
     }
    }
   },
+  "voltaRed": {
+   "model": "hull",
+   "source": "/home/stone/dev/signe-maitre/art-src/vehicles/volta",
+   "out": "assets",
+   "frame": 160,
+   "scale": 5,
+   "cx": 80,
+   "cy": 102,
+   "states": {
+    "intact": {
+     "file": "voltaRedTurns"
+    },
+    "dented": {
+     "file": "voltaRedDented",
+     "damage": 0.5,
+     "size": 128
+    },
+    "wreck": {
+     "file": "voltaRedWreck",
+     "damage": 1,
+     "size": 128
+    }
+   },
+   "panels": {
+    "side": "side_red",
+    "top": "top_red",
+    "front": "front_red",
+    "rear": "rear_red"
+   }
+  },
   "suv": {
    "model": "hull",
    "source": "/home/stone/dev/signe-maitre/art-src/vehicles/suv",

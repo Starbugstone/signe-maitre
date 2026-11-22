@@ -54,7 +54,8 @@ function placeholder(v, spec) {
 }
 // The sheet for the vehicle's state, and how many headings it holds.
 function sheetFor(v, spec) {
-  const atlas = spec.atlas;
+  // A model painted in more than one colour picks its sheets by the vehicle's tint.
+  const atlas = { ...spec.atlas, ...spec.tints?.[v.tint] };
   if (v.condition === 0) return [artwork[atlas.wreck], headings];
   // A two-wheeler shows its rider while someone is on it: the bailiff, or a courier in traffic.
   if (atlas.ridden && (v.route || v === game.ride)) {

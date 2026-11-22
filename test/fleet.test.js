@@ -39,6 +39,8 @@ test("each atlas is drawn with the frame it was baked with", () => {
     assert.deepEqual(entry.sprite, { frame: baked.frame, scale: baked.scale, cx: baked.cx, cy: baked.cy }, id);
     for (const state of ["intact", "dented", "wreck"]) assert.equal(entry.atlas[state], baked.states[state].file, `${id} ${state}`);
   }
+  for (const tint of Object.values(fleet.volta.tints))
+    for (const state of ["intact", "dented", "wreck"]) assert.equal(tint[state], bake.voltaRed.states[state].file, "red Volta " + state);
   const rider = bake.motoRider;
   assert.deepEqual(fleet.moto.sprite, { frame: rider.frame, scale: fleet.moto.sprite.scale, cx: rider.cx, cy: rider.cy });
   assert.deepEqual([fleet.moto.atlas.ridden, fleet.moto.atlas.courier], [rider.states.bailiff.file, rider.states.courier.file]);

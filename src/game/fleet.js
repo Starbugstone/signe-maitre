@@ -18,6 +18,7 @@ import { sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
 // The sedan has no atlas: it is wrapped at run time from its panel sheet.
 // The sedan steers at full rate from 18 units/s: steer × turn.
 const car = { domain: "road", halfWidth: sedanHalfWidth, reverseAccel: 85, turn: 18 / 2.65 };
+const midnightRed = { intact: "voltaRedTurns", dented: "voltaRedDented", wreck: "voltaRedWreck" };
 export const fleet = {
   sedan: {
     ...car,
@@ -65,6 +66,8 @@ export const fleet = {
     grip: 1,
     sound: "electric",
     atlas: { intact: "voltaTurns", dented: "voltaDented", wreck: "voltaWreck" },
+    // Pearl white, or midnight red where the street's paint would be rose or olive.
+    tints: { rose: midnightRed, olive: midnightRed },
     sprite: { frame: 160, scale: 5, cx: 80, cy: 102 },
     traffic: { weight: 13, parked: 14, lanes: ["avenue", "street"], pace: 1.1 },
   },

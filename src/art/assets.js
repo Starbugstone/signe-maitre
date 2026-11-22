@@ -1,4 +1,7 @@
 import voltaTurns from "../../assets/voltaTurns.webp";
+import voltaRedTurns from "../../assets/voltaRedTurns.webp";
+import voltaRedDented from "../../assets/voltaRedDented.webp";
+import voltaRedWreck from "../../assets/voltaRedWreck.webp";
 import voltaDented from "../../assets/voltaDented.webp";
 import voltaWreck from "../../assets/voltaWreck.webp";
 import suvTurns from "../../assets/suvTurns.webp";
@@ -46,6 +49,9 @@ import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
 import canalImage from "../../assets/canal.webp";
 export const imageData = {
+  voltaRedTurns,
+  voltaRedDented,
+  voltaRedWreck,
   voltaTurns,
   voltaDented,
   voltaWreck,

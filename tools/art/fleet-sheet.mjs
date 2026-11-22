@@ -62,7 +62,7 @@ window.sheet = ({ model, condition, zoom, who }) => {
     g.strokeStyle = "#51475c"; g.lineWidth = 0.3; g.strokeRect((i % 8) * cellW, Math.floor(i / 8) * cellH, cellW, cellH);
     draw(body("sedan", x + 15, y, a, condition));
     draw(body("ambulance", x + 30 + 17, y, a, condition));
-    const v = body(model, x + 64 + reach, y, a, condition, who === "courier" ? { route: {} } : {});
+    const v = body(model, x + 64 + reach, y, a, condition, who === "courier" ? { route: {} } : who === "red" ? { tint: "rose" } : {});
     if (who === "bailiff") game.ride = v;
     draw(v); game.ride = null;
     g.fillStyle = "#b9a9c4"; g.font = "3px monospace"; g.fillText(String(i), (i % 8) * cellW + 1.5, Math.floor(i / 8) * cellH + 4);
@@ -121,6 +121,8 @@ try {
     for (const [state, condition] of [["intact", 100], ["dented", 50], ["wreck", 0]])
       await save(`${model}-${state}.png`, await page.evaluate((o) => window.sheet(o), { model, condition, zoom: 4.27 }));
     await save(`${model}-intact-2x.png`, await page.evaluate((o) => window.sheet(o), { model, condition: 100, zoom: 8.54 }));
+    if (model === "volta")
+      await save("volta-red.png", await page.evaluate((o) => window.sheet(o), { model, condition: 100, zoom: 4.27, who: "red" }));
     if (model === "moto")
       for (const who of ["bailiff", "courier"])
         await save(`moto-${who}.png`, await page.evaluate((o) => window.sheet(o), { model, condition: 100, zoom: 4.27, who }));
