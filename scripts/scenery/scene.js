@@ -469,15 +469,20 @@ function checkPaintedLanterns() {
     requireCheck(blocked(x, y - 0.5, 2.6), "Lantern post open to a walker at " + x.toFixed(0) + "," + y.toFixed(0));
     requireCheck(vehicleBlocked({ x, y: y - 0.5, a: 0 }), "Lantern post open to a car at " + x.toFixed(0) + "," + y.toFixed(0));
   }
-  for (const [x, y] of lanterns.slice(0, 6)) {
-    actorLayers(x, y - 4.2, true);
-    actorLayers(x, y + 4.4, false);
+  for (const [i, [x, y]] of lanterns.slice(0, 6).entries()) {
+    try {
+      actorLayers(x, y - 4.2, true);
+      actorLayers(x, y + 4.4, false);
+    } catch (error) {
+      throw new Error("Lantern " + i + " at " + x.toFixed(1) + "," + y.toFixed(1) + ": " + error.message);
+    }
   }
   const m = fromRiver("riverIronBridge"),
     [hx, top, , bracket] = riverMarks.riverIronBridge.hanging[4];
   const iron = X(town.cellKinds[town.riverRow].indexOf("riverIronBridge"));
-  actorLayers(iron + m.x(hx) + 2.4, cy + m.y(bracket) - 3, true);
-  actorLayers(iron + m.x(hx) + 2.4, cy + m.y(bracket) + 12, false);
+  // Half a step out from under the glass, so that part of the walker still shows beside it.
+  actorLayers(iron + m.x(hx) + 4.6, cy + m.y(bracket) - 3, true);
+  actorLayers(iron + m.x(hx) + 4.6, cy + m.y(bracket) + 12, false);
   void top;
 }
 
