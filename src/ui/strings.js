@@ -73,6 +73,11 @@ const words = {
     "La voiture est en arrêt maladie. {job} pour appeler le dépannage.",
   ],
   dented: ["That dent needs its own case number.", "Cette bosse mérite son propre numéro de dossier."],
+  towed: [
+    "Your car was blocking traffic. The pound towed it back to the étude.",
+    "Votre voiture bloquait la circulation. La fourrière l’a ramenée devant l’étude.",
+  ],
+  towing: ["TOWED", "FOURRIÈRE"],
   recovery: ["Roadside assistance", "Dépannage"],
   recoveryText: [
     "Your mechanic accepts payment in exposure. Specifically, exposure to our expenses department. Order a repair?",

@@ -3,8 +3,9 @@ import { steeringInput, throttleInput, walkVector } from "../core/controls.js";
 import { renderMessage, say } from "../ui/dialogs.js";
 import { combo, landSlap, slap } from "./slap.js";
 import { advanceTraffic, drive } from "./driving.js";
-import { streamPopulation, person, target } from "../world/population.js";
-import { blocked, footBlocked, freeSpot, move, shutIn } from "../world/collision.js";
+import { sedan, streamPopulation, person, target } from "../world/population.js";
+import { blocked, distanceToBody, footBlocked, freeSpot, move, shutIn, vehicleBlocked } from "../world/collision.js";
+import { carContact } from "../world/vehicle-shape.js";
 import { footfall } from "../audio/mixer.js";
 import { strides } from "../art/gait.js";
 import { updateAmbulance } from "./rescue.js";
@@ -70,6 +71,7 @@ function update(dt) {
     if (held.has("action")) slap();
   }
   for (const c of cars) if (c.route) advanceTraffic(c, dt);
+  towBlockers();
   for (const n of people) updatePerson(n, dt);
   updateAmbulance(dt);
   inspectorClock -= dt;
@@ -89,6 +91,31 @@ function update(dt) {
     }
 }
 
+// A car left across the traffic for ten seconds, with the player away from it, is towed:
+// the étude's sedan back to its spot, any other abandoned car off the street. Case cars,
+// ambulances and the car the player is in are never touched.
+function towBlockers() {
+  for (const c of cars) {
+    const v = c.route?.stalledBy;
+    if (!v || v.route || v === game.ride || v === target || v.medical || c.route.stalledFor < 10) continue;
+    if (Math.hypot(v.x - p.x, v.y - p.y) < 30 || !cars.includes(v)) continue;
+    if (v === sedan) {
+      // Already home, or someone is standing on its spot: leave it for now.
+      if (Math.hypot(sedan.x - sedan.home.x, sedan.y - sedan.home.y) < 4) continue;
+      const home = { ...sedan.home, halfLength: sedan.halfLength, halfWidth: sedan.halfWidth };
+      if (vehicleBlocked(home) || cars.some((o) => o !== sedan && carContact(home, o))) continue;
+      if ([p, ...people].some((n) => distanceToBody(home, n.x, n.y) < 3)) continue;
+      fx.push({ x: v.x, y: v.y - 10, t: 1.2, s: "towing" });
+      Object.assign(sedan, sedan.home, { speed: 0, slideX: 0, slideY: 0 });
+      say("towed", 5, "clerk");
+    } else {
+      fx.push({ x: v.x, y: v.y - 10, t: 1.2, s: "towing" });
+      cars.splice(cars.indexOf(v), 1);
+    }
+    c.route.heldBy = c.route.stalledBy = null;
+    c.route.stalledFor = 0;
+  }
+}
 // Footsteps land on the painted stride: every 6.8 units walking, every 13.6 running.
 function stepSound(travel) {
   const before = Math.floor(p.stepPhase || 0);

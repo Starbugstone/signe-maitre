@@ -57,3 +57,35 @@ test("freeSpot finds clear ground next to a car that covers the walker", () => {
     assert.ok(spot && !footBlocked(spot.x, spot.y, 2.6));
   });
 });
+
+test("the painted south pavement is walkable up to the bollard line, with no sliver at the kerb", async () => {
+  const { blocked } = await import("../src/world/collision.js");
+  const { town: map } = await import("../src/world/town.js");
+  for (let row = 0; row < map.rows - 1; row++)
+    for (const dx of [-80, 80]) {
+      const x = X(2) + dx;
+      // From the road across the kerb (16.8) onto the strip in front of the south blocks.
+      // Bollards and lamps at the cross-street corners are real obstacles, so stay mid-block.
+      for (let dy = 0; dy <= 20; dy += 0.5)
+        assert.equal(blocked(x, Y(row) + dy, 2.6), false, `row ${row} dx ${dx}: wall at dy ${dy}`);
+      if (row !== map.canalRow) assert.equal(blocked(x, Y(row) + 24, 2.6), true, `row ${row}: walked into the south block`);
+    }
+});
+
+test("the starting sedan can drive off and steer away from the kerb", async () => {
+  globalThis.document ??= { querySelector: () => ({ open: false, getContext: () => ({ setTransform() {} }) }) };
+  Object.assign(globalThis, { innerWidth: 1024, innerHeight: 700, devicePixelRatio: 1 });
+  globalThis.addEventListener ??= () => {};
+  const { sedan } = await import("../src/world/population.js");
+  const { drive } = await import("../src/game/driving.js");
+  const { vehicleBlocked } = await import("../src/world/collision.js");
+  assert.equal(vehicleBlocked(sedan), false, "the sedan spawns clear of the kerb posts");
+  const car = { ...sedan, speed: 0, slideX: 0, slideY: 0 };
+  withCars([car], () => {
+    const start = { x: car.x, y: car.y };
+    for (let i = 0; i < 40; i++) drive(car, 1 / 60, 1, 0, false);
+    for (let i = 0; i < 40; i++) drive(car, 1 / 60, 1, 1, false);
+    assert.ok(car.x - start.x > 15, `the sedan barely moved: ${car.x - start.x}`);
+    assert.ok(car.y > start.y + 1, "the sedan steers out from the kerb");
+  });
+});

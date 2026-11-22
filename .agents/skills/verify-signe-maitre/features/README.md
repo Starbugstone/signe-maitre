@@ -36,8 +36,8 @@ Each feature file begins with an H1 and one paragraph. It then has exactly four 
 | [City map and case files](./map-view.md) | `map-view` | Scripted for shipped, probe and URL builds |
 | [Étude interior](./office-interior.md) | `office-interior` | Scripted for the probe build |
 | [Cases: noise, home visit and repossession](./cases.md) | `noise-case`, `home-visit` | Noise and home visit are scripted for the probe build. Repossession is not scripted. |
-| [Cars: boarding, driving, damage and repair](./vehicles.md) | `street-life` | Boarding and departure are checked. On game revision `ef81f95`, the starter sedan fails departure before the brake and exit checks. |
+| [Cars: boarding, driving, damage and repair](./vehicles.md) | `street-life` | Boarding and departure are checked. The starter sedan stuck in the kerb bollards on `ef81f95`/`253cd55` is fixed; `south-pavement` also drives it off. |
 | [Street incidents and ambulance dispatch](./street-incident.md) | `street-report`, `ambulance` | Separate probe journeys verify filing a copy and waiting for the crew to load a patient. |
 | [Hero walk and run animation](./hero-gait.md) | `tools/art/journeys/hero-gait.mjs`, `tools/art/journeys/hero-strides.mjs` | Scripted for the probe build; judged on video |
 | [Street life: traffic, pedestrians and getting unstuck](./street-life.md) | `street-life` | The traffic watch follows the sedan departure check. Traffic and collision fixtures also cover pinches and recovery. |
-| [Street scenery and railway pillars](./street-scenery.md) | `street-scenery` | Walks the garage pavement and the market alley. `npm run test:scenery` also compares actor and foreground pixels. |
+| [Street scenery and railway pillars](./street-scenery.md) | `street-scenery`, `south-pavement` | Walks the garage pavement and the market alley, and the south pavement past the old kerb wall. `npm run test:scenery` also compares actor and foreground pixels. |

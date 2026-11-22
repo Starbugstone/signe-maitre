@@ -10,6 +10,7 @@ Traffic and pedestrians react to the player and to each other. Drivers ease off 
 - `crowd-dodge` makes a resident leap aside from a car about to hit them and shout `Hey!` / `Eh !`. The player's horn (**H**) scatters nearby residents within 55 units, including those behind the car. Chasing fighters keep pursuing.
 - `crowd-scatter` sends residents within 48 units running from a slap that lands.
 - `fighters` approach to striking range, keep a body's width apart and circle while two others are already swinging. A hit needs a clear line; the player loses at most one HP per 0.6 s.
+- `traffic-tow` tows a stalled car (wreck or abandoned car) that has held the same traffic car still for 10 s while the player is 30+ units away: the étude sedan goes back to its spot with a clerk line, any other car is removed. Never the car the player is in, the case GT or an ambulance; never onto a walker.
 - `unstuck` lets a walker wedged between cars take any step that does not push them deeper, and lifts a walker who keeps pushing in an overlap or a tightly enclosed pocket to a reachable clear spot.
 
 ## How to get to it (user POV)

@@ -148,12 +148,33 @@ function pathAdvance(route, dt, step, lane = route.lane || 0) {
   }
   return { x, y, a, arc: turnDone ? 0 : arc, to: turnDone ? (i + 1) % count : i, remaining, destination };
 }
+// The pose `distance` further along the route, carrying on past corners onto the next street.
+function pathAt(route, distance, lane = route.lane || 0) {
+  const walker = { points: route.points, to: route.to, arc: route.arc || 0, px: route.px, py: route.py };
+  let pose = pathAdvance(walker, 0, 0, lane);
+  for (let left = distance; left > 0; left -= 4) {
+    pose = pathAdvance(walker, 0, Math.min(4, left), lane);
+    Object.assign(walker, { px: pose.x, py: pose.y, arc: pose.arc, to: pose.to });
+  }
+  return pose;
+}
 function placed(path, lane) {
   return { x: path.x - Math.sin(path.a) * lane, y: path.y + Math.cos(path.a) * lane, a: path.a };
 }
 const crossing = (o, a) => o.route && Math.abs(Math.cos(o.a - a)) < 0.5;
+// Last resort against any circle of cars waiting on each other (A on B on ... on A):
+// after three seconds the oldest car in the circle drives on as if the next were not there.
+function yieldsTo(c, o) {
+  if (!c.route || !o.route || c.route.wait < 3) return false;
+  let x = o;
+  for (let k = 0; k < 5 && x?.route; k++) {
+    x = x.route.heldBy;
+    if (x === c) return c.route.id < o.route.id;
+  }
+  return false;
+}
 // Oncoming route traffic keeps to its own lane, so it only matters while passing.
-const oncoming = (o, a) => o.route && !o.route.lane && !o.route.laneTarget && Math.cos(o.a - a) <= -0.5;
+const oncoming = (o, a) => o.route && Math.abs(o.route.lane) <= 6 && Math.cos(o.a - a) <= -0.5;
 // The nearest thing in the corridor swept between two lane offsets ahead of the car.
 // Route traffic crossing the corridor is ignored: the junction rules handle it.
 function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 || laneTo !== 0) {
@@ -179,7 +200,7 @@ function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 ||
     }
   }
   for (const o of cars) {
-    if (o === c || crossing(o, path.a) || (!passing && oncoming(o, path.a))) continue;
+    if (o === c || crossing(o, path.a) || (!passing && oncoming(o, path.a)) || yieldsTo(c, o)) continue;
     const rel = o.a - path.a,
       hl = o.halfLength ?? sedanHalfLength,
       hw = o.halfWidth ?? sedanHalfWidth;
@@ -208,10 +229,12 @@ function isStalled(o) {
 // Swing out just as far as the obstruction needs, and only on a long straight: the
 // whole pass, out, alongside and back, must fit before the corner.
 function startPass(c, route, probe, here) {
+  // Never from inside a turn; near a corner the swept check below follows the turn itself.
+  if (probe.arc !== 0 || probe.remaining < 20) return;
   const lane = passingLanes.find(
     (l) =>
-      [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAdvance(route, 0, d, l), l))) &&
-      lookAhead(c, here, l, l, 60).gap > Math.min(50, probe.remaining),
+      [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAt(route, d, l), l))) &&
+      lookAhead(c, here, l, l, 60).gap > 50,
   );
   if (lane === undefined) return;
   route.laneTarget = lane;
@@ -240,16 +263,38 @@ function honk(c, at) {
   if (at && at !== p && !at.down) at.startled = { from: c, until: game.time + 1.6 };
 }
 // The first walker the car's body would touch along its own path, turn included.
+// The first vehicle the car's body would touch along its path round a corner. Crossing
+// route traffic is left to the junction rules, as on the straight.
+function vehicleOnPath(c, route, lane, from, reach) {
+  for (let d = Math.max(4, from); d <= reach; d += 4) {
+    const pose = placed(pathAt(route, d, lane), lane);
+    const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
+    for (const o of cars) {
+      if (o === c || crossing(o, pose.a) || oncoming(o, pose.a) || yieldsTo(c, o)) continue;
+      if (Math.abs(o.x - pose.x) > 26 || Math.abs(o.y - pose.y) > 26) continue;
+      if (carContact(body, o) && !carContact({ ...c, halfLength: c.halfLength, halfWidth: c.halfWidth }, o))
+        return { gap: d - 4, what: o };
+    }
+  }
+  return { gap: Infinity, what: null };
+}
 function walkerOnPath(c, route, lane, reach) {
   const walkers = game.ride ? people : [...people, p];
   for (let d = 4; d <= reach; d += 4) {
-    const pose = placed(pathAdvance(route, 0, d, lane), lane);
+    const pose = placed(pathAt(route, d, lane), lane);
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
     for (const n of walkers)
       if (Math.abs(n.x - pose.x) < 16 && Math.abs(n.y - pose.y) < 16 && distanceToBody(body, n.x, n.y) < 2.6)
         return { gap: d - 4, what: n };
   }
   return { gap: Infinity, what: null };
+}
+// How long the car has sat still behind the same stalled car (wreck, abandoned car):
+// the towing rule reads it. Any other reason to wait, or a new blocker, starts again.
+function stalledTimer(c, route, dt) {
+  const v = route.heldBy && !route.heldBy.route && isStalled(route.heldBy) ? route.heldBy : null;
+  route.stalledFor = v && v === route.stalledBy && c.speed < 0.5 ? (route.stalledFor || 0) + dt : 0;
+  route.stalledBy = v;
 }
 function advanceTraffic(c, dt) {
   const route = c.route;
@@ -272,9 +317,14 @@ function advanceTraffic(c, dt) {
   if (route.lane !== 0) desired = Math.min(desired, cruise * 0.6);
   // Vehicles: the straight corridor ahead, cut off where the road turns away.
   const reach = 12 + route.speed * 0.9,
-    straight = probe.arc === 0 ? Math.min(reach, probe.remaining + turnRadius) : turnRadius;
+    straight = probe.arc === 0 ? Math.min(reach, Math.max(0, probe.remaining)) : 0;
   const watchFrom = route.laneTarget !== 0 ? route.laneTarget : route.lane;
   let { gap, what } = lookAhead(c, here, watchFrom, route.laneTarget, straight);
+  // Round the corner and mid-turn, vehicles are checked along the body's real path.
+  if (straight < reach) {
+    const curved = vehicleOnPath(c, route, route.laneTarget || route.lane, straight, reach);
+    if (curved.gap < gap) ({ gap, what } = curved);
+  }
   // Walkers: wherever the body will actually go, round the corner too.
   if (what === p || people.includes(what)) ({ gap, what } = { gap: Infinity, what: null });
   const walker = walkerOnPath(c, route, route.laneTarget || route.lane, reach);
@@ -290,21 +340,37 @@ function advanceTraffic(c, dt) {
   const junctionY = roadsY[Math.round((probe.destination.y - Y(0)) / CELL_H)];
   const within = (o, r) => Math.abs(o.x - junctionX) < r && Math.abs(o.y - junctionY) < r;
   const headingIn = (o) => (junctionX - o.x) * (o.slideX || 0) + (junctionY - o.y) * (o.slideY || 0) > 0;
+  // Held up by moving traffic, following who waits on whom up to three cars along.
+  const onTraffic = (o) => {
+    for (let k = 0; k < 3 && o?.route; k++) {
+      const next = o.route.heldBy;
+      if (!next?.route) return false;
+      if (Math.abs(next.speed || 0) > 1) return true;
+      o = next;
+    }
+    return true;
+  };
   const holds = (o) =>
     o !== c &&
-    (o.route ? o.route.wait <= 4 || o.route.blocker?.route : o === game.ride && route.wait <= 3) &&
+    (o.route
+      ? o.route.wait <= 4 || onTraffic(o)
+      : o === game.ride
+        ? route.wait <= 3
+        : o.medical && Math.abs(o.speed || 0) > 1) &&
     (within(o, 30) || (within(o, 40) && headingIn(o)));
   const outside = !within(c, 40);
   // Do not drive into the junction when the way out is blocked by a stalled car.
   const exitBlocked = () => {
     for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46; d += 6) {
-      const pose = placed(pathAdvance(route, 0, d), route.lane);
+      const pose = placed(pathAt(route, d), route.lane);
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
-      if (cars.some((o) => o !== c && !o.route && o !== game.ride && isStalled(o) && carContact(body, o))) return true;
+      const stuck = cars.find((o) => o !== c && !o.route && o !== game.ride && isStalled(o) && carContact(body, o));
+      if (stuck) return stuck;
     }
-    return false;
+    return null;
   };
-  const occupied = outside && !ghost && (cars.some(holds) || (probe.arc === 0 && probe.remaining < 34 && route.laneTarget === 0 && exitBlocked()));
+  const exitCar = probe.arc === 0 && probe.remaining < 34 && route.laneTarget === 0 ? exitBlocked() : null;
+  const occupied = outside && !ghost && (cars.some(holds) || !!exitCar);
   if (occupied) {
     // Brake to the stop line instead of stopping dead at it.
     const toLine = Math.max(Math.abs(c.x - junctionX), Math.abs(c.y - junctionY)) - 40 - 0.5;
@@ -327,7 +393,7 @@ function advanceTraffic(c, dt) {
   }
   // Merge back only once the passed car is behind and the way ahead in the home lane is open.
   if (route.laneTarget !== 0 && route.lane === route.laneTarget) {
-    const home = [0, 10, 20].every((d) => clearPose(c, placed(pathAdvance(route, 0, d), d ? route.lane * (1 - d / 25) : 0)));
+    const home = [0, 10, 20].every((d) => clearPose(c, placed(pathAt(route, d), d ? route.lane * (1 - d / 25) : 0)));
     if (home && lookAhead(c, here, 0, 0, 60, false).gap > 30) route.laneTarget = 0;
   }
   // A pass held up for two seconds is called off, but only where the home lane beside is free.
@@ -350,12 +416,15 @@ function advanceTraffic(c, dt) {
     if (!game.ride && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
       return p;
     for (const other of cars) {
-      if (other === c || (ghost && offscreen(other))) continue;
+      if (other === c || (ghost && offscreen(other)) || yieldsTo(c, other)) continue;
       const hit = carContact(pose, other);
       if (!hit) continue;
       const before = carContact(c, other)?.depth ?? 0;
       // Mid-turn, a corner may graze a stalled car without stopping for good.
       // Two cars locked mid-turn: the older one squeezes past.
+      // A turning body swings its tail; a stalled car behind the centre is not in the way.
+      const behind = (other.x - c.x) * Math.cos(c.a) + (other.y - c.y) * Math.sin(c.a) < 0;
+      if (route.arc > 0 && !other.route && isStalled(other) && behind) continue;
       const graze =
         route.arc > 0 &&
         route.wait > 2 &&
@@ -401,10 +470,14 @@ function advanceTraffic(c, dt) {
   if (route.backing > game.time) {
     backOff(c, route, probe, dt);
     route.blocker = other;
+    route.heldBy = other || what;
+    stalledTimer(c, route, dt);
     route.speed = 0;
     return;
   }
   route.blocker = obstructed ? other : null;
+  route.heldBy = other || (desired < 1 ? what || exitCar : null);
+  stalledTimer(c, route, dt);
   if (obstructed) {
     route.speed = 0;
     c.speed = c.slideX = c.slideY = 0;

@@ -7,7 +7,8 @@ import { carContact, sedanHalfLength, sedanHalfWidth } from "./vehicle-shape.js"
 
 const streetHalfWidth = 25,
   northPavement = 28,
-  southPavement = 17;
+  // The painted south pavement runs from the kerb (16.8) to the bollard line at about 23.
+  southPavement = 23;
 const pierThickness = 3.5;
 
 export function blockedIn(layout, x, y, r) {

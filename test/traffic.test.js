@@ -63,12 +63,35 @@ test("traffic keeps moving round a player standing in the middle of a junction",
   }
   assert.ok(longest < 30, `a car stayed stopped for ${longest.toFixed(1)} s`);
 });
-test("a player in a wider pocket between two wrecks and the kerb is lifted out", () => {
+test("the étude sedan left across a junction is towed home and traffic moves again", async () => {
+  const { sedan } = await import("../src/world/population.js");
+  const { roadsX, roadsY } = town;
   game.ride = null;
-  Object.assign(p, { x: 519.17, y: 313.56, stuck: 0 });
+  Object.assign(sedan, { x: roadsX[3], y: roadsY[3] + 2, a: 0.4, speed: 0, slideX: 0, slideY: 0 });
+  if (!cars.includes(sedan)) cars.push(sedan);
+  Object.assign(p, { x: roadsX[3] + 30, y: roadsY[3] + 30, stuck: 0 });
+  game.camX = roadsX[3];
+  game.camY = roadsY[3];
+  const stopped = new Map();
+  let longest = 0;
+  for (let frame = 0; frame < 120 * 60; frame++) {
+    update(1 / 60);
+    for (const c of cars) {
+      if (!c.route) continue;
+      const time = (c.speed || 0) < 0.5 ? (stopped.get(c) || 0) + 1 / 60 : 0;
+      stopped.set(c, time);
+      longest = Math.max(longest, time);
+    }
+  }
+  assert.deepEqual([sedan.x, sedan.y], [sedan.home.x, sedan.home.y], "the sedan was towed back to the étude");
+  assert.ok(longest < 30, `a car stayed stopped for ${longest.toFixed(1)} s`);
+});
+test("a player in a wider pocket between two wrecks and the south pavement's bollard line is lifted out", () => {
+  game.ride = null;
+  Object.assign(p, { x: 519.17, y: 319.56, stuck: 0 });
   update(0);
   cars.length = people.length = 0;
-  cars.push({ x: 506.87, y: 308.14, a: -0.15, condition: 0 }, { x: 533.01, y: 308.22, a: 0.15, condition: 0 });
+  cars.push({ x: 506.87, y: 314.14, a: -0.15, condition: 0 }, { x: 533.01, y: 314.22, a: 0.15, condition: 0 });
   for (const dir of ["up", "left", "right", "down"]) {
     held.add(dir, "test");
     try {
@@ -77,22 +100,22 @@ test("a player in a wider pocket between two wrecks and the kerb is lifted out",
       held.clear();
     }
   }
-  assert.ok(Math.hypot(p.x - 519.17, p.y - 313.56) > 12, `still in the pocket at ${p.x},${p.y}`);
+  assert.ok(Math.hypot(p.x - 519.17, p.y - 319.56) > 12, `still in the pocket at ${p.x},${p.y}`);
 });
-test("a player boxed into a clear pocket between two wrecks and the kerb is lifted out", () => {
+test("a player boxed into a clear pocket between two wrecks and the south pavement's bollard line is lifted out", () => {
   game.ride = null;
   game.time = 0;
-  Object.assign(p, { x: 520, y: 313.8, stuck: 0 });
+  Object.assign(p, { x: 520, y: 319.8, stuck: 0 });
   game.camX = p.x;
   game.camY = p.y;
   update(0);
   cars.length = people.length = 0;
-  cars.push({ x: 508.45, y: 308, a: -0.15, condition: 0 }, { x: 531.55, y: 308, a: 0.15, condition: 0 });
+  cars.push({ x: 508.45, y: 314, a: -0.15, condition: 0 }, { x: 531.55, y: 314, a: 0.15, condition: 0 });
   held.add("up", "test");
   try {
     for (let i = 0; i < 120; i++) update(1 / 60);
   } finally {
     held.clear();
   }
-  assert.ok(Math.hypot(p.x - 520, p.y - 313.8) > 2, `still pinned at ${p.x},${p.y}`);
+  assert.ok(Math.hypot(p.x - 520, p.y - 319.8) > 2, `still pinned at ${p.x},${p.y}`);
 });

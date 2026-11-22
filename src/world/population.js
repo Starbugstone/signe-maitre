@@ -6,8 +6,10 @@ function car(x, y, a, tint, model, route) {
   cars.push(v);
   return v;
 }
-// Parked at the kerb like the other cars, clear of the westbound lane at Y(1) - 6.
-export const sedan = car(p.x + 11, Y(1) - 16.5, 0, "cream", "Étude 2000");
+// Parked against the kerb bollards. Any closer to the kerb and the posts hold it fast;
+// its offside rubs 0.6 units into the westbound lane, so traffic pulls round it.
+export const sedan = car(p.x + 11, Y(1) - 15, 0, "cream", "Étude 2000");
+sedan.home = { x: sedan.x, y: sedan.y, a: 0 };
 export const target = car(X(4) + 97, Y(0) - 10, Math.PI, "gold", "Moutarde GT");
 const colors = ["blue", "olive", "rose", "silver"];
 const civilianLooks = [{ look: "civilian" }, { look: "worker" }, { look: "lady" }];
