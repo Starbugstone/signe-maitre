@@ -272,12 +272,14 @@
   // La Ferre. The paintings show a river one cell deep; the published river (town.river) is
   // 372 units from bank to bank with a 156-unit island. Banks, bridge ends, island edges, trees,
   // lamps and the cathedral keep their painted scale. Only open water, bridge mid-spans, island
-  // asphalt and bare paving are lengthened. A river plate runs from the north quay cap
-  // (27 units south of the Quai Nord centre line) to the Quai Sud kerb.
-  const RIVER_TOP = -201, // plate top, world units from the river row's centre line
-    RIVER_H = 412.2;
+  // asphalt and bare paving are lengthened. A river plate runs from the south kerb of Quai Nord
+  // (a band of clean quay setts, then the painted cap 27 units south of the centre line) to
+  // the Quai Sud kerb.
+  const RIVER_TOP = -211, // plate top, world units from the river row's centre line
+    RIVER_H = 422.2;
   const ry = (u) => Math.round((u - RIVER_TOP) * P);
-  const WATER_N = ry(-186), // 75: north water edge (source row 225)
+  const BANK_N = ry(-201), // the north quay cap (source row 150)
+    WATER_N = ry(-186), // north water edge (source row 225)
     WATER_S = ry(186), // 1935: south water edge (source row 813)
     ISLE_N = ry(-78),
     ISLE_S = ry(78),
@@ -383,8 +385,13 @@
   }
   // Both banks at their painted scale. The upper north walk is the Quai Nord pavement of the
   // district painting; the south promenade ends at the Quai Sud kerb.
-  function banks(plate, c, key) {
-    rows(plate, c, 150, 232, 0, 82);
+  function banks(plate, c, key, tile, road) {
+    // Quai Nord's south pavement, in the setts of the quays; a bridge's road runs through it.
+    const ctx = plate.getContext("2d");
+    ctx.fillStyle = ctx.createPattern(tile, "repeat");
+    ctx.fillRect(0, 0, plate.width, BANK_N);
+    if (road) rows(plate, c, 150 - BANK_N, 150, 0, BANK_N, road[0], road[1]);
+    rows(plate, c, 150, 232, BANK_N, BANK_N + 82);
     const lamps = entry(key).bankForeground?.southLamps;
     const end = Math.min(999, Math.max(939, (lamps?.footY ?? 0) + 8));
     rows(plate, c, 735, 865, WATER_S - 78, WATER_S + 52);
@@ -398,7 +405,7 @@
     const { c } = await riverSource("river");
     const plate = canvas(CW * P, PLATE_H);
     rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, "river");
+    banks(plate, c, "river", await paving());
     return finishRiver(plate);
   };
 
@@ -408,7 +415,7 @@
     liftDashes(c, false, x(entry(key).kerbs.x[1]), 12, 0, 1000);
     const plate = canvas(CW * P, PLATE_H);
     rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, key);
+    banks(plate, c, key, await paving(), [x(636), x(874)]);
     const outline = Object.values(entry(key).outlineEnvelopes)[0];
     const north = (y) => y - 225 + WATER_N,
       south = (y) => y - 813 + WATER_S;
@@ -462,7 +469,7 @@
     if (road) liftDashes(c, false, x(entry(key).kerbs.x[1]), 12, 0, 1000);
     const plate = canvas(CW * P, PLATE_H);
     rows(plate, await water(), 0, PLATE_H, 0, PLATE_H);
-    banks(plate, c, key);
+    banks(plate, c, key, await paving(), road && [x(road[0]), x(road[1])]);
 
     const nTop = 300,
       nEnd = 458,
@@ -479,7 +486,7 @@
     // Bridge decks over both channels.
     if (road) {
       const [r0, r1] = [x(road[0]), x(road[1])];
-      repeatRows(plate, c, 244, 300, 82, yN(nTop), { x0: r0, x1: r1 });
+      repeatRows(plate, c, 244, 300, BANK_N + 82, yN(nTop), { x0: r0, x1: r1 });
       repeatRows(plate, c, sEnd, 735, yS(sEnd), WATER_S - 78, { x0: r0, x1: r1 });
     }
     // Columns with the island street (and the through road).
@@ -528,6 +535,12 @@
     rows(plate, c, nEnd, mTop, yN(nEnd), yM(mTop), m0, m1);
     rows(plate, c, mTop, mEnd, yM(mTop), yM(mEnd), m0, m1);
     rows(plate, c, mEnd, sStart, yM(mEnd), yS(sStart), m0, m1);
+    // The through road keeps its grain across both aprons: its own asphalt, repeated.
+    if (road) {
+      const [r0, r1] = [x(road[0]), x(road[1])];
+      repeatRows(plate, c, 396, 440, yN(nEnd), yM(mTop), { x0: r0, x1: r1, mirror: true });
+      repeatRows(plate, c, 552, 600, yM(mEnd), yS(sStart), { x0: r0, x1: r1, mirror: true });
+    }
     rows(plate, c, sStart, sEnd, yS(sStart), yS(sEnd), m0, m1);
     // The pointed end: its wall follows the painted curve, drawn out between the rigid bands.
     if (nose) {

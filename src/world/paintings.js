@@ -12,8 +12,8 @@ export const plateScale = 5;
 export const ringFoot = (378 * (CELL_H / 2 - kerbY)) / 429 - CELL_H / 2, // -28.36
   ringDeck = ringFoot - 40;
 
-// The river plates run from the north quay cap to the Quai Sud kerb (see the bake recipes).
-export const riverPlate = { top: -201, height: 412.2 };
+// The river plates run from the south kerb of Quai Nord to the Quai Sud kerb (see the bake recipes).
+export const riverPlate = { top: -211, height: 422.2 };
 
 function mapper(source, target) {
   return (v) => {

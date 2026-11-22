@@ -453,3 +453,6 @@ export default async function (d) {
     );
   });
 }
+
+// The landmark tour (city-scenery.mjs) drives with the same hands.
+export { brakeToStop, driveRouteTo };

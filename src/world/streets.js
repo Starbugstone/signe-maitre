@@ -274,9 +274,9 @@ function drawSeams(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
   for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
     if (!land(row)) continue;
     const cy = Y(row);
-    // The river plate covers the quay rows from 27 units south of Quai Nord to the Quai Sud kerb.
+    // The river plate covers the quay rows from the south kerb of Quai Nord to the Quai Sud kerb.
     const top = row === town.riverSouthRow ? -16 : -CELL_H / 2,
-      bottom = row === canalRow ? 28 : CELL_H / 2;
+      bottom = row === canalRow ? 18 : CELL_H / 2;
     for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
       const x = X(col) - CELL_W / 2;
       if (!visible(x - 24, cy - CELL_H / 2, 48, CELL_H)) continue;
@@ -321,7 +321,7 @@ function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
         r = cellPlateKey(col, row);
       // On the quays only the part outside the river plate is joined.
       const top = row === town.riverSouthRow ? 16 : 29,
-        bottom = row === canalRow ? 26 : 27;
+        bottom = row === canalRow ? 17 : 27;
       const road = getJoin("road:" + l + r + top + bottom, plates[l], plates[r], true, CELL_H / 2 - top, top + bottom, 14);
       ctx.drawImage(road, x - 14, y - top, 28, top + bottom);
     }
