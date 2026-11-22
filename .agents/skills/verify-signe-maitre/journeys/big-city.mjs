@@ -275,6 +275,24 @@ async function turnSlowly(d, angle, speed, tolerance = 0.17) {
   return brakeToStop(d);
 }
 
+// If the turn carried the sedan wide, use the width of the quay to reverse
+// towards the alley centre before pointing the nose south again.
+async function adjustAlleyApproach(d, alleyX, quaiY, state) {
+  for (let i = 0; i < 38; i++) {
+    const { ride } = state;
+    const offset = ride.x - alleyX;
+    if (Math.abs(offset) <= 5 || ride.y < quaiY - 16) break;
+    const aim = Math.PI / 2 - Math.max(-0.9, Math.min(0.9, offset * 0.08));
+    const error = wrapAngle(aim - ride.a);
+    const power = ride.speed > -17 ? ["down"] : [];
+    const steering = Math.abs(error) > 0.1 ? [error < 0 ? "right" : "left"] : [];
+    await d.hold([...power, ...steering], 100);
+    state = await d.state();
+  }
+  await brakeToStop(d);
+  return turnSlowly(d, Math.PI / 2, 10);
+}
+
 export default async function (d) {
   await d.step("big-city-map-open", async () => {
     await d.press("map");
@@ -405,7 +423,11 @@ export default async function (d) {
     // Start the turn slightly farther west to leave room for the nose to swing.
     const approach = { x: alleyX - 16, y: quaiY - 8 };
     await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 15 });
-    const linedUp = await turnSlowly(d, Math.PI / 2, 11);
+    let linedUp = await turnSlowly(d, Math.PI / 2, 11);
+    if (Math.abs(linedUp.ride.x - alleyX) >= 9) {
+      d.note("reverse to centre the sedan on the alley", linedUp.ride);
+      linedUp = await adjustAlleyApproach(d, alleyX, quaiY, linedUp);
+    }
     d.expect(Math.abs(linedUp.ride.x - alleyX) < 15 && Math.abs(wrapAngle(linedUp.p.a - Math.PI / 2)) < 0.35,
       "The sedan faces the alley entrance", linedUp.ride);
     // Attempt to push the wide Étude 2000 (halfWidth 4.8 > 3.6) straight south into the narrow alley.
