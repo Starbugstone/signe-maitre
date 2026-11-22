@@ -449,7 +449,9 @@ export default async function (d) {
     await d.press("car");
     await d.waitFor("on foot", ({ state }) => state.ride === null);
     // Walk straight into the exact same Ruelle des Écoles mouth that refused the sedan.
-    await d.walkTo({ x: X(9), y: Y(8) + 12 }, { tol: 6 });
+    await d.walkTo({ x: X(9), y: Y(8) + 12 }, { tol: 2.5 });
+    // Centre the walker in the narrow mouth before the long southbound stretch.
+    await d.walkTo({ x: X(9), y: Y(8) + 34 }, { tol: 2.5 });
     await d.walkTo({ x: X(9), y: Y(8) + 112 }, { tol: 5 });
     const { p, ride } = await d.state();
     d.expect(!ride && Math.abs(p.x - X(9)) < 8 && p.y > Y(8) + 95, "player walked through the narrow cobblestone alley on foot", p);
