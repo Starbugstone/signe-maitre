@@ -91,11 +91,21 @@ export default async (d) => {
     // Make room to turn the full hull, then approach the north quay bow-first.
     await poweredUntil(d, ["up", "right"], (b) => b.y > initial.river.top + 42 && b.a > 0.7, 24);
     await poweredUntil(d, ["up", "left"], (b) => b.a < -1.12, 30);
-    const hit = await poweredUntil(d, ["up"], (b) => b.bumps > first.bumps, 24);
-    // A diagonal bow can reach farther than its centre line, and the hull recoils
-    // before the next input sample reads the impact.
-    const reach = Math.hypot(hit.ride.halfLength, hit.ride.halfWidth) + 4;
-    d.expect(hit.ride.y <= initial.river.top + reach, "The bow struck the north quay", hit.ride);
+    // The hull can recoil after the impact. Use the bow's maximum reach and allow
+    // another approach when passing traffic makes contact in deeper water.
+    const reach = Math.hypot(first.halfLength, first.halfWidth) + 4;
+    const struckQuay = (b, previousBumps) => b.bumps > previousBumps && b.y <= initial.river.top + reach;
+    let hit = await d.state();
+    let struck = struckQuay(hit.ride, first.bumps);
+    for (let pulse = 0; pulse < 70 && !struck; pulse++) {
+      const previousBumps = hit.ride.bumps;
+      const correction = angleDiff(-Math.PI / 2, hit.ride.a) - hit.ride.yaw * 0.18;
+      const rudder = Math.abs(correction) > 0.14 ? [correction > 0 ? "right" : "left"] : [];
+      await d.hold(["up", ...rudder], 140);
+      hit = await d.state();
+      struck = struckQuay(hit.ride, previousBumps);
+    }
+    d.expect(struck, "The bow struck the north quay", hit.ride);
     d.expect(hit.ride.lastImpact >= 3 && hit.ride.condition > 0, "The quay deflects the hull and keeps the helm usable", hit.ride);
   });
   await d.step("return to the anchor", async () => {
