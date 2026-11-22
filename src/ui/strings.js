@@ -183,8 +183,8 @@ const words = {
   moveCar: ["No room at the door. Move the car.", "La portière est coincée. Déplacez la voiture."],
   closer: ["Get closer to a car.", "Approchez-vous d’une voiture."],
   seized: [
-    "Vehicle seized. Auction hall, south of the canal.",
-    "Véhicule saisi. Hôtel des ventes, au sud du canal.",
+    "Vehicle seized. Deliver it to the auction hall.",
+    "Véhicule saisi. Direction l’hôtel des ventes.",
   ],
   sedan: [
     "Company car. All dents have been duly witnessed.",
@@ -286,6 +286,19 @@ const words = {
   frLang: ["Switch to French", "Passer en français"],
   enLang: ["Switch to English", "Passer en anglais"],
   loading: ["Opening Port-Fer…", "Ouverture de Port-Fer…"],
+  districtArc: ["Seizure Star", "Étoile des Saisies"],
+  districtButte: ["Creditor Hill", "Butte du Créancier"],
+  districtOpera: ["Auction Opera", "Quartier de l’Opéra"],
+  districtParcNord: ["Tax-Hill Park", "Buttes-Fiscales"],
+  districtContrainte: ["Writ Square", "Place de la Contrainte"],
+  districtMarais: ["Old Marais", "Le Vieux Marais"],
+  districtFaubourgEst: ["Clerks’ Suburb", "Faubourg des Greffes"],
+  districtQuaisOuest: ["West Quays", "Quais de l’Ouest"],
+  districtIle: ["Île de la Ferre", "Île de la Ferre"],
+  districtFerre: ["River Ferre", "La Ferre"],
+  districtTour: ["Iron Field", "Champ-de-Fer"],
+  districtRiveGauche: ["Clerks’ Quarter", "Quartier des Clercs"],
+  districtDocks: ["Ferre Docks", "Les Docks de la Ferre"],
 };
 
 export { words };

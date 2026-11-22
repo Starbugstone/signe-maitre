@@ -66,6 +66,37 @@ Collision keeps its existing exports. `blockedIn` and `vehicleBlocked` must resp
 
 Until the new paintings land, map new cell kinds onto the four existing paintings (`market`, `garage`, `docks`, `square`) plus simple procedural overlays (roundabout island, alley paving). The painting key per cell lives in `town.blocks[row][col]`. New keys are registered in `src/world/street-props.js` (`plateRegistration`) and `src/art/assets.js`.
 
+## Map
+
+Port-Fer is a **16 × 12** cell city (`cols 0..15`, `rows 0..11`, world size `4500 × 2652` with `CELL_W = 290`, `CELL_H = 228`).
+
+- **River la Ferre** runs west→east between `row 6` (Quai Nord) and `row 8` (Quai Sud), with open water `y ∈ [1482, 1854]` (`row 7` centre at `y = 1668`). **10 road bridges** cross at columns `1, 3, 4, 6, 8, 10, 11, 12, 13, 14` (all `clearance: true`), leaving open water spans at `0, 2, 5, 7, 9, 15`. **Île de la Ferre** sits on `row 7` across columns `8..10` (`x ∈ [2287, 3083]`, `y ∈ [1590, 1746]`), leaving 108-unit north and south navigable channels, holding **Palais de Justice** `(8, 7)` and **Notre-Dame-du-Port** `(10, 7)` with a central square & mooring at `(9, 7)`. Six moorings sit on water along the north quay, south quay and island quay.
+- **Grand Boulevards** form an avenue ring (`row 2`, `row 10`, `col 2`, `col 13`) linked to the riverside quays (`row 6`, `row 8`) and north–south axes (`col 3`, `col 6`, `col 8`, `col 10`). Four anticlockwise **roundabouts** anchor the network: **Étoile des Saisies** `(3, 3)` (`r = 22`, around Arc des Saisies), **Place de la Contrainte** `(6, 5)` (`r = 18`, around the obelisk), **Rond-Point du Timbre** `(13, 2)` (`r = 15`), and **Place de la Rive-Sud** `(10, 10)` (`r = 15`).
+- **Monuments (7)**: Arc des Saisies `(3, 3)`, Tour de Fer `(3, 8)` (roads pass beneath its four corner iron piers), Place de la Contrainte obelisk `(6, 5)`, Hôtel des Ventes opera/auction house `(7, 3)`, Sacré-Créancier hilltop basilica `(8, 0)`, Palais de Justice `(8, 7)`, and Notre-Dame-du-Port `(10, 7)`.
+- **Alleys, parks, tees & dead ends**: Dense *ruelles* (`halfWidth = 7`, admitting walkers and vehicles with `halfWidth ≤ 3.6`) fill **Le Vieux Marais** (`cols 9..12, rows 3..5`), **Quartier Latin** (`cols 9..10, row 9`), and **Butte du Créancier** (`cols 7..9, row 0`), plus four opened mid-cell seam passages (`9.5, 4..5`, `10.5, 3..4`, `6.5, 0..1`, `9.5, 8..9`). Three parks (**Champ-de-Fer** `(3..4, 9)`, **Parc des Buttes-Fiscales** `(14, 3..4)`, **Jardin du Sénat** `(7, 9)`) and five impasses (`(1,4)`, `(12,4)`, `(4,9)`, `(14,3)`, `(7,9)`) provide dead ends and T-junctions.
+- **Petite Ceinture ring railway** loops clockwise on a continuous elevated viaduct (`deckLift = 40`) along `row 1` (`y ≈ 271.65`), seam `col 14/15` (`x = 4280`, East Rail Bridge over la Ferre), `row 11` (`y ≈ 2551.65`), and seam `col 0/1` (`x = 220`, West Rail Bridge over la Ferre), with **8 stations** (`porte-etoile`, `butte-creancier`, `buttes-fiscales`, `viaduc-est`, `porte-docks`, `gare-sud`, `champ-fer`, `viaduc-ouest`). Straight-line trains are removed; `drawRingTrains(ctx, ring, ox, oy)` in `src/world/rail.js` is the single hook for Opus's ring train renderer.
+- **Case addresses**: `office` (Étude + interior) at `(7, 5)`, `auction` (Hôtel des Ventes) at `(7, 3)`, `repo` (Crédit Sec) at `(5, 4)` with Moutarde GT on North Boulevard `(5, 2)`, `noise` (Le Boum) at `(9, 5)`, `flat` (Résidence Mireille) at `(6, 6)`.
+
+```text
+Col:  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
+r00:  +---+---+---+---+---+---+---+.:[B]:.+-+---+---+---+---+---+---+  [B] Sacré-Créancier (8,0)
+r01:  +===+===+===[S1]+===+===+===+===+==[S2]+===+===+==[S3]+===+===+  === Petite Ceinture North
+r02:  +|  +===+===+===+==[GT]=+===+===+===+===+===+===+==(O)+---+---+  === Grands Boulevards
+r03:  +|  +===+==(A)==+===+===+===[V]=+---+:::+-::+---+===+ [P] +  |+  (A) Arc des Saisies (3,3)
+r04:  +| [x]  +===+---+--[R]--+---+---+---+:.:+:.:+[x]+===+ [P] +[S4]  [V] Hôtel des Ventes (7,3)
+r05: [S8] +===+===+===+===+==(O)==[É]=+---[C]:+:::+-+---+===+---+  |+  (O) Obelisk (6,5) / [É] Étude
+r06:  +===+===+===+===+===+==[S]=M+===+===+===+===+===+M+===+===+===+  Quai Nord (M = moorings)
+r07: ~|~B~|~  ~|~B~B~ ~|~ ~|~B~ ~|~ ~B[J]==[M]==[N]B~B~B~B~B~ ~|~B~|~  la Ferre + Île (J=Palais, N=Cathedral)
+r08:  +===+===+M==[T]=+===+===+===+===+===+===+===+===+===+M+===+===+  Quai Sud / [T] Tour de Fer (3,8)
+r09:  +|  +===+===+ [P]   +---+---+[x]+:::+:::+---+===+---+---+---+ |  [P] Parks / [x] Impasses
+r10:  +|  +===+===+===+===+===+===+===+===+==(O)==+===+===+===+---+ |  (O) Pl. Rive-Sud (10,10)
+r11:  +===+===+===[S7]+===+===+===+===+==[S6]+===+===+==[S5]+===+===+  === Petite Ceinture South
+
+Legend: === Avenue / Blvd   --- Street   ::: Alley (halfWidth 7)   (A)/(O) Roundabout
+        [S1..S8] Ring stations   | Ring vertical viaduct   B Road bridge   ~ River la Ferre
+        M River mooring   [É/R/C/S/V] Case pins (Étude, Crédit Sec, Le Boum, Mireille, Ventes)
+```
+
 ## Painting contract (Astra A and B produce, Fable registers)
 
 Copy the framing of the existing street paintings in `assets/market.webp`, `assets/garage.webp`, `assets/docks.webp` and `assets/square.webp`. Pass one of them to the image model as the style and framing reference for every new painting.

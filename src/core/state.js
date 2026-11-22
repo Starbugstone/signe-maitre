@@ -1,4 +1,4 @@
-import { X, Y } from "../world/layout.js";
+import { office } from "../world/town.js";
 export { held } from "./controls.js";
 
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -9,7 +9,8 @@ export function rand() {
   return seed / 4294967296;
 }
 export const artwork = {},
-  p = { x: X(2) + 28, y: Y(1) - 25, a: Math.PI / 2, hp: 5 };
+  // Start on the north pavement beside the étude, clear of kerb furniture.
+  p = { x: office.x - 22, y: office.y - 3, a: Math.PI / 2, hp: 5 };
 export const cars = [],
   people = [],
   trails = [],

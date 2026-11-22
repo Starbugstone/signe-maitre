@@ -10,15 +10,27 @@ export function walkableBetween(a, b) {
   }
   return true;
 }
-// Try the patient's curb first. A parked vehicle may require a neighbouring lane,
-// a bay further along the street, or an approach from the other direction.
+
+// Try the patient's curb first. A parked vehicle, roundabout, dead end, alley or river bank
+// may require a neighbouring lane, a bay further along the street, or the other axis.
 export function planApproach(patient, view, occupied) {
   const { col, row } = town.cellAt(patient.x, patient.y);
-  const streets = [
+  const candidates = [
     { horizontal: true, centre: Y(row), along: patient.x, cross: patient.y },
     { horizontal: false, centre: X(col), along: patient.y, cross: patient.x },
-  ].sort((a, b) => Math.abs(a.cross - a.centre) - Math.abs(b.cross - b.centre));
-  for (const road of streets) {
+  ];
+  // If patient is on an alley or island edge, also consider adjacent rows/cols within walking reach.
+  for (const dr of [-1, 1]) {
+    if (row + dr >= 0 && row + dr < town.rows && Math.abs(patient.y - Y(row + dr)) < 90)
+      candidates.push({ horizontal: true, centre: Y(row + dr), along: patient.x, cross: patient.y });
+  }
+  for (const dc of [-1, 1]) {
+    if (col + dc >= 0 && col + dc < town.cols && Math.abs(patient.x - X(col + dc)) < 90)
+      candidates.push({ horizontal: false, centre: X(col + dc), along: patient.y, cross: patient.x });
+  }
+  candidates.sort((a, b) => Math.abs(a.cross - a.centre) - Math.abs(b.cross - b.centre));
+
+  for (const road of candidates) {
     const { horizontal, centre, along, cross } = road;
     const point = (u, w) => (horizontal ? { x: u, y: w } : { x: w, y: u });
     const extent = horizontal ? W : H;

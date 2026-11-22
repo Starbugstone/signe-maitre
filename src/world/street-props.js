@@ -2,6 +2,9 @@ import { CELL_W, CELL_H, X, Y } from "./layout.js";
 
 export const kerbX = 17.6,
   kerbY = 16.8;
+
+// Data-driven plate registration. Future paintings from art-src/scenery/manifest.json
+// register their measured [west, centre, east] and [north, centre, south] pixel kerbs here.
 export const plateRegistration = {
   market: [
     [667, 749, 841],
@@ -95,16 +98,26 @@ function makeProps(key, mapX, mapY, lamps, bollards) {
   ];
 }
 const props = {};
-for (const [key, { lamps, bollards }] of Object.entries(fixtures)) {
-  const [xs, ys] = plateRegistration[key];
+function buildPlateProps(key, kerbs, spec = { lamps: [], bollards: [] }) {
+  const [xs, ys] = kerbs;
   props[key] = makeProps(
     key,
     (x) => register(x / 0.6, [0, ...xs, 1500], [-CELL_W / 2, -kerbX, 0, kerbX, CELL_W / 2]),
     (y) => register(y / 0.6, [0, ...ys, 1000], [-CELL_H / 2, -kerbY, 0, kerbY, CELL_H / 2]),
-    lamps,
-    bollards,
+    spec.lamps || [],
+    spec.bollards || [],
   );
 }
+for (const [key, spec] of Object.entries(fixtures)) buildPlateProps(key, plateRegistration[key], spec);
+
+export function registerSceneryManifest(entries) {
+  for (const entry of entries) {
+    if (!entry?.key || !entry.kerbs?.x || !entry.kerbs?.y) continue;
+    plateRegistration[entry.key] = [entry.kerbs.x, entry.kerbs.y];
+    buildPlateProps(entry.key, plateRegistration[entry.key], entry.fixtures);
+  }
+}
+
 const canalHeight = CELL_H - 31 + 5;
 props.canal = makeProps(
   "canal",
@@ -130,25 +143,108 @@ props.canal = makeProps(
   ],
 );
 
+function nearPoly(x, y, poly, pad) {
+  if (!poly?.length) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i],
+      [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    const dx = xj - xi,
+      dy = yj - yi,
+      len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2)) : 0;
+    if (Math.hypot(x - (xi + dx * t), y - (yi + dy * t)) < pad) return true;
+  }
+  return inside;
+}
+
 const byLayout = new WeakMap();
 export function streetProps(layout, col, row) {
   if (!byLayout.has(layout)) byLayout.set(layout, new Map());
   const cache = byLayout.get(layout),
     id = row * layout.cols + col;
   if (cache.has(id)) return cache.get(id);
-  const key = layout.blocks[row][col],
-    result = [];
-  for (const item of props[key]) {
-    if (row === layout.canalRow && item.y > 0) continue;
-    if (row === layout.canalRow + 1 && item.y < -11) continue;
-    result.push({ x: X(col) + item.x, y: Y(row) + item.y, item });
+
+  const key = layout.blocks[row][col];
+  const cellProps = props[key] || [];
+  const result = [];
+  const cx = X(col),
+    cy = Y(row);
+  const meta = layout.cellMeta?.(col, row);
+  const river = layout.river;
+
+  // River row outside islands holds open water only — never base-plate bollards.
+  if (meta?.isRiverRow && !meta.isIsland) {
+    cache.set(id, result);
+    return result;
   }
-  // Canal posts belong to the cell containing their feet, including the south quay.
-  if (row === layout.canalRow || row === layout.canalRow + 1)
+
+  // Cells with no wide street/avenue (pure alley hubs or park cores) omit wide kerb furniture.
+  if (meta && !meta.hasWideRoad) {
+    cache.set(id, result);
+    return result;
+  }
+
+  const keepProp = (wx, wy, item) => {
+    if (river) {
+      if (row === layout.canalRow && item.y > 0) return false;
+      if (row === layout.riverSouthRow && item.y < -11) return false;
+      if (wy > river.top - 3 && wy < river.bottom + 3 && !meta?.isIsland) return false;
+      if (meta?.isIsland) {
+        const isl = meta.island;
+        if (wx < isl.left + 8 || wx > isl.right - 8 || wy < isl.top + 8 || wy > isl.bottom - 8) return false;
+      }
+    }
+    if (meta) {
+      // Remove furniture along missing or alley-only arms so posts never block alley mouths or float in walls.
+      if (item.x < -28 && !meta.wideArms.w) return false;
+      if (item.x > 28 && !meta.wideArms.e) return false;
+      if (item.y < -30 && !meta.wideArms.n) return false;
+      if (item.y > 26 && !meta.wideArms.s) return false;
+      // Suppress base-plate kerb furniture overlapping roundabout plazas.
+      for (const rb of meta.roundabouts)
+        if (Math.hypot(wx - rb.x, wy - rb.y) < rb.outerRadius + 4) return false;
+      // Suppress furniture inside monument footprints / piers.
+      for (const poly of meta.solidPolys) if (nearPoly(wx, wy, poly, 4)) return false;
+      // Keep opened seam alley mouths clear.
+      for (const rect of meta.openRects)
+        if (rect.alley && wx >= rect.left - 3 && wx <= rect.right + 3 && wy >= rect.top - 3 && wy <= rect.bottom + 3)
+          return false;
+    }
+    // Keep ring station street stairs clear.
+    if (layout.ring?.stations)
+      for (const st of layout.ring.stations)
+        if (Math.hypot(wx - st.street.x, wy - st.street.y) < 11) return false;
+    // Keep river mooring quay access clear.
+    if (river?.moorings)
+      for (const m of river.moorings)
+        if (Math.hypot(wx - m.quay.x, wy - m.quay.y) < 11) return false;
+    // Keep case doorway aprons clear of bollards.
+    if (layout.jobs)
+      for (const job of layout.jobs)
+        if (Math.abs(wx - job.x) < 5 && wy >= job.y - 2 && wy <= Y(job.row) && item.radius < 2.2) return false;
+    // Keep Tour de Fer underpass completely clear of random kerb posts.
+    if (layout.monuments)
+      for (const m of layout.monuments)
+        if (m.passUnder && m.col === col && m.row === row && Math.hypot(wx - m.x, wy - m.y) < 52) return false;
+    return true;
+  };
+
+  for (const item of cellProps) {
+    const wx = cx + item.x,
+      wy = cy + item.y;
+    if (keepProp(wx, wy, item)) result.push({ x: wx, y: wy, item });
+  }
+
+  // Legacy single-band canal fallback (used only by non-river synthetic layouts).
+  if (layout.singleBandCanal && (row === layout.canalRow || row === layout.canalRow + 1)) {
     for (const item of props.canal) {
       const y = Y(layout.canalRow) + item.y;
-      if (layout.cellAt(X(col), y).row === row) result.push({ x: X(col) + item.x, y, item });
+      if (layout.cellAt(cx, y).row === row) result.push({ x: cx + item.x, y, item });
     }
+  }
+
   cache.set(id, result);
   return result;
 }
