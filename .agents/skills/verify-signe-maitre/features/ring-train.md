@@ -22,10 +22,10 @@ Four trainsets of three coaches run clockwise round the ring viaduct (`town.ring
 
 ## Driving it with pf
 
-Preconditions: a fresh game. The probe adds `cam`, `transit` and `ring { deckLift, length, stations[{id,name,s,side,street,stop}], trains[{k,s,v,station,doors,cars[{x,y,a}]}] }` to the snapshot.
+Preconditions: a fresh game. The probe adds `cam`, `transit` and `walkers[{x,y,kind,anger}], ring { deckLift, length, stations[{id,name,s,side,street,stop}], trains[{k,s,v,station,doors,cars[{x,y,a}]}] }` to the snapshot.
 
 - **Ride.** `pf run ring-train --build probe` follows `findRoute` on foot to the nearest station and checks the station hint. It climbs to the platform (on the stair side), waits until boarded with the doors-open hint, then checks that the player rides in the middle coach and the camera follows the deck. It stays aboard through Buttes-Fiscales and Viaduc-Est, round the north-east corner and over the East Rail Bridge, then requests the next stop and steps off at Porte des Docks' stair foot. Finally it walks away and checks that the sedan has not moved and the case state is unchanged. `mid-corner.png` and `on-rail-bridge.png` are taken on the way.
-- **Lose the heat.** `pf run ring-escape --build probe` slaps the tough beside the étude until Heat reaches at least 1. It runs through the streets to the platform, rides one stop and checks Heat 0/3, the **lostTail** ticker and unchanged HP.
+- **Lose the heat.** `pf run ring-escape --build probe` walks to the nearest station, then slaps a passer-by (never a tough or inspector) within 400 units of the stair until Heat passes 1.3 and inspectors turn out. It runs back up to the platform, rides one stop and checks Heat 0/3, the **lostTail** ticker and unchanged HP. Heat fades by about 0.055 a second, so raising it at the étude and running the 1000 units to the station leaves nothing to lose, and the tough there knocks the player out on the way.
 - **Map.** `pf run map-view` shows the ring on `01-map-open.png`.
 - **Depth.** `npm run test:scenery` runs the `ring-train-depth` fixture. A walker behind the deck is partly hidden while a train stands at Porte de l’Étoile, and a walker in front stays fully visible.
 - Run both journeys on `desktop/en` and `phone/fr`.

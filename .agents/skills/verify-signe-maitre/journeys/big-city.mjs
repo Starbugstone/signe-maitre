@@ -437,11 +437,22 @@ export default async function (d) {
     // Return to the sedan, drive south down avenue col 8 to Petite Ceinture South, and walk onto Gare du Sud station!
     await d.walkTo({ x: X(9), y: Y(8) + 6 }, { tol: 8 });
     const { sedan } = await d.state();
-    await d.walkTo(
-      { x: sedan.x, y: sedan.y + (sedan.y > Y(8) ? -15 : 15) },
-      { tol: 4, until: (hud) => hud.hint.includes(d.t("enterHint")) },
-    );
-    await d.press("car");
+    // A passing car can be nearer than the parked sedan when Car is pressed. Step back
+    // out of it and try again once the traffic has gone by.
+    for (let attempt = 0; ; attempt++) {
+      await d.walkTo(
+        { x: sedan.x, y: sedan.y + (sedan.y > Y(8) ? -15 : 15) },
+        { tol: 4, until: (hud) => hud.hint.includes(d.t("enterHint")) },
+      );
+      await d.press("car");
+      const { state } = await d.waitFor("in a car", ({ state }) => state.ride !== null);
+      if (state.ride.model === "Étude 2000") break;
+      d.note("boarded a passing " + state.ride.model + "; getting out", state.ride);
+      if (attempt >= 2) d.expect(false, "re-boarded the sedan", state.ride);
+      await brakeToStop(d, 1500);
+      await d.press("car");
+      await d.waitFor("on foot", ({ state }) => state.ride === null);
+    }
     await d.waitFor("re-boarded sedan", ({ state }) => state.ride?.model === "Étude 2000");
 
     const station = town.ring.stations.find((st) => st.id === "gare-sud");

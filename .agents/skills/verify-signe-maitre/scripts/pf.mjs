@@ -126,6 +126,7 @@ window.__pf = Object.freeze({
       route: !interior && end ? (directions()?.path || []).map(xy) : [],
       ambulance: ambulance && { ...veh(ambulance), state: ambulance.state, loaded: ambulance.loaded || 0 },
       downed: people.filter((n) => n.knockedOut && !n.onStretcher).map(xy),
+      walkers: people.filter((n) => !n.down && !n.knockedOut).map((n) => ({ ...xy(n), kind: n.kind, anger: +(n.anger || 0).toFixed(1) })),
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
       traffic: cars.filter((c) => c.route).map(veh),

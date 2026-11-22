@@ -26,7 +26,7 @@ Every `pf run` starts its own headless Chromium. Each journey gets a fresh brows
 Two builds can be driven.
 
 - **`--build shipped`** is the default. It drives `index.html` exactly as committed and refuses to start if `index.html` no longer matches a fresh build of `src/`. Journeys can only read what a player sees.
-- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians and moving traffic. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
+- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians, pedestrians still on their feet (`walkers`), moving traffic and the ring trains. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
 
 Use `--url <address>` to drive a deployed copy, such as `https://starbugstone.github.io/signe-maitre/`. In that mode, only journeys marked `needs: "hud"` can run. Others are reported as skipped.
 
