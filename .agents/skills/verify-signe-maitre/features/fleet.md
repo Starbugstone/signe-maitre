@@ -15,7 +15,7 @@ Five more road vehicles share the streets with the sedan and the ambulance. Each
 
 ## How to get to it (user POV)
 
-- From the start, walk along the north pavement of the étude's street. Going west: the motorbike, then the Volta E, the dump truck and the bus. Going east past the company sedan: the SUV.
+- From the start, walk along the north pavement of the étude's street. Going east past the company sedan: the motorbike. Going west: the SUV, then the Volta E, the dump truck and, across the next junction, the bus.
 - Stand by any of them and press **F** or tap **Car**. Drive with the usual controls.
 
 ## Driving it with pf

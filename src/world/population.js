@@ -1,7 +1,7 @@
 import { cars, game, p, people, rand } from "../core/state.js";
 import { footBlocked, vehicleBlocked } from "./collision.js";
 import { town, canalRow, CELL_W, TAU, X, Y } from "./town.js";
-import { fleet, pickModel, routeClass } from "../game/fleet.js";
+import { fleet, pickModel } from "../game/fleet.js";
 import { carContact } from "./vehicle-shape.js";
 // `model` is a fleet id. A name the fleet does not know ("Biscotte") is a sedan's nameplate.
 function car(x, y, a, tint, model, route) {
@@ -27,8 +27,8 @@ function car(x, y, a, tint, model, route) {
 // Seized vehicles waiting for the auction stand along the étude's own kerb, one of each
 // kind: [model, distance east of the cell's junction].
 const pound = {
-  "1,1": [["bus", -60], ["dumper", 60], ["volta", 125]],
-  "2,1": [["moto", -90], ["suv", 110]],
+  "1,1": [["bus", -60], ["dumper", 55], ["volta", 122]],
+  "2,1": [["suv", -90], ["moto", 124]],
 };
 // Chosen so that the six blocks around the étude show every model.
 const trafficSalt = 4,
@@ -157,7 +157,9 @@ function populate(col, row, key) {
   if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
   const q = Math.floor(random() * 4),
     f = 0.12 + random() * 0.65;
-  const model = pickModel(routeClass(null), draw(trafficSalt));
+  // Every block loop runs on ordinary streets. A route that says otherwise (`route.class`)
+  // should draw its model with pickModel(routeClass(route), ...).
+  const model = pickModel("street", draw(trafficSalt));
   const left = X(col) + 6,
     right = X(col + 1) - 6,
     top = Y(row) + 6,

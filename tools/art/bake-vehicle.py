@@ -702,6 +702,13 @@ def main():
                     "states": {state: path.name for state, path in written.items()},
                     **cfg.get("info", {}),
                 }
+                if cfg["model"] == "hull":
+                    source = Path(cfg["source"]) if Path(cfg["source"]).is_absolute() else ROOT / cfg["source"]
+                    spec = json.loads((source / "spec.json").read_text())
+                    info["metres"] = {"length": spec["length_m"], "width": spec["width_m"], "height": spec["height_m"]}
+                    if cfg.get("afloat"):
+                        # The hull is cut at the waterline: the frame's ground plane is the water.
+                        info["waterlineMetres"] = spec.get("waterline_m", 0)
                 (out / f"{vehicle}.json").write_text(json.dumps(info, indent=2) + "\n")
 
 

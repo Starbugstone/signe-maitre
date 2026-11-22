@@ -6,6 +6,7 @@ export const meta = { feature: "fleet", needs: "probe" };
 
 const junctions = [75, 365, 655, 945, 1235, 1525];
 const turnTo = (want, a) => Math.atan2(Math.sin(want - a), Math.cos(want - a));
+const halfLengths = { sedan: 11, volta: 12, suv: 12.4, moto: 7, dumper: 19, bus: 28.5 };
 
 // Each model, the condition to crash it down to, the speed it must reach on the straight,
 // how fast it steers (rad/s), so a tap on the wheel is as long as the turn needs, and its
@@ -14,8 +15,9 @@ const fleet = [
   ["moto", 0, 70, 3.7, 215],
   ["suv", 99, 40, 2.3, 104],
   ["volta", 64, 60, 2.6, 196],
-  ["dumper", 99, 22, 1.4, 40],
-  ["bus", 99, 22, 1.3, 46],
+  // The bus before the dump truck, which crashes where the bus was parked.
+  ["bus", 99, 16, 1.3, 46],
+  ["dumper", 99, 16, 1.4, 40],
 ];
 
 export default async function (d) {
@@ -39,8 +41,26 @@ export default async function (d) {
       const car = parked.find((c) => c.model === model && c.condition > 0 && Math.abs(c.y - pavement) < 14);
       d.expect(!!car, `a seized ${model} stands at the étude's kerb`, parked.filter((c) => c.model !== "sedan"));
       parkedAt = car;
-      // Back to the pavement first, then along it to the vehicle's door.
-      if (Math.abs(p.y - pavement) > 3) await d.walkTo({ x: p.x, y: pavement }, { tol: 3, timeout: 20000 });
+      // Back to the pavement first, crossing the kerb where nothing is parked, then along
+      // it to the vehicle's door.
+      if (Math.abs(p.y - pavement) > 3) {
+        const kerb = parked.filter((c) => Math.abs(c.y - pavement) < 14);
+        const clear = (x) => kerb.every((c) => Math.abs(c.x - x) > halfLengths[c.model] + 9) && junctions.every((j) => Math.abs(j - x) > 34);
+        const crossings = [];
+        for (let step = 0; step < 160; step += 8) for (const x of step ? [p.x + step, p.x - step] : [p.x]) if (clear(x)) crossings.push(x);
+        // A wreck or a car waiting for the walker can close one crossing; try the next.
+        let reached = false;
+        for (const x of crossings.slice(0, 6)) {
+          try {
+            await d.walkTo({ x, y: pavement }, { tol: 3, timeout: 20000 });
+            reached = true;
+            break;
+          } catch (error) {
+            d.note("crossing blocked", { x, error: error.message });
+          }
+        }
+        d.expect(reached, "the player gets back to the north pavement", crossings);
+      }
       await d.walkTo({ x: car.x, y: pavement }, { tol: 5, timeout: 90000 });
       d.expect((await d.hud()).hint.includes(d.t("enterHint")), "the hint offers the wheel", await d.hud());
     });
@@ -57,19 +77,32 @@ export default async function (d) {
       const start = (await d.state()).ride,
         lane = parkedAt.y + 12.5; // a little south of the lane line: the étude sedan rubs into it
       let top = 0;
-      const aim = (ride) => Math.PI - Math.max(-0.8, Math.min(0.8, (lane - ride.y) * 0.07));
+      // A long body swings out gently, or its nose is across the oncoming lane.
+      const swing = halfLengths[model] > 15 ? 0.28 : 0.8;
+      const aim = (ride) => Math.PI - Math.max(-swing, Math.min(swing, (lane - ride.y) * 0.07));
       for (let i = 0; i < 70; i++) {
         const { ride } = await d.state();
         top = Math.max(top, Math.abs(ride.speed));
-        if (ride.condition < 100 || start.x - ride.x > 120) break;
+        // A bump from passing traffic is no reason to stop: carry on like any driver.
+        if (start.x - ride.x > 120) break;
         if (Math.abs(lane - ride.y) < 5 && Math.abs(turnTo(Math.PI, ride.a)) < 0.35) break;
-        await steer(aim(ride), 90, rate, Math.abs(ride.speed) < 22 ? ["up"] : []);
+        await steer(aim(ride), 90, rate, Math.abs(ride.speed) < Math.min(22, pace) ? ["up"] : []);
       }
       // Throttle held through every tap of the wheel, until the model is up to its pace.
-      for (let i = 0; i < 60 && top <= pace * 1.1; i++) {
+      let held = 0;
+      for (let i = 0; i < 80; i++) {
         const { ride } = await d.state();
         top = Math.max(top, Math.abs(ride.speed));
-        if (ride.condition < 100 || start.x - ride.x > 170) break;
+        const gone = Math.hypot(ride.x - start.x, ride.y - start.y);
+        if (gone > 170 || (gone > 30 && top > pace * 1.1)) break;
+        // Nose to nose with traffic: back off a little and let it through.
+        held = Math.abs(ride.speed) < 2 ? held + 1 : 0;
+        if (held > 5) {
+          await d.hold(["down"], 900);
+          await new Promise((r) => setTimeout(r, 1500));
+          held = 0;
+          continue;
+        }
         await steer(aim(ride), 110, rate);
       }
       const { ride } = await d.state();

@@ -20,12 +20,14 @@ The player can take the wheel of the Étude 2000 sedan, a parked or passing car,
 
 Preconditions: use `--build probe`. The player is on foot within 22 units of `state().sedan`.
 
-- Run `pf run street-life --build probe`, then repeat with `--device phone --lang fr`. Boarding checks the sedan model and the speed display. The touch run also checks the localized Horn and Brake controls.
+- Run `pf run street-life --build probe`, then repeat with `--device phone --lang fr`. Boarding checks the sedan's nameplate (`state().ride.label`; `model` is now the fleet id, `sedan`) and the speed display. The touch run also checks the localized Horn and Brake controls.
 - **Drive.** The journey steers, accelerates, checks that the sedan has moved more than two world units from its parking spot, then holds Down and waits for a stop.
 - **Exit.** `d.press("car")`. `state().ride` is `null`.
 - GT delivery, a handbrake turn, wrecking a car and ordering roadside repair still require manual drives.
 
 ## Gotchas
+
+- The other models (Volta E, SUV, bus, dump truck, motorbike) have their own journey and recipe in [Fleet](fleet.md).
 
 - On game revision `ef81f95`, the starter sedan overlaps a market street prop. Boarding works, but the vehicle stays at (694, 283.5) under throttle. The departure check catches this before the braking and exit steps.
 - `d.press("action")` on a phone taps **Slap / Brake**. Its label follows whether the player is in a car.

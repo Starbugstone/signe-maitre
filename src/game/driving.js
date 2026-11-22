@@ -145,7 +145,7 @@ function drive(v, dt, throttle, steering, brake) {
     }
   }
   clearTraffic(v, oldX, oldY, oldAngle, dt);
-  if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5, w: spec.halfWidth, l: spec.halfLength });
+  if (brake && Math.abs(v.speed) > 36) trails.push({ x: v.x, y: v.y, a: v.a, t: 5, w: spec.halfWidth });
 }
 // Traffic follows its block loop on a path line, at a lane offset from it. Drivers
 // ease their speed, keep a gap to traffic going their way and to anything stopped in
@@ -488,6 +488,9 @@ function advanceTraffic(c, dt) {
       // A turning body swings its tail; a stalled car behind the centre is not in the way.
       const behind = (other.x - c.x) * Math.cos(c.a) + (other.y - c.y) * Math.sin(c.a) < 0;
       if (route.arc > 0 && !other.route && isStalled(other) && behind) continue;
+      // Held up mid-turn by a car standing against its tail, a longer body brushes past:
+      // the tail swings clear as the turn completes.
+      if (route.arc > 0 && route.wait > 2 && behind && hit.depth < 2.5 && long > 0) continue;
       const graze =
         route.arc > 0 &&
         route.wait > 2 &&
