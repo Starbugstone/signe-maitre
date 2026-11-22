@@ -6,7 +6,7 @@ A bilingual browser arcade game set in Port-Fer. Play a French commissaire de ju
 
 [Play Signé, Maître ! in your browser](https://starbugstone.github.io/signe-maitre/).
 
-Open [index.html](index.html) in a modern browser. The game, artwork, and sound synthesis are bundled in that file. You can also run a local server from this directory.
+To play a local copy, serve this directory over HTTP. The page loads its script and artwork from `game/`, and browsers block that from a double-clicked file.
 
 ```sh
 python3 -m http.server 8765 --bind 127.0.0.1
@@ -58,7 +58,7 @@ npm run build
 
 Run `npm run test:scenery` for scenery changes. It checks which pixels each object covers and walks the player through the garage and market crossing. Install the browser once with `npx playwright-core install chromium-headless-shell`. CI runs the checks on every push and pull request and saves gameplay screenshots on failure.
 
-The build embeds the modules, CSS and artwork in the root `index.html` for offline or HTTP play. District authors can use the [town-generation skill](.agents/skills/port-fer-town/SKILL.md) for connectivity and visual checks.
+The build writes a small root `index.html` and puts the bundled script and the artwork in `game/`, each file named by its content hash. GitHub Pages serves both from `main`, and returning players download only the files that changed. Commit `game/` with `index.html`. District authors can use the [town-generation skill](.agents/skills/port-fer-town/SKILL.md) for connectivity and visual checks.
 
 To drive the built game in headless Chromium and keep screenshots as proof, run `node .agents/skills/verify-signe-maitre/scripts/pf.mjs doctor`. The [verification skill](.agents/skills/verify-signe-maitre/SKILL.md) lists the scripted player journeys.
 

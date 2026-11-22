@@ -5,7 +5,7 @@ description: Drive Signé, Maître ! (the Port-Fer browser game) in headless Chr
 
 # Verify Signé, Maître !
 
-The game is one static page. `npm run build` bundles `src/` into the root `index.html`, which runs from `file://` or any static server. The player uses a canvas with HTML around it: a HUD, a toolbar, a route card, a ticker, a hint line, a `<dialog id="panel">` and touch buttons. All commands run from the repository root. `pf` is short for this command.
+The game is one static page. `npm run build` bundles `src/` into the root `index.html` and the hashed script and artwork in `game/`. Players load it over HTTP; the harness opens it from `file://` with Chromium's file-access flag, and the probe build inlines everything into one temporary page. The player uses a canvas with HTML around it: a HUD, a toolbar, a route card, a ticker, a hint line, a `<dialog id="panel">` and touch buttons. All commands run from the repository root. `pf` is short for this command.
 
 ```sh
 node .agents/skills/verify-signe-maitre/scripts/pf.mjs

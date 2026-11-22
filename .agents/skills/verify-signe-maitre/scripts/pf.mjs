@@ -205,8 +205,8 @@ async function doctor(opts) {
   check("chromium binary", !!chrome, chrome || "set PF_CHROMIUM or run `npx playwright-core install chromium-headless-shell`");
   if (!opts.url) {
     try {
-      const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
-      const fresh = sha(await renderGame());
+      const { publishedPage } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
+      const fresh = sha(await publishedPage());
       const shipped = sha(await readFile(join(root, "index.html"), "utf8"));
       check("index.html matches src/ (fresh build)", fresh === shipped, fresh === shipped ? shipped.slice(0, 12) : "stale: run `npm run build`");
     } catch (e) {
@@ -214,7 +214,7 @@ async function doctor(opts) {
     }
   }
   if (pw && chrome) {
-    const browser = await pw.chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
+    const browser = await pw.chromium.launch({ executablePath: chrome, args: ["--no-sandbox", "--allow-file-access-from-files"] });
     try {
       const page = await browser.newPage({ ...DEVICES.desktop, locale: "en-US" });
       const errors = [];
@@ -279,14 +279,14 @@ async function run(opts) {
   const runDir = join(runsRoot, id);
   const file = mode === "url" ? null : await buildFiles(mode, runDir);
   if (mode === "shipped") {
-    const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
-    if (sha(await renderGame()) !== sha(await readFile(file, "utf8")))
+    const { publishedPage } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
+    if (sha(await publishedPage()) !== sha(await readFile(file, "utf8")))
       throw Error("index.html is stale against src/. Run `npm run build` first, or pass --build probe.");
   }
   const url = opts.url || pathToFileURL(file).href;
   const build = file ? sha(await readFile(file, "utf8")).slice(0, 12) : "remote";
   await mkdir(runDir, { recursive: true });
-  const server = await pw.chromium.launchServer({ executablePath: chrome, args: ["--no-sandbox"], headless: !opts.headed });
+  const server = await pw.chromium.launchServer({ executablePath: chrome, args: ["--no-sandbox", "--allow-file-access-from-files"], headless: !opts.headed });
   await writeFile(join(runDir, "pids.json"), JSON.stringify({ harness: process.pid, chromium: server.process().pid }));
   let browser,
     failed = 0,
