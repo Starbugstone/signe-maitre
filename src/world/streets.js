@@ -556,4 +556,20 @@ function streetLayer(ox, oy) {
   g.restore();
 }
 
+// Restore the opaque deck from the cached painting after the water traffic.
+export function drawBridgeDecks(ox, oy, river) {
+  const legacy = !town.river;
+  g.save();
+  g.beginPath();
+  for (const bridge of river.bridges) {
+    const halfWidth = legacy ? 27.5 : bridge.halfWidth;
+    if (bridge.x + halfWidth < ox || bridge.x - halfWidth > ox + game.vw) continue;
+    g.rect(bridge.x - halfWidth, river.top - 14, halfWidth * 2, river.bottom - river.top + 19);
+  }
+  g.clip();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(streets, Math.round((cachedX - ox) * groundScale), Math.round((cachedY - oy) * groundScale));
+  g.restore();
+}
+
 export { plateScale, plates, prepareTown, streetLayer };

@@ -6,7 +6,8 @@ import { advanceTraffic, drive } from "./driving.js";
 import { sedan, streamPopulation, person, target } from "../world/population.js";
 import { blocked, distanceToBody, footBlocked, freeSpot, move, shutIn, vehicleBlocked } from "../world/collision.js";
 import { carContact } from "../world/vehicle-shape.js";
-import { footfall } from "../audio/mixer.js";
+import { footfall, shipHornSound } from "../audio/mixer.js";
+import { boatFleet, river, updateBoats } from "./boats.js";
 import { strides } from "../art/gait.js";
 import { updateAmbulance } from "./rescue.js";
 import { updatePerson } from "./crowd.js";
@@ -38,9 +39,13 @@ function update(dt) {
     renderMessage();
   }
   p.moving = false;
+  updateBoats(river, boatFleet, dt, game.ride, throttleInput(), steeringInput(), (boat) => {
+    const volume = Math.max(0, 1 - Math.hypot(boat.x - p.x, boat.y - p.y) / 240);
+    if (volume) shipHornSound(volume);
+  });
   if (game.ride) {
     const v = game.ride;
-    drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
+    if (v.domain !== "water") drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
     p.x = v.x;
     p.y = v.y;
     p.a = v.a;

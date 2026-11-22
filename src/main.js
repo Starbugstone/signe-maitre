@@ -44,7 +44,7 @@ function updateVehicleSignal() {
     vehicleSignalSound(null);
     return;
   }
-  const label = t(ride.medical ? "vehicleSiren" : "vehicleHorn");
+  const label = t(ride.medical ? "vehicleSiren" : ride.domain === "water" ? "shipHorn" : "vehicleHorn");
   const pressed = ride.medical ? String(!!ride.sirenOn) : null;
   for (const button of signalButtons) {
     if (button.textContent !== label) button.textContent = label;
@@ -55,7 +55,7 @@ function updateVehicleSignal() {
   let mode = null;
   if (!document.hidden && document.hasFocus()) {
     if (ride.medical && ride.sirenOn) mode = "siren";
-    if (!ride.medical && held.has("horn")) mode = "horn";
+    if (!ride.medical && held.has("horn")) mode = ride.domain === "water" ? "ship" : "horn";
   }
   vehicleSignalSound(mode);
 }

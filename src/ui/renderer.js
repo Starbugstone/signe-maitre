@@ -7,7 +7,7 @@ import { $, g, hud, label, rect } from "../platform/canvas.js";
 import { H, TAU, W, canalBottom, canalTop, jobs, roadsX, roadsY } from "../world/town.js";
 import { directions } from "../world/navigation.js";
 import { goal, nextFile } from "../game/cases.js";
-import { drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
+import { drawBridgeDecks, drawStreetProp, streetLayer, visibleStreetProps } from "../world/streets.js";
 import { target } from "../world/population.js";
 import { ambulance, medicalCrew, nearbyPatient } from "../game/rescue.js";
 import { drawAmbulance, drawCrew } from "../art/emergency.js";
@@ -16,7 +16,9 @@ import { dude } from "../art/pedestrians.js";
 import { visibleRails } from "../world/rail.js";
 import { arrivalMarker, drawRouteArrow } from "./waypoint.js";
 import { atObjective, routeHUD, showMapSheet } from "./guidance.js";
-import { nearestCar } from "../game/boarding.js";
+import { drawBoats, drawMooring } from "../art/boats.js";
+import { river } from "../game/boats.js";
+import { berthInReach, nearestBoat, nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
 
 const addressPinHeight = 23;
@@ -70,18 +72,20 @@ function map(left, top, w, h, full, origin = p) {
   const roadWidth = full ? 1.4 : 0.45;
   for (const rx of roadsX) rect(g, x + rx * scale - roadWidth / 2, top, roadWidth, h, "#8a8390");
   for (const ry of roadsY) rect(g, left, y + ry * scale - roadWidth / 2, w, roadWidth, "#8a8390");
-  rect(g, left, y + (canalTop + 23) * scale, w, (canalBottom - canalTop - 49) * scale, "#397483");
-  const bridgeWidth = Math.max(1, 28 * scale);
-  for (const rx of roadsX)
-    rect(
-      g,
-      x + rx * scale - bridgeWidth / 2,
-      y + (canalTop + 23) * scale,
-      bridgeWidth,
-      (canalBottom - canalTop - 49) * scale,
-      "#a39a99",
-    );
-  const nav = directions(origin);
+  const waterTop = y + river.top * scale, waterHeight = (river.bottom - river.top) * scale;
+  rect(g, x, waterTop, mw, waterHeight, "#397483");
+  for (const bank of river.islands)
+    rect(g, x + bank.left * scale, y + bank.top * scale, (bank.right - bank.left) * scale,
+      (bank.bottom - bank.top) * scale, "#5c5260");
+  for (const bridge of river.bridges) {
+    const half = Math.max(0.5, bridge.halfWidth * scale);
+    rect(g, x + bridge.x * scale - half, waterTop, half * 2, waterHeight, "#a39a99");
+  }
+  for (const m of river.moorings) {
+    const r = full ? 1.15 : 0.47;
+    rect(g, x + m.quay.x * scale - r, y + m.quay.y * scale - r, 2 * r, 2 * r, "#a1e3de");
+  }
+  const nav = game.ride?.domain === "water" ? null : directions(origin);
   if (nav) {
     g.beginPath();
     g.moveTo(x + origin.x * scale, y + origin.y * scale);
@@ -161,6 +165,7 @@ function draw() {
   streetLayer(ox, oy);
   g.save();
   g.translate(-ox, -oy);
+  if (drawBoats(ox, oy)) drawBridgeDecks(ox, oy, river);
   for (const trail of trails) {
     g.save();
     g.translate(trail.x, trail.y);
@@ -171,7 +176,10 @@ function draw() {
     g.restore();
   }
   const visible = (o) => Math.abs(o.x - cx) < game.vw / 2 + 30 && Math.abs(o.y - cy) < game.vh / 2 + 28;
-  const end = goal();
+  for (const m of river.moorings) if (visible(m.quay)) drawMooring(m);
+  const ridingBoat = game.ride?.domain === "water";
+  const speed = ridingBoat ? Math.hypot(game.ride.slideX, game.ride.slideY) : Math.abs(game.ride?.speed ?? 0);
+  const end = ridingBoat ? null : goal();
   if (end && visible(end)) {
     g.save();
     g.strokeStyle = "#ffe080";
@@ -238,7 +246,7 @@ function draw() {
     mh = (mw * H) / W;
   routeHUD(end);
   if (game.viewMap) {
-    drawFullMap(end, p);
+    drawFullMap(goal(), p);
   } else {
     $("#mapSheet").hidden = true;
     map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
@@ -260,9 +268,9 @@ function draw() {
       (game.ride
         ? // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
           "　" +
-          Math.round(Math.abs(game.ride.speed) * 0.53) +
-          "\u00a0km/h\u00a0\u00a0·\u00a0\u00a0" +
-          t("vehicle") +
+          Math.round(speed * (ridingBoat ? 0.405 : 0.53)) +
+          "\u00a0" + (ridingBoat ? t("knots") : "km/h") + "\u00a0\u00a0·\u00a0\u00a0" +
+          t(ridingBoat ? game.ride.model : "vehicle") +
           "\u00a0" +
           game.ride.condition +
           "%"
@@ -270,18 +278,20 @@ function draw() {
   );
   const j = jobs.find((j) => dist(j, p) < 36);
   const nearJob = j ? t("jobKey") + " · " + t(j.name) : "";
-  let hint = game.viewMap
-    ? t("mapHint")
-    : game.ride
-      ? nearJob || t("outHint")
-      : nearestCar()
-        ? t("enterHint") + (nearJob ? "　/　" + nearJob : "")
-        : nearJob || t("footHint");
-  if (!game.viewMap && recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
-  if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
-    hint = t("medicKeys");
+  const nearbyBoat = !game.ride && !game.viewMap && nearestBoat();
+  const car = !game.ride && !game.viewMap && !nearbyBoat ? nearestCar() : null;
+  let hint = nearJob || t("footHint");
+  if (game.viewMap) hint = t("mapHint");
+  else if (ridingBoat) hint = t(berthInReach() ? "boatDisembark" : "boatFindDock");
+  else if (nearbyBoat) hint = t("boatEnter") + " · " + t(nearbyBoat.model);
+  else if (recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
+  else if (game.ride) hint = nearJob || t("outHint");
+  else if (car?.medical && car.condition > 0) hint = t("medicKeys");
+  else if (car) hint = t("enterHint") + (nearJob ? "　/　" + nearJob : "");
   $("#reportBtn").hidden = !nearbyPatient();
   hud("#hint", hint);
+  $("[data-key=action]").hidden = ridingBoat;
+  hud("[data-key=car]", t(ridingBoat || nearbyBoat ? "touchBoat" : "touchCar"));
   hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
 }
 

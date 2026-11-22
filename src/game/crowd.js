@@ -177,7 +177,7 @@ export function updatePerson(n, dt) {
   n.anger = Math.max(0, n.anger - dt);
   const d = dist(n, p),
     chase = (n.anger > 0 || (n.kind === "inspector" && game.heat > 0.25)) && d < 190;
-  if (game.ride && d < 10 && Math.abs(game.ride.speed) > 40) {
+  if (game.ride && game.ride.domain !== "water" && d < 10 && Math.abs(game.ride.speed) > 40) {
     crashSound(Math.abs(game.ride.speed), "thud");
     knockDown(n, "traffic");
     game.heat = Math.min(3, game.heat + 0.42);
