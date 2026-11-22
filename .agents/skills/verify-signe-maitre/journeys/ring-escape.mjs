@@ -48,7 +48,9 @@ export default async function (d) {
 
   let hp;
   await d.step("escape-to-platform", async () => {
-    await d.walkTo(first.street, { tol: 5, run: true });
+    // Back to the stair by the streets: a straight line catches on bollards while the
+    // inspectors close in.
+    await walkToStation(d, (await d.state()).p, first, { run: true });
     await d.press("car");
     const { state } = await d.waitFor("on the platform", ({ state }) => state.transit?.phase === "platform", 4000);
     hp = state.p.hp;
