@@ -113,6 +113,7 @@ function drive(v, dt, throttle, steering, brake) {
 const trafficAccel = 30,
   trafficBrake = 130,
   passingLanes = [-12, -17],
+  pavementLanes = [9, 12],
   turnRadius = 8;
 let nextTrafficId = 1;
 function pathAdvance(route, dt, step, lane = route.lane || 0) {
@@ -231,7 +232,10 @@ function isStalled(o) {
 function startPass(c, route, probe, here) {
   // Never from inside a turn; near a corner the swept check below follows the turn itself.
   if (probe.arc !== 0 || probe.remaining < 20) return;
-  const lane = passingLanes.find(
+  // Held up for a while with the road itself blocked, a driver mounts the kerb on its own
+  // side and squeezes past along the pavement, as city drivers do.
+  const lanes = route.wait > 4 ? [...passingLanes, ...pavementLanes] : passingLanes;
+  const lane = lanes.find(
     (l) =>
       [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAt(route, d, l), l))) &&
       lookAhead(c, here, l, l, 60).gap > 50,

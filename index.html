@@ -2695,6 +2695,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   var trafficAccel = 30;
   var trafficBrake = 130;
   var passingLanes = [-12, -17];
+  var pavementLanes = [9, 12];
   var turnRadius = 8;
   var nextTrafficId = 1;
   function pathAdvance(route, dt, step, lane = route.lane || 0) {
@@ -2783,7 +2784,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function startPass(c, route, probe, here) {
     if (probe.arc !== 0 || probe.remaining < 20) return;
-    const lane = passingLanes.find(
+    const lanes = route.wait > 4 ? [...passingLanes, ...pavementLanes] : passingLanes;
+    const lane = lanes.find(
       (l) => [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAt(route, d, l), l))) && lookAhead(c, here, l, l, 60).gap > 50
     );
     if (lane === void 0) return;

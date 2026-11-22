@@ -12,6 +12,14 @@ For town layout, street and railway joins, or enterable buildings, use the [Port
 
 To prove a change in the running game, use the [verification skill](.agents/skills/verify-signe-maitre/SKILL.md). It drives the game with real keyboard and touch input and keeps screenshots, video and a HUD journal in `.verify/evidence/`. Add or repair a journey and its [feature map](.agents/skills/verify-signe-maitre/features/README.md) entry when you change what a player can do.
 
+## Gameplay direction
+
+When a gameplay question is open, decide it the way the top-down open-city games GTA 1 and GTA 2 would, then dress it in the bailiff theme. Borrow mechanics and feel, never their names, characters, art, music, missions or map.
+
+- City life: traffic that honks, queues and drives around obstacles, mounting the pavement when it must; pedestrians that dodge, flee a fight and get knocked down; a heat level that brings out pursuers.
+- Bailiff theme: express each mechanic through Port-Fer's bailiffs, debtors, seizures, auctions, reports and paperwork. The pound tows a car abandoned across traffic; enforcers are inspectors and bailiff's office staff, not police; jobs are case files, not missions; rewards are fees.
+- Keep the elevated camera, Port-Fer art and the existing controls. When the GTA answer would break the visual standard above or the base idea, the bailiff game wins.
+
 ## Alpha publishing
 
 During alpha, push all completed changes directly to `main`. Remove this section when the project enters beta.
