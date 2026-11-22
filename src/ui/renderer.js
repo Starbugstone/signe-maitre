@@ -358,7 +358,8 @@ function draw() {
     drawFullMap(goal(), p);
   } else {
     $("#mapSheet").hidden = true;
-    map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
+    // Scenery captures (scripts/scenery/tour.js) stitch bare street frames into one picture.
+    if (!game.bareStreet) map(game.vw - mw - 4, game.vh - mh - (compact ? 60 : 10), mw, mh, false);
   }
   hud("#district", district() + "  /  Port-Fer");
   hud(

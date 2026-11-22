@@ -62,12 +62,12 @@ import teeNorthPlate from "../../assets/scenery/teeNorth.webp";
 import towerBasePlate from "../../assets/scenery/towerBase.webp";
 import towerIronPlate from "../../assets/scenery/towerIron.webp";
 // What stands in front of the river traffic on each river plate, as an alpha mask.
-import riverOver from "../../assets/scenery/riverOver.png";
-import riverBridgeOver from "../../assets/scenery/riverBridgeOver.png";
-import riverIronBridgeOver from "../../assets/scenery/riverIronBridgeOver.png";
-import islandWestOver from "../../assets/scenery/islandWestOver.png";
-import islandCathedralOver from "../../assets/scenery/islandCathedralOver.png";
-import islandEastOver from "../../assets/scenery/islandEastOver.png";
+import riverOver from "../../assets/scenery/riverOver.webp";
+import riverBridgeOver from "../../assets/scenery/riverBridgeOver.webp";
+import riverIronBridgeOver from "../../assets/scenery/riverIronBridgeOver.webp";
+import islandWestOver from "../../assets/scenery/islandWestOver.webp";
+import islandCathedralOver from "../../assets/scenery/islandCathedralOver.webp";
+import islandEastOver from "../../assets/scenery/islandEastOver.webp";
 import bargeTurns from "../../assets/bargeTurns.webp";
 import riverboatTurns from "../../assets/riverboatTurns.webp";
 import speedboatTurns from "../../assets/speedboatTurns.webp";

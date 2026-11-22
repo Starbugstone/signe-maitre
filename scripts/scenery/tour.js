@@ -40,7 +40,9 @@ window.tour = {
     return times;
   },
   // Draw the empty street at a camera centre and return the canvas as a PNG data URL.
-  shot(x, y, { actors = false } = {}) {
+  // `minimap` keeps the HUD's corner map in the frame; stitched captures leave it out.
+  shot(x, y, { actors = false, minimap = false } = {}) {
+    game.bareStreet = !minimap;
     if (!actors) {
       cars.length = people.length = fx.length = trails.length = 0;
       for (const job of town.jobs) done.add(job.id);

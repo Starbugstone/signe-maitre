@@ -1,6 +1,10 @@
 // Bake the Port-Fer street paintings from art-src/scenery into assets/scenery/*.webp.
 //
-//   node tools/art/bake-scenery.mjs [--src DIR] [--only name,name] [--quality 0.82] [--png DIR] [--review DIR]
+//   node tools/art/bake-scenery.mjs [--src DIR] [--only name,name] [--quality 0.62] [--png DIR] [--review DIR]
+//
+// --quality sets the WebP quality of the full plates. They are drawn at or below their own
+// size, where 0.62 cannot be told from 0.82; cut-out pieces with soft edges keep 0.82 and the
+// over-water masks are lossless.
 //
 // --review writes a sheet per river plate with its over-water mask, lanterns, boat solids and
 // the obstacles of src/world/paintings.js drawn on it, to check the hand-marked shapes.
@@ -27,7 +31,8 @@ const out = join(root, "assets/scenery");
 const only = option("only", "")
   .split(",")
   .filter(Boolean);
-const quality = Number(option("quality", "0.82"));
+const quality = Number(option("quality", "0.62"));
+const pieces = new Set(["alleyStripV", "alleyStripH", "ringDeck", "ringPortal", "ringBracket", "ringCanopies", "railBridgeBed", "railBridgeTop", "towerIron"]);
 const pngDir = option("png", "");
 const reviewDir = option("review", "");
 const decode = (url) => Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
@@ -55,9 +60,9 @@ try {
   for (const name of names) {
     if (only.length && !only.includes(name)) continue;
     const started = Date.now();
-    const result = await page.evaluate(([name, quality, png]) => bake.run(name, quality, png), [name, quality, !!pngDir]);
+    const result = await page.evaluate(([name, quality, png]) => bake.run(name, quality, png), [name, pieces.has(name) ? 0.82 : quality, !!pngDir]);
     const bytes = decode(result.image);
-    await writeFile(join(out, name + (result.type === "image/png" ? ".png" : ".webp")), bytes);
+    await writeFile(join(out, name + ".webp"), bytes);
     if (pngDir) await writeFile(join(pngDir, name + ".png"), decode(result.png));
     total += bytes.length;
     console.log(

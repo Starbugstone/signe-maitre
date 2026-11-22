@@ -440,7 +440,11 @@
       h = half.getContext("2d");
     h.imageSmoothingQuality = "high";
     h.drawImage(mask, 0, 0, half.width, half.height);
-    half.format = "png";
+    // Only the alpha matters: one flat colour under it keeps the file small.
+    const flat = h.getImageData(0, 0, half.width, half.height);
+    for (let i = 0; i < flat.data.length; i += 4) flat.data[i] = flat.data[i + 1] = flat.data[i + 2] = 255;
+    h.putImageData(flat, 0, 0);
+    half.lossless = true;
     return half;
   }
   // For review: the plate with its mask in red, lanterns in cyan, boat solids in yellow and
@@ -800,12 +804,11 @@
     },
     async run(name, quality, png) {
       const c = await recipes[name]();
-      const type = c.format === "png" ? "image/png" : "image/webp";
+      // Chromium writes lossless WebP at quality 1.
       return {
         width: c.width,
         height: c.height,
-        type,
-        image: c.toDataURL(type, quality),
+        image: c.toDataURL("image/webp", c.lossless ? 1 : quality),
         png: png ? c.toDataURL("image/png") : null,
       };
     },
