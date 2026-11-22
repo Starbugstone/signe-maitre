@@ -67,8 +67,8 @@ The driver `d` provides these calls.
 Run the built-in gameplay journeys on keyboard and touch. The art journeys and their video review steps are in [Hero gait](features/hero-gait.md).
 
 ```sh
-pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --keep-going
-pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --device phone --lang fr --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery ring-train ring-escape --build probe --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery ring-train ring-escape --build probe --device phone --lang fr --keep-going
 ```
 
 Use `--keep-going` to continue to the next journey after a failure. Without it, the run stops at the first failure.

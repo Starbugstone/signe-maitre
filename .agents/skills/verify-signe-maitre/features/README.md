@@ -41,3 +41,4 @@ Each feature file begins with an H1 and one paragraph. It then has exactly four 
 | [Hero walk and run animation](./hero-gait.md) | `tools/art/journeys/hero-gait.mjs`, `tools/art/journeys/hero-strides.mjs` | Scripted for the probe build; judged on video |
 | [Street life: traffic, pedestrians and getting unstuck](./street-life.md) | `street-life` | The traffic watch follows the sedan departure check. Traffic and collision fixtures also cover pinches and recovery. |
 | [Street scenery and railway pillars](./street-scenery.md) | `street-scenery`, `south-pavement` | Walks the garage pavement and the market alley, and the south pavement past the old kerb wall. `npm run test:scenery` also compares actor and foreground pixels. |
+| [Ring railway: La Petite Ceinture](./ring-train.md) | `ring-train`, `ring-escape` | Scripted for the probe build on desktop/en and phone/fr. Runs on the fallback ring until `town.ring` lands. |

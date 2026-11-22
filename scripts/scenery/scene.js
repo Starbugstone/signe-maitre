@@ -9,6 +9,8 @@ import { town, X, Y } from "../../src/world/town.js";
 import { streetLayer } from "../../src/world/streets.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
+import { ringLine } from "../../src/game/transit.js";
+import { trainsetAt } from "../../src/game/ring-route.js";
 
 function requireCheck(ok, message) {
   if (!ok) throw new Error(message);
@@ -159,6 +161,22 @@ const checks = {
           "Closed railway underpass at " + dy,
         );
       }
+  },
+  // A walker behind the ring deck is hidden by the deck and a train standing at the
+  // platform; one on the street in front of it stays fully visible.
+  "ring-train-depth": () => {
+    const { ring, tt } = ringLine();
+    const station = ring.stations[0];
+    let t = 0;
+    while (trainsetAt(tt, 0, t).station !== 0) t += 0.1;
+    game.time = t + 2;
+    try {
+      // The lower edge of the deck and platform crosses the middle of the sampled body.
+      actorLayers(station.stop.x - 15, station.stop.y - 27, true);
+      actorLayers(station.stop.x - 15, station.stop.y + 8, false);
+    } finally {
+      game.time = 0;
+    }
   },
 };
 

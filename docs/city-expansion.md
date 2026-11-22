@@ -110,6 +110,14 @@ Finished atlases follow the ambulance format: 64 headings, 192 × 192 px per fra
 
 Vehicles in `cars` carry `model` (a fleet id). Driving, collision and rendering read the fleet entry instead of the sedan constants.
 
+## Ring train hooks (Opus publishes)
+
+The ring train reads `town.ring` through one adapter, `ringOf(town)` in `src/game/ring-route.js`. Without `town.ring`, it builds a temporary loop. Stations are sorted by `s`. A station without `s` is projected onto the loop from `stop`. Trains run clockwise. Riders wait on the right of travel, 8.5 units from the centre line, so paint platforms on that side. `deckLift` is the rail-head height above the ground line. The fallback uses 47.7, the same as the market viaduct.
+
+- `ringReplacesLineTrains(town)` is true when `town.ring` exists. `src/world/rail.js` then stops drawing the old straight-line trains. The town owner can delete `town.lines` and `trainPosition` at the same time.
+- `src/ui/renderer.js` calls `drawRingTrains(ox, oy, actors)` after the viaduct overhead pass, so draw the ring deck before it. `ringActors(ox, oy)` adds the station roundels, and on the fallback the piers, to the depth-sorted actors.
+- The temporary deck and piers in `src/art/train.js` are drawn only while `town.ring` is missing.
+
 ## Verification
 
 Every agent proves its work in the running game with the verification skill (`.agents/skills/verify-signe-maitre/SKILL.md`), adds or repairs journeys for what it changes, keeps `npm test` green and runs `npm run test:scenery` for scenery changes. Report what you verified, with evidence paths under `.verify/evidence/`, and what you could not verify.

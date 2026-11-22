@@ -166,7 +166,7 @@ function medicalDrive(v, distance, dt) {
   if (!dt || !distance) return true;
   const next = { ...v, x: v.x + distance * v.dx, y: v.y + distance * v.dy };
   // The driver yields to the CJ crossing on foot, just as ordinary traffic does.
-  if (!game.ride && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
+  if (!game.ride && !game.transit && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
     stopMotion(v);
     v.yielding = true;
     return false;

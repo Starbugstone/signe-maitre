@@ -569,13 +569,13 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     if (!Number.isInteger(canalRow2) || canalRow2 < 0 || canalRow2 + 1 >= rows2)
       throw new Error("Canal needs two banks");
     const lines = /* @__PURE__ */ new Map();
-    for (const line of railways) {
-      if (!Number.isInteger(line.row) || line.row < 0 || line.row >= rows2 || line.row === canalRow2 + 1 || lines.has(line.row))
-        throw new Error("Invalid or overlapping viaduct row " + line.row);
-      if (line.from !== "west" || line.to !== "east")
+    for (const line2 of railways) {
+      if (!Number.isInteger(line2.row) || line2.row < 0 || line2.row >= rows2 || line2.row === canalRow2 + 1 || lines.has(line2.row))
+        throw new Error("Invalid or overlapping viaduct row " + line2.row);
+      if (line2.from !== "west" || line2.to !== "east")
         throw new Error("A through line must reach both town boundaries");
-      if (!(line.speed > 0) || !Number.isFinite(line.phase)) throw new Error("Invalid train timetable");
-      lines.set(line.row, line);
+      if (!(line2.speed > 0) || !Number.isFinite(line2.phase)) throw new Error("Invalid train timetable");
+      lines.set(line2.row, line2);
     }
     for (const [j, row] of blocks.entries()) {
       if (row.includes("market") && j !== canalRow2 + 1 && !lines.has(j))
@@ -628,9 +628,9 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       roadsY: Array.from({ length: rows2 }, (_, i) => Y(i))
     };
   }
-  function trainPosition(line, width2, seconds) {
+  function trainPosition(line2, width2, seconds) {
     const carLength = 51, gap = 0.6, count = 3, length = count * (carLength + gap);
-    return { head: (seconds * line.speed + line.phase) % (width2 + length + 36), carLength, gap, count };
+    return { head: (seconds * line2.speed + line2.phase) % (width2 + length + 36), carLength, gap, count };
   }
 
   // src/world/town.js
@@ -707,9 +707,9 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       clearAnalog();
     }
   };
-  function axis(positive, negative, fallback) {
+  function axis(positive, negative, fallback2) {
     const plus = held.has(positive), minus = held.has(negative);
-    return plus || minus ? Number(plus) - Number(minus) : fallback;
+    return plus || minus ? Number(plus) - Number(minus) : fallback2;
   }
   function walkVector() {
     return [axis("right", "left", analog.x), axis("down", "up", analog.y)];
@@ -740,6 +740,8 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     artReady: false,
     konamiHero: false,
     ride: null,
+    // La Petite Ceinture: null, { phase: "platform", station } or { phase: "riding", set, car, boardedAt, alightAt }.
+    transit: null,
     time: 0,
     heat: 0,
     wallet: 0,
@@ -2038,18 +2040,18 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       { horizontal: false, centre: X(col), along: patient.y, cross: patient.x }
     ].sort((a, b) => Math.abs(a.cross - a.centre) - Math.abs(b.cross - b.centre));
     for (const road of streets2) {
-      const { horizontal, centre, along, cross } = road;
+      const { horizontal, centre, along: along2, cross } = road;
       const point = (u, w) => horizontal ? { x: u, y: w } : { x: w, y: u };
       const extent = horizontal ? W : H;
       const bounds = horizontal ? [view.left, view.right] : [view.top, view.bottom];
       const curb = Math.sign(cross - centre) || 1;
       for (const inset of [11, 5, -6, 0, -11])
         for (const shift of [0, 14, -14, 27, -27]) {
-          const apron = point(along + shift, centre + curb * inset);
+          const apron = point(along2 + shift, centre + curb * inset);
           if (!walkableBetween(apron, patient)) continue;
-          const offset = curb * inset, flow = horizontal ? Math.sign(offset) : -Math.sign(offset), first = flow || (along < extent / 2 ? -1 : 1);
+          const offset = curb * inset, flow = horizontal ? Math.sign(offset) : -Math.sign(offset), first = flow || (along2 < extent / 2 ? -1 : 1);
           for (const sign of [first, -first]) {
-            const end = along + shift + sign * 24;
+            const end = along2 + shift + sign * 24;
             if (end < 17 || end > extent - 17) continue;
             let start = end - sign * 65;
             if (!outsideView(point(start, centre + curb * inset), view))
@@ -2156,6 +2158,21 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       "Votre voiture bloquait la circulation. La fourri\xE8re l\u2019a ramen\xE9e devant l\u2019\xE9tude."
     ],
     towing: ["TOWED", "FOURRI\xC8RE"],
+    platformWait: [
+      "Platform ticket stamped, in triplicate. Waiting for the train at",
+      "Ticket de quai compost\xE9 en trois exemplaires. En attente du train \xE0"
+    ],
+    boarded: [
+      "Doors closing. The fare goes down as a travel expense.",
+      "Attention \xE0 la fermeture des portes. Le billet passera en frais de d\xE9placement."
+    ],
+    alightRequest: ["Stop requested:", "Arr\xEAt demand\xE9 :"],
+    leftPlatform: ["Back down to the street.", "Retour dans la rue."],
+    alighted: ["Off the train at", "Descente \xE0"],
+    lostTail: [
+      "The inspectors are still waiting at the other station. Heat dropped.",
+      "Les contr\xF4leurs vous attendent encore \xE0 l\u2019autre station. L\u2019alerte retombe."
+    ],
     recovery: ["Roadside assistance", "D\xE9pannage"],
     recoveryText: [
       "Your mechanic accepts payment in exposure. Specifically, exposure to our expenses department. Order a repair?",
@@ -2314,16 +2331,16 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       "\u2191 \u2193 \u2190 \u2192 / ZQSD / WASD\u3000Marcher ou conduire\u3000\xB7\u3000Maj  Courir\u3000\xB7\u3000F  Auto\u3000\xB7\u3000H  Klaxon / sir\xE8ne\u3000\xB7\u3000Espace  Gifle / frein \xE0 main\u3000\xB7\u3000E  Acte\u3000\xB7\u3000M  Plan\u3000\xB7\u3000V  R\xE9plique"
     ],
     helpText: [
-      "Arrows, WASD or ZQSD move you on foot. Hold Shift to run, or hold Run with a direction on the touch pad. F gets you into or out of a nearby car. Accelerate with up, brake or reverse with down, steer with left and right. Hold H or Horn to honk. In the ambulance, press H or Siren to turn the siren on or off. Space slaps on foot or pulls the handbrake. E opens a job. Beside a downed pedestrian, press R or tap Incident report to hand over a copy. The ambulance collects anyone still waiting. M opens the city map. Press V or tap the speech button to deliver your signature line.",
-      "\xC0 pied, utilisez les fl\xE8ches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une fl\xE8che sur l\u2019\xE9cran tactile. F pour monter en voiture ou en descendre. Haut pour acc\xE9l\xE9rer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou Klaxon pour klaxonner. Dans l\u2019ambulance, appuyez sur H ou Sir\xE8ne pour activer ou couper la sir\xE8ne. Espace pour gifler ou tirer le frein \xE0 main. E pour un dossier. Pr\xE8s d\u2019un passant \xE0 terre, R ou le bouton Signalement permet de remettre un double. L\u2019ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de r\xE9plique pour sortir votre phrase f\xE9tiche."
+      "Arrows, WASD or ZQSD move you on foot. Hold Shift to run, or hold Run with a direction on the touch pad. F gets you into or out of a nearby car. At a ring station sign, F climbs to the platform; on board, F gets you off at the next stop. Accelerate with up, brake or reverse with down, steer with left and right. Hold H or Horn to honk. In the ambulance, press H or Siren to turn the siren on or off. Space slaps on foot or pulls the handbrake. E opens a job. Beside a downed pedestrian, press R or tap Incident report to hand over a copy. The ambulance collects anyone still waiting. M opens the city map. Press V or tap the speech button to deliver your signature line.",
+      "\xC0 pied, utilisez les fl\xE8ches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une fl\xE8che sur l\u2019\xE9cran tactile. F pour monter en voiture ou en descendre. Au panneau d\u2019une gare de la Ceinture, F m\xE8ne au quai ; \xE0 bord, F vous fait descendre au prochain arr\xEAt. Haut pour acc\xE9l\xE9rer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou Klaxon pour klaxonner. Dans l\u2019ambulance, appuyez sur H ou Sir\xE8ne pour activer ou couper la sir\xE8ne. Espace pour gifler ou tirer le frein \xE0 main. E pour un dossier. Pr\xE8s d\u2019un passant \xE0 terre, R ou le bouton Signalement permet de remettre un double. L\u2019ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de r\xE9plique pour sortir votre phrase f\xE9tiche."
     ],
     gamepadControls: [
       "Left stick \xB7 Move / steer\u3000 RT / LT \xB7 Accelerate / brake\u3000 Y \xB7 Car\u3000 X \xB7 Slap / handbrake\u3000 A \xB7 Job\u3000 View \xB7 Map\u3000 Menu \xB7 Controls",
       "Stick gauche \xB7 Marcher / tourner\u3000 RT / LT \xB7 Acc\xE9l\xE9rer / freiner\u3000 Y \xB7 Auto\u3000 X \xB7 Gifle / frein \xE0 main\u3000 A \xB7 Acte\u3000 View \xB7 Plan\u3000 Menu \xB7 Commandes"
     ],
     controllerHelp: [
-      "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters or exits a car. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
-      "Appuyez sur un bouton de la manette Xbox pour l\u2019activer. D\xE9placez-vous avec le stick gauche ou la croix directionnelle et maintenez LB pour courir. Y sert \xE0 monter en voiture ou \xE0 en descendre. Tournez avec le stick gauche. RT acc\xE9l\xE8re, LT freine ou fait reculer. Maintenez RB pour klaxonner ou appuyez dessus pour actionner la sir\xE8ne. X sert \xE0 gifler ou \xE0 tirer le frein \xE0 main. A ouvre un dossier. Enfoncez le stick droit (RS) pour signaler un incident. B lance une r\xE9plique. View ouvre le plan et Menu affiche les commandes."
+      "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters or exits a car, climbs to a ring station platform or gets you off the train at the next stop. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
+      "Appuyez sur un bouton de la manette Xbox pour l\u2019activer. D\xE9placez-vous avec le stick gauche ou la croix directionnelle et maintenez LB pour courir. Y sert \xE0 monter en voiture ou \xE0 en descendre, \xE0 monter sur le quai d\u2019une gare de la Ceinture ou \xE0 descendre du train au prochain arr\xEAt. Tournez avec le stick gauche. RT acc\xE9l\xE8re, LT freine ou fait reculer. Maintenez RB pour klaxonner ou appuyez dessus pour actionner la sir\xE8ne. X sert \xE0 gifler ou \xE0 tirer le frein \xE0 main. A ouvre un dossier. Enfoncez le stick droit (RS) pour signaler un incident. B lance une r\xE9plique. View ouvre le plan et Menu affiche les commandes."
     ],
     dialogControls: [
       "Left stick / D-pad \xB7 Choose\u3000 A \xB7 Select\u3000 B \xB7 Back\u3000 Right stick \xB7 Scroll",
@@ -2331,10 +2348,17 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     ],
     cityMap: ["PORT-FER  /  STREET MAP", "PORT-FER  /  PLAN DE VILLE"],
     legend1: ["\xC9 Office \xB7 R Repo \xB7 C Noise report", "\xC9 \xC9tude \xB7 R Saisie auto \xB7 C Constat"],
-    legend2: ["S Home visit \xB7 A Auction \xB7 \u25C6 You", "S Saisie \xE0 domicile \xB7 A Ench\xE8res \xB7 \u25C6 Vous"],
+    legend2: ["S Home visit \xB7 A Auction \xB7 \u25C6 You \xB7 \u25CB Ring station", "S Saisie \xE0 domicile \xB7 A Ench\xE8res \xB7 \u25C6 Vous \xB7 \u25CB Gare de la Ceinture"],
     mapHint: ["{map} / Map \xB7 Back to town", "{map} / Plan \xB7 Retour en ville"],
     outHint: ["{car} / Car \xB7 Get out", "{car} / Auto \xB7 Descendre"],
     enterHint: ["{car} / Car \xB7 Take the wheel", "{car} / Auto \xB7 Prendre le volant"],
+    stationHint: ["{car} / Car \xB7 Take the Petite Ceinture", "{car} / Auto \xB7 Prendre la Petite Ceinture"],
+    platformHint: ["On the platform \xB7 {car} / Car \xB7 Back to the street", "Sur le quai \xB7 {car} / Auto \xB7 Redescendre dans la rue"],
+    nextStopHint: ["Next stop:", "Prochain arr\xEAt :"],
+    alightKey: ["{car} / Car \xB7 Get off there", "{car} / Auto \xB7 Descendre \xE0 cet arr\xEAt"],
+    alightingHint: ["Getting off at", "Vous descendez \xE0"],
+    doorsOpenHint: ["Doors open:", "Portes ouvertes :"],
+    alightNowKey: ["{car} / Car \xB7 Get off here", "{car} / Auto \xB7 Descendre ici"],
     footHint: ["On foot \xB7 {action} to slap", "\xC0 pied \xB7 {action} pour gifler"],
     jobKey: ["{job} / Job", "{job} / Acte"],
     quip: ["Quip", "R\xE9plique"],
@@ -2464,6 +2488,329 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     game.quipCooldown = 1.2;
   }
 
+  // src/game/ring-route.js
+  var TAU2 = 2 * Math.PI;
+  var mod = (a, n) => (a % n + n) % n;
+  var RING_DECK_LIFT = 47.7;
+  var CAR_LENGTH = 51;
+  var CAR_GAP = 1.4;
+  var CAR_HALF_WIDTH = 3.8;
+  var BOGIE = 0.34 * CAR_LENGTH;
+  function ringReplacesLineTrains(layout) {
+    return Boolean(layout.ring);
+  }
+  function fallbackRing(layout) {
+    const left2 = X(0) + CELL_W / 2 + 20, right = X(layout.cols - 1) - CELL_W / 2 - 20, top2 = Y(0) + CELL_H / 2 - 8, bottom = Y(layout.rows - 1) - CELL_H / 2 + 8, radius = 70;
+    const points = [];
+    const corner = (cx, cy, from) => {
+      for (let i = 0; i <= 12; i++) {
+        const a = from + i / 12 * (Math.PI / 2);
+        points.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
+      }
+    };
+    corner(left2 + radius, top2 + radius, Math.PI);
+    corner(right - radius, top2 + radius, -Math.PI / 2);
+    corner(right - radius, bottom - radius, 0);
+    corner(left2 + radius, bottom - radius, Math.PI / 2);
+    const midRow = Math.min(layout.rows - 2, layout.canalRow + 1), eastRow = 1, northCol = Math.min(2, layout.cols - 2), southCol = Math.max(1, layout.cols - 2);
+    const stations = [
+      { id: "centre", name: { fr: "Centre-Ville", en: "Centre-Ville" }, stop: { x: X(northCol), y: top2 }, street: { x: X(northCol) + 14, y: top2 + 12 } },
+      { id: "prets", name: { fr: "Quai des Pr\xEAts", en: "Quai des Pr\xEAts" }, stop: { x: right, y: Y(eastRow) }, street: { x: right - 14, y: Y(eastRow) + 12 } },
+      { id: "foire", name: { fr: "La Foire", en: "La Foire" }, stop: { x: X(southCol), y: bottom }, street: { x: X(southCol) - 14, y: bottom - 12 } },
+      { id: "docks", name: { fr: "Les Docks", en: "Les Docks" }, stop: { x: left2, y: Y(midRow) }, street: { x: left2 + 14, y: Y(midRow) + 12 } }
+    ];
+    return { points, deckLift: RING_DECK_LIFT, stations, fallback: true };
+  }
+  function prepareRing(source) {
+    const points = source.points.slice();
+    const first = points[0], last = points.at(-1);
+    if (points.length > 2 && Math.hypot(first.x - last.x, first.y - last.y) < 1e-6) points.pop();
+    if (points.length < 3) throw new Error("The ring needs a closed loop");
+    const cum = [0];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      cum.push(cum[i] + Math.hypot(b.x - a.x, b.y - a.y));
+    }
+    const length = cum.at(-1);
+    function pointAt(s) {
+      s = mod(s, length);
+      let lo = 0, hi = points.length - 1;
+      while (lo < hi) {
+        const mid = lo + hi + 1 >> 1;
+        if (cum[mid] <= s) lo = mid;
+        else hi = mid - 1;
+      }
+      const a = points[lo], b = points[(lo + 1) % points.length], f = (s - cum[lo]) / (cum[lo + 1] - cum[lo] || 1);
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    }
+    function project(q) {
+      let best = Infinity, at = 0;
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = points[(i + 1) % points.length], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1, f = Math.max(0, Math.min(1, ((q.x - a.x) * dx + (q.y - a.y) * dy) / l2)), d = Math.hypot(a.x + dx * f - q.x, a.y + dy * f - q.y);
+        if (d < best) {
+          best = d;
+          at = cum[i] + f * (cum[i + 1] - cum[i]);
+        }
+      }
+      return at;
+    }
+    function poseAt(s, half = BOGIE) {
+      const f = pointAt(s + half), r = pointAt(s - half);
+      return { x: (f.x + r.x) / 2, y: (f.y + r.y) / 2, a: Math.atan2(f.y - r.y, f.x - r.x) };
+    }
+    const stations = source.stations.map((st) => ({ ...st, s: mod(Number.isFinite(st.s) ? st.s : project(st.stop), length) })).sort((a, b) => a.s - b.s);
+    if (!stations.length) throw new Error("The ring needs a station");
+    const deckLift = source.deckLift ?? RING_DECK_LIFT;
+    return { points, cum, length, deckLift, stations, fallback: !!source.fallback, pointAt, poseAt, project };
+  }
+  var ringCache = /* @__PURE__ */ new WeakMap();
+  function ringOf(layout) {
+    if (!ringCache.has(layout)) ringCache.set(layout, prepareRing(layout.ring ?? fallbackRing(layout)));
+    return ringCache.get(layout);
+  }
+  function runProfile(distance, vmax, accel) {
+    const rampDistance = vmax * vmax / accel;
+    if (distance <= rampDistance) {
+      const peak = Math.sqrt(distance * accel);
+      return { distance, peak, ramp: peak / accel, cruise: 0, time: 2 * peak / accel };
+    }
+    const cruise = (distance - rampDistance) / vmax;
+    return { distance, peak: vmax, ramp: vmax / accel, cruise, time: 2 * vmax / accel + cruise };
+  }
+  function along(run, t2, accel) {
+    const { peak, ramp, cruise, distance } = run;
+    if (t2 <= 0) return { d: 0, v: 0 };
+    if (t2 < ramp) return { d: 0.5 * accel * t2 * t2, v: accel * t2 };
+    const rampD = 0.5 * accel * ramp * ramp;
+    if (t2 < ramp + cruise) return { d: rampD + peak * (t2 - ramp), v: peak };
+    const braking = Math.min(ramp, t2 - ramp - cruise);
+    return {
+      d: Math.min(distance, rampD + peak * cruise + peak * braking - 0.5 * accel * braking * braking),
+      v: Math.max(0, peak - accel * braking)
+    };
+  }
+  function timetable(ring, options = {}) {
+    const {
+      vmax = 92,
+      accel = 18,
+      dwell = 8,
+      doorsOpen = 1,
+      doorsClose = 1.6,
+      count = 4,
+      sets = ring.length < 3e3 ? 2 : 3,
+      // At time zero the first train is this many seconds from the first platform.
+      arrivesIn = 12
+    } = options;
+    const n = ring.stations.length;
+    let start = 0;
+    const legs = ring.stations.map((from, i) => {
+      const to = ring.stations[(i + 1) % n];
+      const distance = n === 1 ? ring.length : mod(to.s - from.s, ring.length) || ring.length;
+      const run = runProfile(distance, vmax, accel);
+      const leg = { from: i, to: (i + 1) % n, start, run };
+      start += dwell + run.time;
+      return leg;
+    });
+    const period = start;
+    const lastRun = legs.at(-1).run.time;
+    return {
+      ring,
+      legs,
+      period,
+      sets,
+      count,
+      dwell,
+      doorsOpen,
+      doorsClose,
+      accel,
+      vmax,
+      headway: period / sets,
+      phase: period - Math.min(arrivesIn, lastRun),
+      trainLength: count * CAR_LENGTH + (count - 1) * CAR_GAP
+    };
+  }
+  function trainsetAt(tt, k, time) {
+    const tau = mod(time + tt.phase - k * tt.headway, tt.period);
+    let lo = 0, hi = tt.legs.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >> 1;
+      if (tt.legs[mid].start <= tau) lo = mid;
+      else hi = mid - 1;
+    }
+    const leg = tt.legs[lo], local = tau - leg.start, from = tt.ring.stations[leg.from];
+    if (local < tt.dwell)
+      return {
+        k,
+        s: from.s,
+        v: 0,
+        station: leg.from,
+        next: leg.to,
+        dwellLeft: tt.dwell - local,
+        doors: local >= tt.doorsOpen && local < tt.dwell - tt.doorsClose
+      };
+    const { d, v } = along(leg.run, local - tt.dwell, tt.accel);
+    return { k, s: mod(from.s + d, tt.ring.length), v, station: -1, next: leg.to, dwellLeft: 0, doors: false };
+  }
+  function carriagesOf(tt, state) {
+    const pitch = CAR_LENGTH + CAR_GAP;
+    return Array.from({ length: tt.count }, (_, i) => {
+      const s = state.s + ((tt.count - 1) / 2 - i) * pitch;
+      return { i, k: state.k, s, ...tt.ring.poseAt(s), cab: i === 0 ? "front" : i === tt.count - 1 ? "rear" : null };
+    });
+  }
+  var RIDER_CAR = 1;
+  function rideStep(tt, ride, time) {
+    if (!ride) return { ride };
+    if (ride.phase === "platform") {
+      for (let k = 0; k < tt.sets; k++) {
+        const st2 = trainsetAt(tt, k, time);
+        if (st2.station === ride.station && st2.doors)
+          return {
+            ride: { phase: "riding", set: k, car: RIDER_CAR, boardedAt: ride.station, alightAt: null },
+            event: "boarded"
+          };
+      }
+      return { ride };
+    }
+    const st = trainsetAt(tt, ride.set, time);
+    if (ride.alightAt !== null && st.station === ride.alightAt && st.doors)
+      return { ride: null, event: "alighted", station: ride.alightAt, boardedAt: ride.boardedAt };
+    return { ride };
+  }
+  function rideRequest(tt, ride, time) {
+    if (!ride) return { ride };
+    if (ride.phase === "platform") return { ride: null, event: "leftPlatform", station: ride.station };
+    const st = trainsetAt(tt, ride.set, time);
+    if (st.station >= 0 && st.doors)
+      return { ride: null, event: "alighted", station: st.station, boardedAt: ride.boardedAt };
+    const stop = st.station >= 0 && st.dwellLeft > tt.doorsClose ? st.station : st.next;
+    return { ride: { ...ride, alightAt: stop }, event: "alightRequested", station: stop };
+  }
+  function nextStop(tt, ride, time) {
+    if (!ride || ride.phase !== "riding") return -1;
+    const st = trainsetAt(tt, ride.set, time);
+    return st.station >= 0 && !st.doors && st.dwellLeft > tt.doorsClose ? st.station : st.next;
+  }
+  function doorsOpenAt(tt, ride, time) {
+    if (!ride || ride.phase !== "riding") return -1;
+    const st = trainsetAt(tt, ride.set, time);
+    return st.doors ? st.station : -1;
+  }
+  function platformSpot(ring, station, side = 8.5) {
+    const pose = ring.poseAt(station.s, 4);
+    return { x: pose.x - Math.sin(pose.a) * side, y: pose.y + Math.cos(pose.a) * side, a: pose.a };
+  }
+
+  // src/game/transit.js
+  var STATION_REACH = 14;
+  var line;
+  function ringLine() {
+    if (!line) {
+      const ring = ringOf(town);
+      line = { ring, tt: timetable(ring) };
+    }
+    return line;
+  }
+  var stationName = (station) => station.name[lang] ?? station.name.fr;
+  function nearStation(o = p) {
+    if (game.ride || game.transit) return null;
+    let best = null, d = STATION_REACH;
+    for (const st of ringLine().ring.stations) {
+      const here = dist(o, st.street);
+      if (here < d) {
+        d = here;
+        best = st;
+      }
+    }
+    return best;
+  }
+  function enterStation(station) {
+    const { ring } = ringLine();
+    const index = ring.stations.indexOf(station);
+    game.transit = { phase: "platform", station: index };
+    held.clear();
+    Object.assign(p, platformSpot(ring, station), { moving: false, stuck: 0 });
+    beep(520, 0.08, "sine");
+    say("platformWait", 5, "", " " + stationName(station) + ".");
+  }
+  function streetAt(station) {
+    const { x, y } = station.street;
+    const spot = footBlocked(x, y, 2.6) ? freeSpot(x, y, 2.6) : null;
+    Object.assign(p, spot ?? { x, y }, { a: Math.PI / 2, moving: false, stuck: 0 });
+  }
+  function apply(result) {
+    const { ring } = ringLine();
+    game.transit = result.ride;
+    const station = ring.stations[result.station];
+    switch (result.event) {
+      case "boarded":
+        beep(330, 0.12, "sine");
+        say("boarded", 4);
+        break;
+      case "alightRequested":
+        beep(880, 0.05, "sine");
+        say("alightRequest", 4, "", " " + stationName(station) + ".");
+        break;
+      case "leftPlatform":
+        streetAt(station);
+        say("leftPlatform", 3);
+        break;
+      case "alighted": {
+        streetAt(station);
+        const pursued = game.heat > 0.25 || people.some((n) => n.anger > 0 || n.kind === "inspector" && !n.down);
+        if (result.station !== result.boardedAt) {
+          game.heat = 0;
+          for (const n of people) n.anger = 0;
+        }
+        if (pursued && result.station !== result.boardedAt) say("lostTail", 5, "dispatch");
+        else say("alighted", 4, "", " " + stationName(station) + ".");
+        break;
+      }
+    }
+  }
+  function transitControl() {
+    apply(rideRequest(ringLine().tt, game.transit, game.time));
+  }
+  function chime() {
+    beep(659, 0.22, "sine");
+    setTimeout(() => beep(523, 0.3, "sine"), 230);
+  }
+  var lastStops = [];
+  function updateTransit(dt) {
+    const { ring, tt } = ringLine();
+    for (let k = 0; k < tt.sets; k++) {
+      const st = trainsetAt(tt, k, game.time);
+      const arrived = st.station >= 0 && lastStops[k] !== st.station;
+      lastStops[k] = st.station;
+      if (!arrived) continue;
+      const mine = game.transit && (game.transit.set === k || game.transit.station === st.station);
+      const stop = ring.stations[st.station].stop;
+      if (mine || Math.hypot(stop.x - game.camX, stop.y + ring.deckLift - game.camY) < game.vw * 0.6) chime();
+    }
+    if (!game.transit) return;
+    const result = rideStep(tt, game.transit, game.time);
+    if (result.event) apply(result);
+    if (game.transit?.phase === "riding") {
+      const car2 = carriagesOf(tt, trainsetAt(tt, game.transit.set, game.time))[game.transit.car];
+      Object.assign(p, { x: car2.x, y: car2.y, a: car2.a, moving: false });
+    }
+  }
+  function transitFocus() {
+    if (!game.transit) return null;
+    return { x: p.x, y: p.y - ringLine().ring.deckLift };
+  }
+  function transitHint(t2) {
+    const { ring, tt } = ringLine();
+    if (!game.transit) return "";
+    if (game.transit.phase === "platform") return t2("platformHint");
+    const alightAt = game.transit.alightAt;
+    if (alightAt !== null) return t2("alightingHint") + " " + stationName(ring.stations[alightAt]);
+    const here = doorsOpenAt(tt, game.transit, game.time);
+    if (here >= 0) return t2("doorsOpenHint") + " " + stationName(ring.stations[here]) + "  \xB7  " + t2("alightNowKey");
+    const next = nextStop(tt, game.transit, game.time);
+    return t2("nextStopHint") + " " + stationName(ring.stations[next]) + "  \xB7  " + t2("alightKey");
+  }
+
   // src/game/boarding.js
   function roomToWalk(x, y) {
     return [0, 1, 2, 3].filter((i) => !footBlocked(x + Math.cos(i * Math.PI / 2) * 4, y + Math.sin(i * Math.PI / 2) * 4, 2.6)).length >= 2;
@@ -2519,6 +2866,11 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       return;
     }
     let c = nearestCar();
+    const station = nearStation();
+    if (station && (!c || dist(p, station.street) <= dist(p, c))) {
+      enterStation(station);
+      return;
+    }
     if (!c) {
       say("closer");
       return;
@@ -2747,12 +3099,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     const cos = Math.cos(path.a), sin = Math.sin(path.a), length = c.halfLength ?? sedanHalfLength, width2 = c.halfWidth ?? sedanHalfWidth;
     const low = Math.min(laneFrom, laneTo) - width2, high = Math.max(laneFrom, laneTo) + width2;
     let gap = Infinity, what = null;
-    function consider(o, along, across, margin) {
+    function consider(o, along2, across, margin) {
       const dx = o.x - path.x, dy = o.y - path.y;
       const forward = dx * cos + dy * sin, side = -dx * sin + dy * cos;
       if (forward <= 0 || forward > reach + 30) return;
       if (side + across < low - margin || side - across > high + margin) return;
-      const clear = forward - length - along;
+      const clear = forward - length - along2;
       if (clear < gap) {
         gap = clear;
         what = o;
@@ -2769,13 +3121,13 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       );
     }
     for (const n of people) consider(n, 2.6, 2.6, 1);
-    if (!game.ride) consider(p, 2.6, 2.6, 1);
+    if (!game.ride && !game.transit) consider(p, 2.6, 2.6, 1);
     return { gap, what };
   }
   function clearPose(c, pose) {
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
     if (vehicleBlocked(body)) return false;
-    if (!game.ride && distanceToBody(body, p.x, p.y) < 3) return false;
+    if (!game.ride && !game.transit && distanceToBody(body, p.x, p.y) < 3) return false;
     return !cars.some((o) => o !== c && carContact(body, o));
   }
   function isStalled(o) {
@@ -2797,10 +3149,10 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   }
   function backOff(c, route, probe, dt) {
     if (probe.arc !== 0) return;
-    const back = 10 * dt, px = route.px - Math.cos(probe.a) * back, py = route.py - Math.sin(probe.a) * back;
-    const pose = placed({ x: px, y: py, a: probe.a }, route.lane);
+    const back = 10 * dt, px2 = route.px - Math.cos(probe.a) * back, py = route.py - Math.sin(probe.a) * back;
+    const pose = placed({ x: px2, y: py, a: probe.a }, route.lane);
     if (!clearPose(c, pose)) return;
-    route.px = px;
+    route.px = px2;
     route.py = py;
     Object.assign(c, { x: pose.x, y: pose.y, a: probe.a });
   }
@@ -2824,7 +3176,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     return { gap: Infinity, what: null };
   }
   function walkerOnPath(c, route, lane, reach) {
-    const walkers = game.ride ? people : [...people, p];
+    const walkers = game.ride || game.transit ? people : [...people, p];
     for (let d = 4; d <= reach; d += 4) {
       const pose = placed(pathAt(route, d, lane), lane);
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
@@ -2929,7 +3281,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       if (!moving) return "still";
       if (!ghost && outside && within(pose, 40) && cars.some(holds)) return "junction";
       if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
-      if (!game.ride && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
+      if (!game.ride && !game.transit && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
         return p;
       for (const other2 of cars) {
         if (other2 === c || ghost && offscreen(other2) || yieldsTo(c, other2)) continue;
@@ -3161,7 +3513,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     v.yielding = false;
     if (!dt || !distance) return true;
     const next = { ...v, x: v.x + distance * v.dx, y: v.y + distance * v.dy };
-    if (!game.ride && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
+    if (!game.ride && !game.transit && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
       stopMotion(v);
       v.yielding = true;
       return false;
@@ -5045,11 +5397,11 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     if (n.swing > 0) {
       const before = n.swing;
       n.swing = Math.max(0, n.swing - dt);
-      if (before > 0.21 && n.swing <= 0.21 && !game.ride && dist(n, p) < 15 && strikeClear(n.x, n.y, p.x, p.y)) hurtPlayer(n);
+      if (before > 0.21 && n.swing <= 0.21 && !game.ride && !game.transit && dist(n, p) < 15 && strikeClear(n.x, n.y, p.x, p.y)) hurtPlayer(n);
       return;
     }
     n.anger = Math.max(0, n.anger - dt);
-    const d = dist(n, p), chase = (n.anger > 0 || n.kind === "inspector" && game.heat > 0.25) && d < 190;
+    const d = dist(n, p), chase = !game.transit && (n.anger > 0 || n.kind === "inspector" && game.heat > 0.25) && d < 190;
     if (game.ride && d < 10 && Math.abs(game.ride.speed) > 40) {
       crashSound(Math.abs(game.ride.speed), "thud");
       knockDown(n, "traffic");
@@ -5133,7 +5485,9 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       renderMessage();
     }
     p.moving = false;
-    if (game.ride) {
+    updateTransit(dt);
+    if (game.transit) {
+    } else if (game.ride) {
       const v = game.ride;
       drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
       p.x = v.x;
@@ -5165,7 +5519,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     for (const n of people) updatePerson(n, dt);
     updateAmbulance(dt);
     inspectorClock -= dt;
-    if (game.heat > 1.3 && inspectorClock <= 0 && people.filter((n) => n.kind === "inspector").length < 4) {
+    if (game.heat > 1.3 && !game.transit && inspectorClock <= 0 && people.filter((n) => n.kind === "inspector").length < 4) {
       for (let dx of [-70, 70, 0])
         if (!blocked(p.x + dx, p.y + 28, 4)) {
           person(p.x + dx, p.y + 28, "inspector");
@@ -5394,14 +5748,14 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     say(objective(), 4, "dispatch");
     beep(550);
   }
-  function complete(fee, line) {
+  function complete(fee, line2) {
     done.add(game.active);
     game.active = "";
     game.stage = "";
     game.wallet += fee;
     beep(780, 0.22);
     game.quipTime = 2.4;
-    say(line, 6, "clerk", "  +\u20AC" + fee);
+    say(line2, 6, "clerk", "  +\u20AC" + fee);
   }
   function officeDesk() {
     const choices = files.filter((id) => !done.has(id) && !game.active).map((id) => [id, () => offer(id)]);
@@ -5912,7 +6266,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       const ctx = image.getContext("2d");
       ctx.setTransform(plateScale, 0, 0, plateScale, -left2 * plateScale, -top2 * plateScale);
       ctx.beginPath();
-      for (const [px, py] of item.outline) ctx.lineTo(px, py);
+      for (const [px2, py] of item.outline) ctx.lineTo(px2, py);
       ctx.closePath();
       ctx.clip();
       const plate = plates[item.key];
@@ -6107,7 +6461,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     marketRail.width = plate.width;
     marketRail.height = Math.ceil((foot - railTop) * railScaleY * plateScale);
     const ctx = marketRail.getContext("2d");
-    const px = (u) => (marketColumnX(u) + CELL_W / 2) * plateScale;
+    const px2 = (u) => (marketColumnX(u) + CELL_W / 2) * plateScale;
     const py = (v) => (v - railTop) * railScaleY * plateScale;
     const outline = [
       [-64, 236],
@@ -6132,13 +6486,13 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     ctx.beginPath();
     ctx.rect(0, 0, plate.width, py(deckBottom));
     for (const pier of marketPiers) {
-      ctx.moveTo(px(pier + outline[0][0]), py(outline[0][1]));
-      for (const [dx, y] of outline) ctx.lineTo(px(pier + dx), py(y));
+      ctx.moveTo(px2(pier + outline[0][0]), py(outline[0][1]));
+      for (const [dx, y] of outline) ctx.lineTo(px2(pier + dx), py(y));
       ctx.closePath();
     }
     ctx.clip();
     ctx.drawImage(plate, 0, -railTop * railScaleY * plateScale);
-    clearTrussOpenings(ctx, px, py);
+    clearTrussOpenings(ctx, px2, py);
     return marketRail;
   }
   var streetSpans = /* @__PURE__ */ new Map();
@@ -6188,7 +6542,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         g.drawImage(strip, 0, start - railTop, strip.width, end - start, x, y, CELL_W + 0.02, height2);
       }
     }
-    if (!overhead) return;
+    if (!overhead || ringReplacesLineTrains(town)) return;
     const { head, carLength, gap, count } = trainPosition(town.lines.get(row), town.width, game.time);
     const h = carLength * artwork.metro.height / artwork.metro.width;
     for (let i = 0; i < count; i++) {
@@ -6281,6 +6635,417 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     $("#casebook").scrollTop = 0;
   }
 
+  // src/art/train.js
+  var px = CAR_LENGTH / 544;
+  var railRow = 168;
+  var eaveRow = 61;
+  var zOf = (row) => (railRow - row) * px;
+  var roofZ = zOf(eaveRow);
+  var baseZ = zOf(181);
+  var doors = [64, 440];
+  var doorWidth = 40;
+  function texture(w, h, paint) {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    paint(c.getContext("2d"), w, h);
+    return c;
+  }
+  var textures;
+  function carTextures() {
+    if (textures) return textures;
+    const roof = texture(256, 48, (c, w, h) => {
+      const base = c.createLinearGradient(0, 0, 0, h);
+      base.addColorStop(0, "#2e2326");
+      base.addColorStop(0.15, "#5a4946");
+      base.addColorStop(0.62, "#8c766d");
+      base.addColorStop(0.88, "#6a5550");
+      base.addColorStop(1, "#3a1b1f");
+      c.fillStyle = base;
+      c.fillRect(0, 0, w, h);
+      let seed2 = 7;
+      const rnd = () => (seed2 = seed2 * 16807 % 2147483647) / 2147483647;
+      for (let i = 0; i < 900; i++) {
+        c.fillStyle = rnd() < 0.5 ? "#00000018" : "#ffd9a012";
+        c.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1);
+      }
+      c.fillStyle = "#3b2d2c";
+      c.fillRect(12, 15, w - 24, 15);
+      c.fillStyle = "#8f7a72";
+      c.fillRect(12, 15, w - 24, 2);
+      for (let x = 18; x < w - 24; x += 21) {
+        c.fillStyle = "#1f1619";
+        c.fillRect(x - 1, 18, 17, 10);
+        const glow = c.createLinearGradient(0, 19, 0, 27);
+        glow.addColorStop(0, "#f7c46a");
+        glow.addColorStop(1, "#b8692b");
+        c.fillStyle = glow;
+        c.fillRect(x, 19, 15, 8);
+        c.fillStyle = "#1f161980";
+        c.fillRect(x + 7, 19, 1, 8);
+      }
+      c.fillStyle = "#33262680";
+      for (let x = 42; x < w - 10; x += 43) c.fillRect(x, 2, 1.5, h - 4);
+      c.strokeStyle = "#1a1216";
+      c.lineWidth = 3;
+      c.strokeRect(1.5, 1.5, w - 3, h - 3);
+    });
+    function end(cab) {
+      return texture(96, 120, (c, w, h) => {
+        c.fillStyle = "#1c1417";
+        c.fillRect(0, 0, w, h);
+        const body = c.createLinearGradient(0, 0, w, 0);
+        body.addColorStop(0, "#5a121b");
+        body.addColorStop(0.5, "#8c2129");
+        body.addColorStop(1, "#5a121b");
+        c.fillStyle = body;
+        c.fillRect(3, 3, w - 6, 96);
+        if (cab) {
+          for (const x of [12, 52]) {
+            const pane = c.createLinearGradient(0, 14, 0, 46);
+            pane.addColorStop(0, "#ffe08c");
+            pane.addColorStop(1, "#d98a35");
+            c.fillStyle = "#24171a";
+            c.fillRect(x - 2, 12, 36, 38);
+            c.fillStyle = pane;
+            c.fillRect(x, 14, 32, 34);
+          }
+          c.fillStyle = "#24171a";
+          c.fillRect(30, 3, 36, 9);
+          c.fillStyle = cab === "front" ? "#ffe9b0" : "#e0302c";
+          for (const x of [18, 78]) {
+            c.beginPath();
+            c.arc(x, 78, 6, 0, TAU2);
+            c.fill();
+          }
+        } else {
+          c.fillStyle = "#2a1a1c";
+          c.fillRect(26, 12, 44, 84);
+          c.fillStyle = "#d59a45";
+          c.fillRect(34, 20, 28, 26);
+        }
+        c.fillStyle = "#2b2224";
+        c.fillRect(8, 99, w - 16, 21);
+        c.fillStyle = "#6f5a48";
+        c.fillRect(20, 104, w - 40, 5);
+      });
+    }
+    textures = { roof, cabFront: end("front"), cabRear: end("rear"), gangway: end(null) };
+    return textures;
+  }
+  function mapOnto(image, sx, sy, sw, sh, o, ex, ey) {
+    g.save();
+    g.transform(ex.x / sw, ex.y / sw, ey.x / sh, ey.y / sh, o.x, o.y);
+    g.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+    g.restore();
+  }
+  function quad(points, fill) {
+    g.beginPath();
+    for (const q of points) g.lineTo(q.x, q.y);
+    g.closePath();
+    g.fillStyle = fill;
+    g.fill();
+  }
+  function drawPlaceholderCar(car2, lift, state) {
+    const t2 = carTextures();
+    const ux = Math.cos(car2.a), uy = Math.sin(car2.a), nx = -uy, ny = ux;
+    const hl = CAR_LENGTH / 2 - 1.5, hw = CAR_HALF_WIDTH;
+    const at = (u, v, z) => ({ x: car2.x + ux * u + nx * v, y: car2.y + uy * u + ny * v - lift - z });
+    quad([at(-hl, -hw, -0.4), at(hl, -hw, -0.4), at(hl + 1, hw + 1.4, -0.4), at(-hl + 1, hw + 1.4, -0.4)], "#0d0a1470");
+    const near = ny >= 0 ? 1 : -1;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    quad([at(-hl + 4, near * hw, 0), at(hl - 4, near * hw, 0), at(hl - 6, near * (hw + 5), 0), at(-hl + 6, near * (hw + 5), 0)], "#ff9a3214");
+    g.restore();
+    if (car2.cab === "front") {
+      const nose = at(hl, 0, 2);
+      const beam = g.createRadialGradient(nose.x, nose.y, 0, nose.x, nose.y, 30);
+      beam.addColorStop(0, "#ffe2a040");
+      beam.addColorStop(1, "#ffe2a000");
+      g.fillStyle = beam;
+      g.beginPath();
+      g.moveTo(at(hl, -2.5, 2).x, at(hl, -2.5, 2).y);
+      g.lineTo(at(hl + 34, -10, 0).x, at(hl + 34, -10, 0).y);
+      g.lineTo(at(hl + 34, 10, 0).x, at(hl + 34, 10, 0).y);
+      g.lineTo(at(hl, 2.5, 2).x, at(hl, 2.5, 2).y);
+      g.fill();
+    }
+    if (Math.abs(ny) > 0.02) {
+      const v = near * hw;
+      let a = at(-hl, v, baseZ), b = at(hl, v, baseZ);
+      if (b.x < a.x) [a, b] = [b, a];
+      const top2 = { x: 0, y: -(roofZ - baseZ) };
+      const origin = { x: a.x, y: a.y + top2.y };
+      const along2 = { x: b.x - a.x, y: b.y - a.y };
+      mapOnto(artwork.metro, 0, eaveRow, 544, 181 - eaveRow, origin, along2, { x: 0, y: roofZ - baseZ });
+      if (state.doors) {
+        g.save();
+        g.transform(along2.x / 544, along2.y / 544, 0, (roofZ - baseZ) / (181 - eaveRow), origin.x, origin.y - eaveRow * ((roofZ - baseZ) / (181 - eaveRow)));
+        const open = Math.min(1, (state.doorsFor ?? 1) * 2.5);
+        for (const x of doors) {
+          const light = g.createLinearGradient(0, 64, 0, 132);
+          light.addColorStop(0, "#fff0b8");
+          light.addColorStop(1, "#e9a14a");
+          g.fillStyle = "#24161a";
+          g.fillRect(x + 2, 64, doorWidth - 4, 68);
+          g.fillStyle = light;
+          g.fillRect(x + doorWidth / 2 - open * (doorWidth - 8) / 2, 66, open * (doorWidth - 8), 64);
+        }
+        g.restore();
+      }
+    }
+    if (Math.abs(uy) > 0.02) {
+      const sign = uy > 0 ? 1 : -1;
+      const cab = car2.cab === "front" ? sign > 0 ? "cabFront" : "gangway" : car2.cab === "rear" ? sign < 0 ? "cabRear" : "gangway" : "gangway";
+      let a = at(sign * hl, -hw, baseZ), b = at(sign * hl, hw, baseZ);
+      if (b.x < a.x) [a, b] = [b, a];
+      const height2 = roofZ - baseZ;
+      mapOnto(t2[cab], 0, 0, 96, 120, { x: a.x, y: a.y - height2 }, { x: b.x - a.x, y: b.y - a.y }, { x: 0, y: height2 });
+    }
+    const r0 = at(-hl, -near * hw, roofZ), r1 = at(hl, -near * hw, roofZ), r3 = at(-hl, near * hw, roofZ);
+    mapOnto(t2.roof, 0, 0, 256, 48, r0, { x: r1.x - r0.x, y: r1.y - r0.y }, { x: r3.x - r0.x, y: r3.y - r0.y });
+    g.beginPath();
+    for (const q of [r0, r1, at(hl, near * hw, roofZ), r3]) g.lineTo(q.x, q.y);
+    g.closePath();
+    g.lineWidth = 0.32;
+    g.strokeStyle = "#1a1216";
+    g.stroke();
+    if (car2.cab) {
+      const base = at(car2.cab === "front" ? -hl * 0.35 : hl * 0.35, 0, roofZ);
+      g.strokeStyle = "#1d181b";
+      g.lineWidth = 0.55;
+      g.beginPath();
+      g.moveTo(base.x - 2.6, base.y);
+      g.lineTo(base.x, base.y - 3.4);
+      g.lineTo(base.x + 2.6, base.y);
+      g.moveTo(base.x - 3.4, base.y - 3.4);
+      g.lineTo(base.x + 3.4, base.y - 3.4);
+      g.stroke();
+    }
+  }
+  var atlasMeta = { bodyLength: void 0, anchor: void 0 };
+  function drawAtlasCar(car2, lift) {
+    const meta = atlasMeta;
+    const atlas = car2.cab ? artwork.ringTrainCabTurns : artwork.ringTrainTurns;
+    const heading = car2.cab === "rear" ? car2.a + Math.PI : car2.a;
+    const angle = (heading % TAU2 + TAU2) % TAU2, frame = Math.round(angle / TAU2 * 64) % 64, cell = atlas.width / 8, scale = (meta.bodyLength ?? cell * 0.8) / CAR_LENGTH, [ax, ay] = meta.anchor ?? [cell / 2, cell * 0.656];
+    g.drawImage(atlas, frame % 8 * cell, Math.floor(frame / 8) * cell, cell, cell, car2.x - ax / scale, car2.y - lift - ay / scale, cell / scale, cell / scale);
+  }
+  function drawCarriage(car2, lift, state) {
+    if (artwork.ringTrainTurns && artwork.ringTrainCabTurns) drawAtlasCar(car2, lift);
+    else drawPlaceholderCar(car2, lift, state);
+  }
+  var fallbackGeometry;
+  function offsetLine(points, d) {
+    return points.map((q, i) => {
+      const a = points[(i - 1 + points.length) % points.length], b = points[(i + 1) % points.length], l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: q.x - (b.y - a.y) / l * d, y: q.y + (b.x - a.x) / l * d };
+    });
+  }
+  function fallback() {
+    if (fallbackGeometry) return fallbackGeometry;
+    const { ring } = ringLine();
+    const piers = [];
+    for (let s = 0; s < ring.length; s += 46) {
+      const q = ring.pointAt(s);
+      if (blockedIn(town, q.x, q.y, 5) && blockedIn(town, q.x, q.y + 6, 5)) piers.push({ ...q, pier: true });
+    }
+    fallbackGeometry = {
+      piers,
+      rails: [offsetLine(ring.points, -2.3), offsetLine(ring.points, 2.3)],
+      edges: [offsetLine(ring.points, -6), offsetLine(ring.points, 6)]
+    };
+    return fallbackGeometry;
+  }
+  function strokeLoop(points, lift, width2, colour, dash) {
+    g.beginPath();
+    for (const q of points) g.lineTo(q.x, q.y - lift);
+    g.closePath();
+    g.lineWidth = width2;
+    g.strokeStyle = colour;
+    g.setLineDash(dash ?? []);
+    g.stroke();
+    g.setLineDash([]);
+  }
+  function drawFallbackDeck() {
+    const { ring } = ringLine();
+    const geo = fallback(), lift = ring.deckLift;
+    g.save();
+    g.lineJoin = "round";
+    strokeLoop(ring.points, lift - 4.5, 11, "#1f2622");
+    strokeLoop(ring.points, lift - 4.5, 9, "#3f5547", [1.2, 2.4]);
+    strokeLoop(ring.points, lift, 12.5, "#34302f");
+    strokeLoop(ring.points, lift, 7, "#251d1c", [0.9, 1.6]);
+    for (const edge of geo.edges) strokeLoop(edge, lift, 0.9, "#6c8473");
+    for (const rail of geo.rails) strokeLoop(rail, lift, 0.6, "#b5aaa0");
+    for (const st of ring.stations) {
+      g.beginPath();
+      for (let s = st.s - 112; s <= st.s + 112; s += 8) {
+        const pose = ring.poseAt(s, 4);
+        g.lineTo(pose.x - Math.sin(pose.a) * 9.5, pose.y + Math.cos(pose.a) * 9.5 - lift);
+      }
+      g.lineWidth = 6.5;
+      g.strokeStyle = "#776c63";
+      g.stroke();
+      g.beginPath();
+      for (let s = st.s - 112; s <= st.s + 112; s += 8) {
+        const pose = ring.poseAt(s, 4);
+        g.lineTo(pose.x - Math.sin(pose.a) * 6.6, pose.y + Math.cos(pose.a) * 6.6 - lift);
+      }
+      g.lineWidth = 0.7;
+      g.strokeStyle = "#e2b84c";
+      g.stroke();
+      g.globalCompositeOperation = "lighter";
+      for (let s = st.s - 100; s <= st.s + 100; s += 40) {
+        const pose = ring.poseAt(s, 4);
+        const x = pose.x - Math.sin(pose.a) * 10, y = pose.y + Math.cos(pose.a) * 10 - lift;
+        const glow = g.createRadialGradient(x, y, 0, x, y, 9);
+        glow.addColorStop(0, "#ffc86a40");
+        glow.addColorStop(1, "#ffc86a00");
+        g.fillStyle = glow;
+        g.fillRect(x - 9, y - 9, 18, 18);
+      }
+      g.globalCompositeOperation = "source-over";
+    }
+    g.restore();
+  }
+  function drawPier(q) {
+    const { ring } = ringLine();
+    const top2 = q.y - ring.deckLift + 5;
+    g.fillStyle = "#15112560";
+    g.beginPath();
+    g.ellipse(q.x + 0.8, q.y, 4.2, 1.6, 0, 0, TAU2);
+    g.fill();
+    const shaft = g.createLinearGradient(q.x - 2.2, 0, q.x + 2.2, 0);
+    shaft.addColorStop(0, "#26322b");
+    shaft.addColorStop(0.4, "#5e7765");
+    shaft.addColorStop(1, "#1e2621");
+    g.fillStyle = shaft;
+    g.fillRect(q.x - 2.2, top2, 4.4, q.y - top2 - 2);
+    g.fillStyle = "#4e4744";
+    g.fillRect(q.x - 3.2, q.y - 3, 6.4, 3);
+    g.fillStyle = "#2f3d35";
+    g.beginPath();
+    g.moveTo(q.x - 2.2, top2 + 6);
+    g.quadraticCurveTo(q.x - 2.2, top2, q.x - 6, top2);
+    g.lineTo(q.x + 6, top2);
+    g.quadraticCurveTo(q.x + 2.2, top2, q.x + 2.2, top2 + 6);
+    g.fill();
+  }
+  function drawStationSign(st) {
+    const { x, y } = st.street;
+    g.fillStyle = "#15112570";
+    g.beginPath();
+    g.ellipse(x + 0.5, y, 2.4, 1, 0, 0, TAU2);
+    g.fill();
+    g.fillStyle = "#2a2f2b";
+    g.fillRect(x - 0.45, y - 15, 0.9, 15);
+    g.fillStyle = "#191825";
+    g.beginPath();
+    g.arc(x, y - 17.5, 3.9, 0, TAU2);
+    g.fill();
+    g.fillStyle = "#f3e3bf";
+    g.beginPath();
+    g.arc(x, y - 17.5, 3.4, 0, TAU2);
+    g.fill();
+    g.fillStyle = "#2f6b4f";
+    g.beginPath();
+    g.arc(x, y - 17.5, 2.6, 0, TAU2);
+    g.fill();
+    g.fillStyle = "#f3e3bf";
+    g.font = "bold 2.6px system-ui";
+    g.textAlign = "center";
+    g.fillText("PC", x, y - 16.5);
+    g.textAlign = "left";
+  }
+  function ringActors(ox, oy) {
+    const { ring } = ringLine();
+    const out = [];
+    const inView = (q, above = 0) => q.x > ox - 12 && q.x < ox + game.vw + 12 && q.y > oy - 4 && q.y - above < oy + game.vh + 4;
+    for (const st of ring.stations)
+      if (inView(st.street, 25)) out.push({ y: st.street.y, x: st.street.x, draw: () => drawStationSign(st) });
+    if (ring.fallback) {
+      for (const q of fallback().piers) if (inView(q)) out.push({ y: q.y, x: q.x, draw: () => drawPier(q) });
+    }
+    return out;
+  }
+  function drawRingTrains(ox, oy, actors = []) {
+    const { ring, tt } = ringLine();
+    const lift = ring.deckLift;
+    if (ring.fallback) drawFallbackDeck();
+    const view = { left: ox - 40, right: ox + game.vw + 40, top: oy - 20, bottom: oy + game.vh + lift + 30 };
+    const items = [];
+    for (let k = 0; k < tt.sets; k++) {
+      const state = trainsetAt(tt, k, game.time);
+      state.doorsFor = state.station >= 0 ? tt.dwell - state.dwellLeft - tt.doorsOpen : 0;
+      for (const car2 of carriagesOf(tt, state))
+        if (car2.x > view.left && car2.x < view.right && car2.y > view.top && car2.y < view.bottom)
+          items.push({ y: car2.y, car: car2, state });
+    }
+    if (game.transit?.phase === "platform") items.push({ y: p.y, rider: true });
+    items.sort((a, b) => a.y - b.y);
+    const tall = actors.filter((a) => a.prop && a.o.item.outline);
+    for (const item of items) {
+      if (item.rider) {
+        g.save();
+        g.translate(0, -lift);
+        dude(p, true);
+        g.restore();
+        continue;
+      }
+      const car2 = item.car;
+      drawCarriage(car2, lift, item.state);
+      const spanX = CAR_LENGTH / 2 * Math.abs(Math.cos(car2.a)) + CAR_HALF_WIDTH * Math.abs(Math.sin(car2.a)) + 1, spanY = CAR_LENGTH / 2 * Math.abs(Math.sin(car2.a)) + CAR_HALF_WIDTH * Math.abs(Math.cos(car2.a)) + 1, box2 = { left: car2.x - spanX, right: car2.x + spanX, top: car2.y - lift - spanY - 18, bottom: car2.y - lift + spanY + 2 };
+      for (const a of tall) {
+        const { item: prop } = a.o;
+        const top2 = Math.min(...prop.outline.map((q) => q[1])) - prop.y + a.o.y;
+        if (a.o.y <= car2.y || top2 >= box2.bottom || Math.abs(a.o.x - car2.x) > spanX + 8) continue;
+        g.save();
+        g.beginPath();
+        g.rect(box2.left, box2.top, box2.right - box2.left, box2.bottom - box2.top);
+        g.clip();
+        drawStreetProp(a.o);
+        g.restore();
+      }
+    }
+  }
+  function drawRingMap(left2, top2, scale, full) {
+    const { ring, tt } = ringLine();
+    g.save();
+    g.beginPath();
+    for (const q of ring.points) g.lineTo(left2 + q.x * scale, top2 + q.y * scale);
+    g.closePath();
+    g.lineJoin = "round";
+    g.lineWidth = full ? 1.6 : 0.6;
+    g.strokeStyle = "#1d1b26";
+    g.stroke();
+    g.lineWidth = full ? 0.9 : 0.34;
+    g.strokeStyle = "#6fae8a";
+    g.stroke();
+    if (full)
+      for (let k = 0; k < tt.sets; k++) {
+        const state = trainsetAt(tt, k, game.time);
+        for (const car2 of carriagesOf(tt, state)) {
+          g.fillStyle = "#b8343c";
+          g.beginPath();
+          g.arc(left2 + car2.x * scale, top2 + car2.y * scale, 0.75, 0, TAU2);
+          g.fill();
+        }
+      }
+    for (const st of ring.stations) {
+      const x = left2 + st.stop.x * scale, y = top2 + st.stop.y * scale, r = full ? 1.7 : 0.7;
+      g.fillStyle = "#191825";
+      g.beginPath();
+      g.arc(x, y, r + (full ? 0.5 : 0.25), 0, TAU2);
+      g.fill();
+      g.fillStyle = "#f3e3bf";
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU2);
+      g.fill();
+    }
+    g.restore();
+  }
+
   // src/ui/renderer.js
   var addressPinHeight = 23;
   function speech(s, x, y, viewportLeft, markers) {
@@ -6342,6 +7107,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         (canalBottom - canalTop - 49) * scale,
         "#a39a99"
       );
+    drawRingMap(x, y, scale, full);
     const nav = directions(origin);
     if (nav) {
       g.beginPath();
@@ -6361,13 +7127,13 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       g.arc(x + q.x * scale, y + q.y * scale, full ? 5 + pulse : 2.05 + pulse * 0.2, 0, TAU);
       g.stroke();
     }
-    const px = x + origin.x * scale, py = y + origin.y * scale;
+    const px2 = x + origin.x * scale, py = y + origin.y * scale;
     const radius = full ? 2.5 : 1.05;
     g.beginPath();
-    g.moveTo(px, py - radius);
-    g.lineTo(px + radius, py);
-    g.lineTo(px, py + radius);
-    g.lineTo(px - radius, py);
+    g.moveTo(px2, py - radius);
+    g.lineTo(px2 + radius, py);
+    g.lineTo(px2, py + radius);
+    g.lineTo(px2 - radius, py);
     g.closePath();
     g.strokeStyle = "#131524";
     g.lineWidth = full ? 1.35 : 0.55;
@@ -6445,10 +7211,11 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         if (visible(crew)) actors.push({ o: crew, crew: true });
       }
     }
-    if (!game.ride) actors.push({ o: p });
+    if (!game.ride && !game.transit) actors.push({ o: p });
     for (const prop of visibleStreetProps(ox, oy)) actors.push({ o: prop, prop: true });
     const rails = visibleRails(ox, oy);
     for (const rail of rails) actors.push({ o: rail, rail: true });
+    for (const piece of ringActors(ox, oy)) actors.push({ o: piece, rail: true });
     actors.sort((a, b) => a.o.y - b.o.y);
     for (const a of actors) {
       if (a.prop) drawStreetProp(a.o);
@@ -6459,6 +7226,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       else dude(a.o, a.o === p);
     }
     for (const rail of rails) rail.draw(true);
+    drawRingTrains(ox, oy, actors);
     if (end && !game.viewMap) {
       if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
       if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
@@ -6500,11 +7268,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     );
     const j = jobs.find((j2) => dist(j2, p) < 36);
     const nearJob = j ? t("jobKey") + " \xB7 " + t(j.name) : "";
-    let hint = game.viewMap ? t("mapHint") : game.ride ? nearJob || t("outHint") : nearestCar() ? t("enterHint") + (nearJob ? "\u3000/\u3000" + nearJob : "") : nearJob || t("footHint");
-    if (!game.viewMap && recoveryCar()) hint = t("callRecovery") + (game.ride ? "\u3000/\u3000" + t("outHint") : "");
-    if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
+    const station = nearStation(), car2 = station && nearestCar();
+    let hint = game.viewMap ? t("mapHint") : game.transit ? transitHint(t) : station && (!car2 || dist(p, station.street) <= dist(p, car2)) ? t("stationHint") + " \xB7 " + stationName(station) : game.ride ? nearJob || t("outHint") : nearestCar() ? t("enterHint") + (nearJob ? "\u3000/\u3000" + nearJob : "") : nearJob || t("footHint");
+    if (!game.viewMap && !game.transit && recoveryCar()) hint = t("callRecovery") + (game.ride ? "\u3000/\u3000" + t("outHint") : "");
+    if (!game.ride && !game.transit && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
       hint = t("medicKeys");
-    $("#reportBtn").hidden = !nearbyPatient();
+    $("#reportBtn").hidden = !!game.transit || !nearbyPatient();
     hud("#hint", hint);
     hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
   }
@@ -6723,6 +7492,10 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       speak();
       return;
     }
+    if (game.transit) {
+      if (k === "car") transitControl();
+      return;
+    }
     if (k === "horn") {
       if (!game.ride || game.ride.condition === 0) return;
       if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
@@ -6805,7 +7578,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     setGamepadMode(false);
   });
   function inputScene() {
-    return panel.open ? panel : game.viewMap ? "map" : interior || game.ride;
+    return panel.open ? panel : game.viewMap ? "map" : interior || game.ride || game.transit;
   }
   function controllerDialog(pressed, step) {
     if (pressed.has("back")) {
@@ -6896,7 +7669,12 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     if (game.artReady && !panel.open && !game.viewMap) {
       const steps = Math.max(1, Math.ceil(dt * 60 - 1e-8));
       for (let step = 0; step < steps; step++) (interior ? updateInterior : update)(dt / steps);
-      if (!interior) {
+      const aboard = !interior && transitFocus();
+      if (aboard) {
+        const follow = 1 - Math.exp(-dt * 4);
+        game.camX += (aboard.x - game.camX) * follow;
+        game.camY += (aboard.y - game.camY) * follow;
+      } else if (!interior) {
         let follow = 1 - Math.exp(-dt * 6);
         game.camX += (p.x + (game.ride ? clamp(game.ride.slideX * 0.3, -60, 60) : -16 * Math.sin((p.x - X(0)) / CELL_W * TAU)) - game.camX) * follow;
         game.camY += (p.y + (game.ride ? clamp(game.ride.slideY * 0.3, -40, 40) : -9 * Math.sin((p.y - Y(0)) / CELL_H * TAU)) - game.camY) * follow;

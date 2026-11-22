@@ -1,5 +1,6 @@
 import { plates, plateScale } from "./streets.js";
 import { trainPosition } from "./layout.js";
+import { ringReplacesLineTrains } from "../game/ring-route.js";
 import { CELL_H, CELL_W, X, Y, town } from "./town.js";
 import { artwork, game } from "../core/state.js";
 import { g } from "../platform/canvas.js";
@@ -172,7 +173,7 @@ function drawRailLayer(row, firstCol, lastCol, overhead, ox) {
       g.drawImage(strip, 0, start - railTop, strip.width, end - start, x, y, CELL_W + 0.02, height);
     }
   }
-  if (!overhead) return;
+  if (!overhead || ringReplacesLineTrains(town)) return;
   const { head, carLength, gap, count } = trainPosition(town.lines.get(row), town.width, game.time);
   const h = (carLength * artwork.metro.height) / artwork.metro.width;
   for (let i = 0; i < count; i++) {

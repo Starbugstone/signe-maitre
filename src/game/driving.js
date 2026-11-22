@@ -214,13 +214,13 @@ function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 ||
     );
   }
   for (const n of people) consider(n, 2.6, 2.6, 1);
-  if (!game.ride) consider(p, 2.6, 2.6, 1);
+  if (!game.ride && !game.transit) consider(p, 2.6, 2.6, 1);
   return { gap, what };
 }
 function clearPose(c, pose) {
   const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
   if (vehicleBlocked(body)) return false;
-  if (!game.ride && distanceToBody(body, p.x, p.y) < 3) return false;
+  if (!game.ride && !game.transit && distanceToBody(body, p.x, p.y) < 3) return false;
   return !cars.some((o) => o !== c && carContact(body, o));
 }
 function isStalled(o) {
@@ -283,7 +283,7 @@ function vehicleOnPath(c, route, lane, from, reach) {
   return { gap: Infinity, what: null };
 }
 function walkerOnPath(c, route, lane, reach) {
-  const walkers = game.ride ? people : [...people, p];
+  const walkers = game.ride || game.transit ? people : [...people, p];
   for (let d = 4; d <= reach; d += 4) {
     const pose = placed(pathAt(route, d, lane), lane);
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
@@ -417,7 +417,7 @@ function advanceTraffic(c, dt) {
     if (!moving) return "still";
     if (!ghost && outside && within(pose, 40) && cars.some(holds)) return "junction";
     if ((pose.lane || route.lane) && vehicleBlocked(pose)) return "kerb";
-    if (!game.ride && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
+    if (!game.ride && !game.transit && distanceToBody(pose, p.x, p.y) < 2.6 && distanceToBody(pose, p.x, p.y) < distanceToBody(c, p.x, p.y))
       return p;
     for (const other of cars) {
       if (other === c || (ghost && offscreen(other)) || yieldsTo(c, other)) continue;

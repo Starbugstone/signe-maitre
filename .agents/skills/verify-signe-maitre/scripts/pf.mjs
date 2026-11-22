@@ -109,6 +109,8 @@ import { ambulance } from "./src/game/rescue.js";
 import { jobs } from "./src/world/town.js";
 import { target, sedan } from "./src/world/population.js";
 import { panel } from "./src/platform/canvas.js";
+import { ringLine } from "./src/game/transit.js";
+import { carriagesOf, trainsetAt } from "./src/game/ring-route.js";
 const xy = (o) => o && { x: +o.x.toFixed(2), y: +o.y.toFixed(2) };
 const veh = (v) => v && { ...xy(v), model: v.model, speed: +(v.speed || 0).toFixed(2), condition: v.condition, medical: !!v.medical };
 window.__pf = Object.freeze({
@@ -127,6 +129,20 @@ window.__pf = Object.freeze({
       jobs: jobs.map((j) => ({ id: j.id, ...xy(j) })),
       target: veh(target), sedan: veh(sedan),
       traffic: cars.filter((c) => c.route).map(veh),
+      cam: xy({ x: game.camX, y: game.camY }),
+      transit: game.transit && { ...game.transit },
+      ring: (() => {
+        const { ring, tt } = ringLine();
+        return {
+          fallback: ring.fallback, deckLift: ring.deckLift, length: +ring.length.toFixed(1),
+          stations: ring.stations.map((s) => ({ id: s.id, name: s.name[document.documentElement.lang] ?? s.name.fr, s: +s.s.toFixed(1), street: xy(s.street), stop: xy(s.stop) })),
+          trains: Array.from({ length: tt.sets }, (_, k) => {
+            const st = trainsetAt(tt, k, game.time);
+            return { k, s: +st.s.toFixed(1), v: +st.v.toFixed(1), station: st.station, doors: st.doors,
+              cars: carriagesOf(tt, st).map((c) => ({ ...xy(c), a: +c.a.toFixed(3) })) };
+          }),
+        };
+      })(),
     };
   },
 });

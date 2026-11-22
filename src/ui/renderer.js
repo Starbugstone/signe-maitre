@@ -18,6 +18,8 @@ import { arrivalMarker, drawRouteArrow } from "./waypoint.js";
 import { atObjective, routeHUD, showMapSheet } from "./guidance.js";
 import { nearestCar } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
+import { drawRingMap, drawRingTrains, ringActors } from "../art/train.js";
+import { nearStation, stationName, transitHint } from "../game/transit.js";
 
 const addressPinHeight = 23;
 
@@ -81,6 +83,7 @@ function map(left, top, w, h, full, origin = p) {
       (canalBottom - canalTop - 49) * scale,
       "#a39a99",
     );
+  drawRingMap(x, y, scale, full);
   const nav = directions(origin);
   if (nav) {
     g.beginPath();
@@ -197,10 +200,11 @@ function draw() {
       if (visible(crew)) actors.push({ o: crew, crew: true });
     }
   }
-  if (!game.ride) actors.push({ o: p });
+  if (!game.ride && !game.transit) actors.push({ o: p });
   for (const prop of visibleStreetProps(ox, oy)) actors.push({ o: prop, prop: true });
   const rails = visibleRails(ox, oy);
   for (const rail of rails) actors.push({ o: rail, rail: true });
+  for (const piece of ringActors(ox, oy)) actors.push({ o: piece, rail: true });
   actors.sort((a, b) => a.o.y - b.o.y);
   for (const a of actors) {
     if (a.prop) drawStreetProp(a.o);
@@ -211,6 +215,7 @@ function draw() {
     else dude(a.o, a.o === p);
   }
   for (const rail of rails) rail.draw(true);
+  drawRingTrains(ox, oy, actors);
   if (end && !game.viewMap) {
     if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
     if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
@@ -270,17 +275,23 @@ function draw() {
   );
   const j = jobs.find((j) => dist(j, p) < 36);
   const nearJob = j ? t("jobKey") + " · " + t(j.name) : "";
+  const station = nearStation(),
+    car = station && nearestCar();
   let hint = game.viewMap
     ? t("mapHint")
-    : game.ride
+    : game.transit
+      ? transitHint(t)
+      : station && (!car || dist(p, station.street) <= dist(p, car))
+        ? t("stationHint") + " · " + stationName(station)
+        : game.ride
       ? nearJob || t("outHint")
       : nearestCar()
         ? t("enterHint") + (nearJob ? "　/　" + nearJob : "")
         : nearJob || t("footHint");
-  if (!game.viewMap && recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
-  if (!game.ride && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
+  if (!game.viewMap && !game.transit && recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
+  if (!game.ride && !game.transit && !game.viewMap && nearestCar()?.medical && nearestCar().condition > 0)
     hint = t("medicKeys");
-  $("#reportBtn").hidden = !nearbyPatient();
+  $("#reportBtn").hidden = !!game.transit || !nearbyPatient();
   hud("#hint", hint);
   hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
 }

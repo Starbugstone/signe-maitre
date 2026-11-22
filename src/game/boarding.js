@@ -5,6 +5,7 @@ import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
 import { panel } from "../platform/canvas.js";
 import { beep } from "../audio/mixer.js";
+import { enterStation, nearStation } from "./transit.js";
 
 // An exit spot must leave room for the next step, not just for standing still.
 function roomToWalk(x, y) {
@@ -67,6 +68,12 @@ function board() {
     return;
   }
   let c = nearestCar();
+  // At a ring station's stair foot, the car key climbs to the platform unless a car is closer.
+  const station = nearStation();
+  if (station && (!c || dist(p, station.street) <= dist(p, c))) {
+    enterStation(station);
+    return;
+  }
   if (!c) {
     say("closer");
     return;
