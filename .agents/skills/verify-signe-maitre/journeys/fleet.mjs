@@ -44,24 +44,27 @@ export default async function (d) {
   // parked, crashed or abandoned vehicle: a breadth-first search over the street between
   // the two building lines. Moving traffic is left to stop for the walker, as it does.
   async function walkAround(arrived, what, required = true) {
-    const cell = 3,
-      top = pavement,
-      bottom = pavement + 45;
+    const cell = 3;
     for (let attempt = 0; attempt < 4; attempt++) {
       const { parked, p } = await d.state();
-      // The player gets out within a few units of the vehicle he left: free to step away.
+      const top = Math.min(pavement - 16, p.y - 12);
+      const bottom = Math.max(pavement + 60, p.y + 12);
+      if (arrived(p, parked)) return true;
+      // Start where the player actually got out, including a side street. Leave
+      // enough room to get around the tail of a wreck lying across the route.
       const solid = (x, y) =>
         blockedIn(town, x, y, 2.6) ||
         (Math.hypot(x - p.x, y - p.y) > 9 &&
-        parked.some((c) => {
-          const dx = x - c.x,
-            dy = y - c.y,
-            cos = Math.cos(c.a),
-            sin = Math.sin(c.a);
-          return Math.abs(dx * cos + dy * sin) < c.halfLength + 3.4 && Math.abs(dy * cos - dx * sin) < c.halfWidth + 3.4;
-        }));
+          parked.some((c) => {
+            const dx = x - c.x,
+              dy = y - c.y,
+              cos = Math.cos(c.a),
+              sin = Math.sin(c.a);
+            return Math.abs(dx * cos + dy * sin) < c.halfLength + 3.4 &&
+              Math.abs(dy * cos - dx * sin) < c.halfWidth + 3.4;
+          }));
       const key = (i, j) => i + "," + j,
-        at = (i, j) => ({ x: p.x + i * cell, y: Math.min(bottom, Math.max(top, p.y)) + j * cell });
+        at = (i, j) => ({ x: p.x + i * cell, y: p.y + j * cell });
       const seen = new Map([[key(0, 0), null]]),
         queue = [[0, 0]];
       let goal = null;
