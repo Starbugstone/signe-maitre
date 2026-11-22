@@ -5,11 +5,11 @@ export const meta = { feature: "River boats and moorings", needs: "probe" };
 const gap = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
-async function poweredUntil(d, control, reaches, limit = 62) {
+async function poweredUntil(d, controls, reaches, limit = 62) {
   for (let i = 0; i < limit; i++) {
     const state = await d.state();
     if (reaches(state.ride, state)) return state;
-    await d.hold([control], 220);
+    await d.hold(controls, 220);
   }
   throw Error("Boat did not reach its mark: " + JSON.stringify((await d.state()).ride));
 }
@@ -75,7 +75,7 @@ export default async (d) => {
   await d.step("pass beneath the bridge", async () => {
     await lineUpForBridge(d, bridge);
     await d.shot("launch under the bridge deck");
-    const passed = await poweredUntil(d, "up", (b) => b.x > bridge.x + bridge.halfWidth + 25);
+    const passed = await poweredUntil(d, ["up"], (b) => b.x > bridge.x + bridge.halfWidth + 25);
     d.expect(passed.ride.model === "launch", "The player sailed through to the far side", passed.ride);
   });
   await d.step("stay aboard away from a mooring", async () => {
@@ -85,12 +85,11 @@ export default async (d) => {
   });
   await d.step("slow down and bump the quay", async () => {
     const first = (await d.state()).ride;
-    const brake = first.speed > 0 ? "down" : "up";
-    await poweredUntil(d, brake, (b) => Math.abs(b.speed) < 10);
-    const towardBank = Math.sign(home.quay.y - home.y);
-    const rudder = towardBank * Math.sign(Math.cos(first.a)) > 0 ? "right" : "left";
-    await d.hold(["up", rudder], 430);
-    const hit = await poweredUntil(d, "up", (b) => b.bumps > first.bumps, 18);
+    // Make room to turn the full hull, then approach the north quay bow-first.
+    await poweredUntil(d, ["up", "right"], (b) => b.y > initial.river.top + 42 && b.a > 0.7, 24);
+    await poweredUntil(d, ["up", "left"], (b) => b.a < -1.12, 30);
+    const hit = await poweredUntil(d, ["up"], (b) => b.bumps > first.bumps, 24);
+    d.expect(hit.ride.y <= initial.river.top + hit.ride.halfLength + 2, "The bow struck the north quay", hit.ride);
     d.expect(hit.ride.lastImpact >= 3 && hit.ride.condition > 0, "The quay deflects the hull and keeps the helm usable", hit.ride);
   });
   await d.step("return to the anchor", async () => {
