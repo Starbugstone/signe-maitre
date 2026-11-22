@@ -7,7 +7,8 @@ import medicDown from "../../assets/medicDown.webp";
 import ambulanceWreck from "../../assets/ambulanceWreck.webp";
 import ambulanceDented from "../../assets/ambulanceDented.webp";
 import ambulanceTurns from "../../assets/ambulanceTurns.webp";
-import metro from "../../assets/metro.webp";
+import ringTrainTurns from "../../assets/ringTrainTurns.webp";
+import ringTrainCabTurns from "../../assets/ringTrainCabTurns.webp";
 import officeInterior from "../../assets/officeInterior.webp";
 import rescueOpenImage from "../../assets/rescueOpen.webp";
 import rescueStretcherImage from "../../assets/rescueStretcher.webp";
@@ -38,7 +39,8 @@ export const imageData = {
   ambulanceWreck,
   ambulanceDented,
   ambulanceTurns,
-  metro,
+  ringTrainTurns,
+  ringTrainCabTurns,
   officeInterior,
   rescueOpen: rescueOpenImage,
   rescueStretcher: rescueStretcherImage,

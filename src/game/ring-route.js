@@ -1,60 +1,22 @@
 // La Petite Ceinture: the ring line's geometry, timetable and ride states.
 // Everything here is pure and derived from the clock, so the trains cost
 // nothing to simulate and the same moment always shows the same trains.
-import { CELL_H, CELL_W, X, Y } from "../world/layout.js";
-
 const TAU = 2 * Math.PI;
 const mod = (a, n) => ((a % n) + n) % n;
 
-// The rail head of the painted market viaduct stands this far above its pier foot.
-export const RING_DECK_LIFT = 47.7;
-// Carriages keep the length of the painted metro car.
-export const CAR_LENGTH = 51,
-  CAR_GAP = 1.4,
-  CAR_HALF_WIDTH = 3.8;
-const BOGIE = 0.34 * CAR_LENGTH;
+// Carriages match the baked atlases (art-src/baked/ringTrain.json): an 18 m coach
+// at the game's 4.76 world units per metre, 2.75 m wide.
+export const CAR_LENGTH = 308 / 3.6,
+  CAR_GAP = 1.6,
+  CAR_HALF_WIDTH = 6.5;
+// The platform edge stands clear of the coach side; waiting passengers stand this far from the track.
+export const PLATFORM_OFFSET = 11;
+// Platforms are a three-coach train long, with a little to spare.
+export const PLATFORM_HALF_LENGTH = (3 * CAR_LENGTH + 2 * CAR_GAP) / 2 + 6;
+// Bogie centres sit 12.5 m apart.
+const BOGIE = 29.8;
 
-// The ring the town publishes replaces the old straight lines and their trains.
-// This is the one switch rail.js reads.
-export function ringReplacesLineTrains(layout) {
-  return Boolean(layout.ring);
-}
-
-// Until the town publishes `town.ring`, run a temporary loop just inside the outer
-// streets, on the block backs between the outer street and the next one. The side
-// legs keep clear of the painting seams, where the market viaduct joins are checked.
-export function fallbackRing(layout) {
-  const left = X(0) + CELL_W / 2 + 20,
-    right = X(layout.cols - 1) - CELL_W / 2 - 20,
-    top = Y(0) + CELL_H / 2 - 8,
-    bottom = Y(layout.rows - 1) - CELL_H / 2 + 8,
-    radius = 70;
-  const points = [];
-  const corner = (cx, cy, from) => {
-    for (let i = 0; i <= 12; i++) {
-      const a = from + (i / 12) * (Math.PI / 2);
-      points.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
-    }
-  };
-  // Clockwise on screen: east along the north leg, south, west, then north.
-  corner(left + radius, top + radius, Math.PI);
-  corner(right - radius, top + radius, -Math.PI / 2);
-  corner(right - radius, bottom - radius, 0);
-  corner(left + radius, bottom - radius, Math.PI / 2);
-  const midRow = Math.min(layout.rows - 2, layout.canalRow + 1),
-    eastRow = 1,
-    northCol = Math.min(2, layout.cols - 2),
-    southCol = Math.max(1, layout.cols - 2);
-  const stations = [
-    { id: "centre", name: { fr: "Centre-Ville", en: "Centre-Ville" }, stop: { x: X(northCol), y: top }, street: { x: X(northCol) + 14, y: top + 12 } },
-    { id: "prets", name: { fr: "Quai des Prêts", en: "Quai des Prêts" }, stop: { x: right, y: Y(eastRow) }, street: { x: right - 14, y: Y(eastRow) + 12 } },
-    { id: "foire", name: { fr: "La Foire", en: "La Foire" }, stop: { x: X(southCol), y: bottom }, street: { x: X(southCol) - 14, y: bottom - 12 } },
-    { id: "docks", name: { fr: "Les Docks", en: "Les Docks" }, stop: { x: left, y: Y(midRow) }, street: { x: left + 14, y: Y(midRow) + 12 } },
-  ];
-  return { points, deckLift: RING_DECK_LIFT, stations, fallback: true };
-}
-
-// Builds arc-length lookups for a published or fallback ring.
+// Builds arc-length lookups for the published ring.
 export function prepareRing(source) {
   const points = source.points.slice();
   const first = points[0],
@@ -68,6 +30,19 @@ export function prepareRing(source) {
     cum.push(cum[i] + Math.hypot(b.x - a.x, b.y - a.y));
   }
   const length = cum.at(-1);
+  // Curvature spread over the half segments either side of each vertex, for the corner speed limit.
+  const bends = [];
+  for (let i = 0; i < points.length; i++) {
+    const a = points[(i - 1 + points.length) % points.length],
+      q = points[i],
+      b = points[(i + 1) % points.length];
+    const turn = Math.abs(Math.atan2((q.x - a.x) * (b.y - q.y) - (q.y - a.y) * (b.x - q.x), (q.x - a.x) * (b.x - q.x) + (q.y - a.y) * (b.y - q.y)));
+    if (turn < 1e-4) continue;
+    const segment = (j) => cum[j + 1] - cum[j],
+      before = segment((i - 1 + points.length) % points.length),
+      after = segment(i);
+    bends.push({ from: cum[i] - before / 2, to: cum[i] + after / 2, curvature: turn / ((before + after) / 2) });
+  }
   function pointAt(s) {
     s = mod(s, length);
     let lo = 0,
@@ -107,62 +82,104 @@ export function prepareRing(source) {
       r = pointAt(s - half);
     return { x: (f.x + r.x) / 2, y: (f.y + r.y) / 2, a: Math.atan2(f.y - r.y, f.x - r.x) };
   }
+  // Each platform lies on the side of the track its street stair climbs from:
+  // +1 on the right of travel, -1 on the left.
   const stations = source.stations
-    .map((st) => ({ ...st, s: mod(Number.isFinite(st.s) ? st.s : project(st.stop), length) }))
+    .map((st) => {
+      const s = mod(Number.isFinite(st.s) ? st.s : project(st.stop), length),
+        pose = poseAt(s, 4);
+      const across = -Math.sin(pose.a) * (st.street.x - pose.x) + Math.cos(pose.a) * (st.street.y - pose.y);
+      return { ...st, s, side: across < 0 ? -1 : 1 };
+    })
     .sort((a, b) => a.s - b.s);
   if (!stations.length) throw new Error("The ring needs a station");
-  const deckLift = source.deckLift ?? RING_DECK_LIFT;
-  return { points, cum, length, deckLift, stations, fallback: !!source.fallback, pointAt, poseAt, project };
+  if (!Number.isFinite(source.deckLift)) throw new Error("The ring needs a deck height");
+  return { points, cum, length, bends, deckLift: source.deckLift, stations, pointAt, poseAt, project };
 }
 
 const ringCache = new WeakMap();
-// The one adapter from a town to its ring line.
+// The one adapter from a town to its ring line: the town's published `town.ring`.
 export function ringOf(layout) {
-  if (!ringCache.has(layout)) ringCache.set(layout, prepareRing(layout.ring ?? fallbackRing(layout)));
+  if (!layout.ring) throw new Error("This town publishes no ring railway");
+  if (!ringCache.has(layout)) ringCache.set(layout, prepareRing(layout.ring));
   return ringCache.get(layout);
 }
 
-// A trapezoidal run between two platforms: accelerate, cruise, brake.
-function runProfile(distance, vmax, accel) {
-  const rampDistance = (vmax * vmax) / accel;
-  if (distance <= rampDistance) {
-    const peak = Math.sqrt(distance * accel);
-    return { distance, peak, ramp: peak / accel, cruise: 0, time: (2 * peak) / accel };
+// The ring's speed limit at grid step h: full speed on the straights, slower through a
+// curve, held from the moment the leading cab enters it until the rear cab leaves.
+function speedLimits(ring, vmax, lateral, trainLength, h) {
+  const n = Math.ceil(ring.length / h),
+    point = new Float64Array(n).fill(vmax);
+  for (const bend of ring.bends) {
+    const cap = Math.min(vmax, Math.sqrt(lateral / bend.curvature));
+    for (let k = Math.floor(bend.from / h); k <= Math.ceil(bend.to / h); k++) {
+      const i = mod(k, n);
+      point[i] = Math.min(point[i], cap);
+    }
   }
-  const cruise = (distance - rampDistance) / vmax;
-  return { distance, peak: vmax, ramp: vmax / accel, cruise, time: (2 * vmax) / accel + cruise };
+  const reach = Math.ceil(trainLength / 2 / h) + 1,
+    limit = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let v = vmax;
+    for (let d = -reach; d <= reach; d++) v = Math.min(v, point[mod(i + d, n)]);
+    limit[i] = v;
+  }
+  return (s) => limit[mod(Math.round(s / h), n)];
 }
-function along(run, t, accel) {
-  const { peak, ramp, cruise, distance } = run;
-  if (t <= 0) return { d: 0, v: 0 };
-  if (t < ramp) return { d: 0.5 * accel * t * t, v: accel * t };
-  const rampD = 0.5 * accel * ramp * ramp;
-  if (t < ramp + cruise) return { d: rampD + peak * (t - ramp), v: peak };
-  const braking = Math.min(ramp, t - ramp - cruise);
-  return {
-    d: Math.min(distance, rampD + peak * cruise + peak * braking - 0.5 * accel * braking * braking),
-    v: Math.max(0, peak - accel * braking),
-  };
+
+// The run between two platforms: accelerate, hold the line speed, brake for curves
+// and for the next platform. Samples are spaced `step` apart with their arrival times.
+function runProfile(start, distance, limitAt, accel) {
+  const n = Math.max(1, Math.ceil(distance / 2)),
+    step = distance / n,
+    v = new Float64Array(n + 1);
+  for (let j = 1; j < n; j++) v[j] = limitAt(start + j * step);
+  for (let j = 1; j <= n; j++) v[j] = Math.min(v[j], Math.sqrt(v[j - 1] ** 2 + 2 * accel * step));
+  v[n] = 0;
+  for (let j = n - 1; j >= 0; j--) v[j] = Math.min(v[j], Math.sqrt(v[j + 1] ** 2 + 2 * accel * step));
+  const t = new Float64Array(n + 1);
+  for (let j = 0; j < n; j++) t[j + 1] = t[j] + (2 * step) / (v[j] + v[j + 1]);
+  return { distance, step, v, t, time: t[n] };
+}
+// Distance and speed `time` seconds after leaving the platform; constant acceleration between samples.
+function along(run, time) {
+  const { t, v, step } = run;
+  if (time <= 0) return { d: 0, v: 0 };
+  if (time >= run.time) return { d: run.distance, v: 0 };
+  let lo = 0,
+    hi = t.length - 2;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (t[mid] <= time) lo = mid;
+    else hi = mid - 1;
+  }
+  const tau = time - t[lo],
+    a = (v[lo + 1] - v[lo]) / (t[lo + 1] - t[lo]);
+  return { d: Math.min(run.distance, lo * step + v[lo] * tau + 0.5 * a * tau * tau), v: v[lo] + a * tau };
 }
 
 export function timetable(ring, options = {}) {
   const {
     vmax = 92,
     accel = 18,
+    // Sideways acceleration allowed in a curve: about 50 units/s through a 160-unit bend.
+    lateral = 16,
     dwell = 8,
     doorsOpen = 1,
     doorsClose = 1.6,
-    count = 4,
-    sets = ring.length < 3000 ? 2 : 3,
+    count = 3,
+    sets = Math.max(2, Math.round(ring.length / 3200)),
     // At time zero the first train is this many seconds from the first platform.
     arrivesIn = 12,
   } = options;
+  const trainLength = count * CAR_LENGTH + (count - 1) * CAR_GAP;
+  const limitAt = speedLimits(ring, vmax, lateral, trainLength, 2);
   const n = ring.stations.length;
   let start = 0;
   const legs = ring.stations.map((from, i) => {
     const to = ring.stations[(i + 1) % n];
     const distance = n === 1 ? ring.length : mod(to.s - from.s, ring.length) || ring.length;
-    const run = runProfile(distance, vmax, accel);
+    const run = runProfile(from.s, distance, limitAt, accel);
     const leg = { from: i, to: (i + 1) % n, start, run };
     start += dwell + run.time;
     return leg;
@@ -180,9 +197,10 @@ export function timetable(ring, options = {}) {
     doorsClose,
     accel,
     vmax,
+    limitAt,
     headway: period / sets,
     phase: period - Math.min(arrivesIn, lastRun),
-    trainLength: count * CAR_LENGTH + (count - 1) * CAR_GAP,
+    trainLength,
   };
 }
 
@@ -209,7 +227,7 @@ export function trainsetAt(tt, k, time) {
       dwellLeft: tt.dwell - local,
       doors: local >= tt.doorsOpen && local < tt.dwell - tt.doorsClose,
     };
-  const { d, v } = along(leg.run, local - tt.dwell, tt.accel);
+  const { d, v } = along(leg.run, local - tt.dwell);
   return { k, s: mod(from.s + d, tt.ring.length), v, station: -1, next: leg.to, dwellLeft: 0, doors: false };
 }
 
@@ -271,10 +289,11 @@ export function doorsOpenAt(tt, ride, time) {
   return st.doors ? st.station : -1;
 }
 
-// Where someone waiting on the platform stands: beside the track, on the right of travel.
-export function platformSpot(ring, station, side = 8.5) {
-  const pose = ring.poseAt(station.s, 4);
-  return { x: pose.x - Math.sin(pose.a) * side, y: pose.y + Math.cos(pose.a) * side, a: pose.a };
+// Where someone waiting on the platform stands: beside the track, on the stair side.
+export function platformSpot(ring, station, offset = PLATFORM_OFFSET) {
+  const pose = ring.poseAt(station.s, 4),
+    d = offset * (station.side ?? 1);
+  return { x: pose.x - Math.sin(pose.a) * d, y: pose.y + Math.cos(pose.a) * d, a: pose.a };
 }
 
 export { TAU };

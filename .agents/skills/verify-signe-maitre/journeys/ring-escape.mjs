@@ -1,6 +1,9 @@
 // Lose the heat on La Petite Ceinture: slap the tough beside the étude until Heat
-// rises, take the ring from the nearest station and step off at the next one.
+// rises, run through the streets to the nearest station, take the ring and step off
+// at the next one.
 // Nobody follows the player up to the platform, and the heat is gone on arrival.
+import { walkToStation } from "./ring-train.mjs";
+
 export const meta = { feature: "ring-train", needs: "probe" };
 
 export default async function (d) {
@@ -19,7 +22,7 @@ export default async function (d) {
 
   let hp;
   await d.step("escape-to-platform", async () => {
-    await d.walkTo(first.street, { tol: 5, run: true });
+    await walkToStation(d, (await d.state()).p, first, { run: true });
     await d.press("car");
     const { state } = await d.waitFor("on the platform", ({ state }) => state.transit?.phase === "platform", 4000);
     hp = state.p.hp;
@@ -27,7 +30,7 @@ export default async function (d) {
   });
 
   await d.step("ride-away", async () => {
-    await d.waitFor("aboard and moving", ({ state }) => state.transit?.phase === "riding" && state.ring.trains[state.transit.set].station === -1, 70000);
+    await d.waitFor("aboard and moving", ({ state }) => state.transit?.phase === "riding" && state.ring.trains[state.transit.set].station === -1, 90000);
     await d.press("car");
     await d.waitFor("stop requested", ({ state }) => state.transit?.alightAt != null, 3000);
   });

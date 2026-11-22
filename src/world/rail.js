@@ -1,5 +1,6 @@
 import { plates, plateScale } from "./streets.js";
 import { CELL_H, CELL_W, TAU, X, Y, town } from "./town.js";
+import { PLATFORM_HALF_LENGTH, ringOf } from "../game/ring-route.js";
 import { artwork, game } from "../core/state.js";
 import { g, rect } from "../platform/canvas.js";
 import {
@@ -238,31 +239,98 @@ function drawStationGround(st) {
   g.fill();
 }
 
+// The raised platform beside the track on the stair side, as long as a train, with its
+// yellow edge line, a green iron railing and warm lamps. Trains stop alongside it.
 function drawStationOverhead(st) {
-  const ring = town.ring;
-  const x = st.stop.x,
-    y = st.stop.y - ring.deckLift;
-  const horiz = Math.abs(st.stop.y - ring.top) < 10 || Math.abs(st.stop.y - ring.bottom) < 10;
-  const pw = horiz ? 56 : 18,
-    ph = horiz ? 17 : 56;
-  // Riveted Parisian green-iron station canopy over the platform.
-  rect(g, x - pw / 2, y - ph / 2, pw, ph, "#1b2829");
-  rect(g, x - pw / 2 + 1.2, y - ph / 2 + 1.2, pw - 2.4, ph - 2.4, "#2d4c46");
-  g.strokeStyle = "#8ab49d";
-  g.lineWidth = 0.85;
-  g.strokeRect(x - pw / 2 + 1.2, y - ph / 2 + 1.2, pw - 2.4, ph - 2.4);
-  // Warm amber platform lamps.
-  for (const off of [-16, 0, 16]) {
-    const lx = horiz ? x + off : x,
-      ly = horiz ? y : y + off;
-    const glow = g.createRadialGradient(lx, ly, 0.5, lx, ly, 7);
-    glow.addColorStop(0, "#ffe49499");
-    glow.addColorStop(1, "#ffe49400");
-    g.fillStyle = glow;
+  const ring = ringOf(town),
+    station = ring.stations.find((o) => o.id === st.id),
+    lift = ring.deckLift,
+    side = station.side,
+    half = PLATFORM_HALF_LENGTH;
+  const edge = (offset) => {
+    const out = [];
+    for (let s = station.s - half; s <= station.s + half + 0.01; s += 6) {
+      const pose = ring.poseAt(s, 0.5);
+      out.push({ x: pose.x - Math.sin(pose.a) * offset * side, y: pose.y + Math.cos(pose.a) * offset * side - lift });
+    }
+    return out;
+  };
+  const inner = edge(7.4),
+    outer = edge(16);
+  const band = (a, b, fill) => {
     g.beginPath();
-    g.arc(lx, ly, 7, 0, TAU);
+    for (const q of a) g.lineTo(q.x, q.y);
+    for (const q of [...b].reverse()) g.lineTo(q.x, q.y);
+    g.closePath();
+    g.fillStyle = fill;
     g.fill();
+  };
+  const line = (points, width, colour, dy = 0) => {
+    g.beginPath();
+    for (const q of points) g.lineTo(q.x, q.y + dy);
+    g.lineWidth = width;
+    g.strokeStyle = colour;
+    g.stroke();
+  };
+  g.save();
+  g.lineJoin = g.lineCap = "round";
+  // Riveted iron fascia below the slab, then the worn stone slab itself.
+  band(outer, outer.map((q) => ({ x: q.x, y: q.y + 3.4 })), "#211a27");
+  line(outer, 0.5, "#4a3d4c", 1.1);
+  g.fillStyle = "#7d6a6a";
+  for (let i = 0; i < outer.length; i++) g.fillRect(outer[i].x - 0.25, outer[i].y + 2.1, 0.5, 0.5);
+  band(inner, outer, "#4f434d");
+  band(edge(9.2), edge(15.2), "#62555d");
+  // Flagstone joints across the slab and a seam down its middle.
+  const near = edge(9.2),
+    far = edge(15.2);
+  g.strokeStyle = "#3a303b";
+  g.lineWidth = 0.35;
+  g.beginPath();
+  for (let i = 0; i < near.length; i++) {
+    const f = i % 2 ? 0.5 : 0;
+    const a = { x: near[i].x + (far[i].x - near[i].x) * f, y: near[i].y + (far[i].y - near[i].y) * f };
+    g.moveTo(a.x, a.y);
+    g.lineTo(i % 2 ? far[i].x : (near[i].x + far[i].x) / 2, i % 2 ? far[i].y : (near[i].y + far[i].y) / 2);
   }
+  g.stroke();
+  line(edge(12.2), 0.3, "#3a303b");
+  // Wet sheen catching the lamps.
+  line(edge(11), 0.5, "#8b767344");
+  line(inner, 1.2, "#2a2230");
+  line(edge(8.3), 0.8, "#d9b347");
+  line(edge(8.3), 0.3, "#fff0a0", -0.25);
+  line(outer, 0.9, "#1a1422");
+  // Green-iron railing along the outer edge.
+  line(outer, 0.7, "#5f8d76", -3.6);
+  const posts = edge(15.6);
+  g.strokeStyle = "#2d4c46";
+  g.lineWidth = 0.6;
+  g.beginPath();
+  for (let i = 0; i < posts.length; i += 2) {
+    g.moveTo(posts[i].x, posts[i].y);
+    g.lineTo(posts[i].x, posts[i].y - 3.8);
+  }
+  g.stroke();
+  // Lamps every few metres, pooling warm light on the slab.
+  const lamps = edge(13.8);
+  for (let i = 3; i < lamps.length - 2; i += 8) {
+    const { x, y } = lamps[i];
+    g.fillStyle = "#1d1822";
+    g.fillRect(x - 0.35, y - 9, 0.7, 9);
+    g.fillStyle = "#ffe7a6";
+    g.beginPath();
+    g.arc(x, y - 9.4, 0.9, 0, TAU);
+    g.fill();
+    g.globalCompositeOperation = "lighter";
+    const glow = g.createRadialGradient(x, y - 4, 0.5, x, y - 4, 11);
+    glow.addColorStop(0, "#ffc86a3a");
+    glow.addColorStop(1, "#ffc86a00");
+    g.fillStyle = glow;
+    g.fillRect(x - 11, y - 15, 22, 22);
+    g.globalCompositeOperation = "source-over";
+  }
+  g.restore();
 }
 
 // Draw the overhead deck along the vertical legs (including West & East Rail Bridges over la Ferre)
@@ -310,6 +378,36 @@ function drawVerticalAndCornerDeck(ox, oy) {
     g.translate(0, -2.5);
     drawDeckStroke([a, b], 13.5, "#362c3e");
     g.restore();
+
+    // Lattice girder on the side facing the camera, like the painted market ironwork.
+    if (Math.abs(a.x - b.x) > 0.5) {
+      const dx = b.x - a.x,
+        dy = b.y - a.y,
+        len = Math.hypot(dx, dy) || 1,
+        // The face toward the camera: the deck edge with the larger screen y.
+        nx = (dy / len) * (dx > 0 ? -1 : 1),
+        ny = (-dx / len) * (dx > 0 ? -1 : 1),
+        top = 7.25,
+        drop = 6.2;
+      const P = (f, down) => ({ x: a.x + dx * f + nx * top, y: a.y + dy * f + ny * top - lift + down });
+      g.beginPath();
+      const steps = Math.max(1, Math.round(len / 5));
+      for (let i = 0; i <= steps; i++) {
+        const q = P(i / steps, i % 2 ? drop : 0.8);
+        i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y);
+      }
+      g.strokeStyle = "#5a4a56";
+      g.lineWidth = 0.7;
+      g.stroke();
+      g.beginPath();
+      const t0 = P(0, drop),
+        t1 = P(1, drop);
+      g.moveTo(t0.x, t0.y);
+      g.lineTo(t1.x, t1.y);
+      g.strokeStyle = "#7d6460";
+      g.lineWidth = 0.9;
+      g.stroke();
+    }
 
     // Main viaduct deck, ballast bed and rails.
     drawDeckStroke([a, b], 14.5, "#1c1626");
@@ -405,7 +503,8 @@ export function visibleRails(ox, oy) {
   for (const st of ring.stations || []) {
     const sx = st.stop.x,
       sy = st.stop.y;
-    if (sx < ox - 50 || sx > ox + game.vw + 50 || sy < oy - 60 || sy - ring.deckLift > oy + game.vh + 60)
+    const reach = PLATFORM_HALF_LENGTH + 20;
+    if (sx < ox - reach || sx > ox + game.vw + reach || sy < oy - reach || sy - ring.deckLift > oy + game.vh + reach)
       continue;
     rails.push({
       y: st.street.y - 3,

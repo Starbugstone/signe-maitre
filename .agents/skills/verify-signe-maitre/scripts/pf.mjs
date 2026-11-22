@@ -134,8 +134,8 @@ window.__pf = Object.freeze({
       ring: (() => {
         const { ring, tt } = ringLine();
         return {
-          fallback: ring.fallback, deckLift: ring.deckLift, length: +ring.length.toFixed(1),
-          stations: ring.stations.map((s) => ({ id: s.id, name: s.name[document.documentElement.lang] ?? s.name.fr, s: +s.s.toFixed(1), street: xy(s.street), stop: xy(s.stop) })),
+          deckLift: ring.deckLift, length: +ring.length.toFixed(1),
+          stations: ring.stations.map((s) => ({ id: s.id, name: s.name[document.documentElement.lang] ?? s.name.fr, s: +s.s.toFixed(1), side: s.side, street: xy(s.street), stop: xy(s.stop) })),
           trains: Array.from({ length: tt.sets }, (_, k) => {
             const st = trainsetAt(tt, k, game.time);
             return { k, s: +st.s.toFixed(1), v: +st.v.toFixed(1), station: st.station, doors: st.doors,

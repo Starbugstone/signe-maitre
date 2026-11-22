@@ -70,9 +70,8 @@ export function buildRingPiers(layout) {
       for (const [bLeft, bRight] of section.bases) {
         const x1 = X(col) + bLeft,
           x2 = X(col) + bRight;
-        // Skip the very outer corner curve edge piers so the curve meets the vertical leg cleanly.
-        if (col === minCol && x1 < left + 12) continue;
-        if (col === maxCol && x2 > right - 12) continue;
+        // No horizontal pier under a corner curve: the curve has left the straight there.
+        if (x1 < left + cornerR || x2 > right - cornerR) continue;
         // Never drop a pier inside an intersection roadway or roundabout.
         if (Math.abs((x1 + x2) / 2 - X(col)) < 26) continue;
         piers.push({

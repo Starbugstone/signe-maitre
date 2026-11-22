@@ -328,7 +328,10 @@ const ring = {
   right: ringRight,
   top: ringTop,
   bottom: ringBottom,
-  cornerR: 36,
+  // 18 m coaches need wide curves: a 150-unit (about 31 m) radius keeps each
+  // carriage over the deck through the corner.
+  cornerR: 150,
+  cornerSteps: 24,
   deckLift: 40,
   stations: [
     {

@@ -269,9 +269,11 @@ const checks = {
   // platform; one on the street in front of it stays fully visible.
   "ring-train-depth": () => {
     const { ring, tt } = ringLine();
-    const station = ring.stations[0];
+    // A station on the north leg, where the deck runs east-west in front of the buildings.
+    const index = ring.stations.findIndex((st) => st.id === "porte-etoile"),
+      station = ring.stations[index];
     let t = 0;
-    while (trainsetAt(tt, 0, t).station !== 0) t += 0.1;
+    while (trainsetAt(tt, 0, t).station !== index) t += 0.1;
     game.time = t + 2;
     try {
       // The lower edge of the deck and platform crosses the middle of the sampled body.
