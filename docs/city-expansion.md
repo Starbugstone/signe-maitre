@@ -85,7 +85,7 @@ Copy the framing of the existing street paintings in `assets/market.webp`, `asse
 
 `kerbs` are the measured pixel positions in your final image (west kerb, centre line, east kerb; north kerb, centre line, south kerb). Measure them; do not copy the target numbers.
 
-## Vehicle art contract (Astra C produces, Fable / Opus / Sol bake)
+## Vehicle art contract (Astra C paints, Fable bakes every atlas)
 
 The game shows vehicles from the same elevated camera at 64 headings. The sedan and ambulance are baked from orthographic panel paintings onto a simple 3D body (`tools/art/bake-ambulance.py`, `assets/rescueVan.webp`). New vehicles use the same pipeline.
 
@@ -93,7 +93,7 @@ For each vehicle paint, on a transparent or flat magenta (#ff00ff) background, o
 
 Ids: `volta` (electric saloon), `suv`, `bus`, `dumper` (dump truck, tipper body), `moto` (motorbike with a rider in the bailiff colours as a separate layer `rider.png`), `barge`, `riverboat`, `speedboat`, `launch`, `ringTrain` (one carriage plus a cab end, two-tone green like `assets/metro.webp`).
 
-Finished atlases follow the ambulance format: 64 headings, 192 × 192 px per frame, one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), written to `assets/<id>Turns.webp`, `assets/<id>Dented.webp`, `assets/<id>Wreck.webp`.
+Finished atlases follow the ambulance format: 64 headings, 192 × 192 px per frame, one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length in px at frame scale) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
 
 ## Fleet contract (Fable publishes)
 
