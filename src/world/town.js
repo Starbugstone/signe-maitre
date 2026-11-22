@@ -1,5 +1,6 @@
 import { buildTown, CELL_W, CELL_H, X, Y, ROAD_HALF_WIDTH } from "./layout.js";
 import { pierDepth, buildRingPiers } from "./viaduct.js";
+import { paintings } from "./paintings.js";
 
 export { CELL_W, CELL_H, X, Y };
 export const TAU = 2 * Math.PI;
@@ -57,31 +58,52 @@ const blocks = [
   ["docks", "garage", "market", "square", "market", "garage", "market", "square", "market", "garage", "square", "market", "docks", "market", "garage", "docks"], // r11 Petite Ceinture South
 ];
 
-// Semantic cell kinds matching art-src/scenery/manifest.json keys for drop-in painting integration.
+// The painting each cell shows. `blocks` above keeps the first four paintings as the palette
+// the layout validates; every key here is registered in src/world/paintings.js.
+const IRON_BRIDGES = new Set([1, 6, 12]);
+const STATION_COLS = new Set([3, 8, 12]);
 const cellKinds = blocks.map((row, r) =>
   row.map((key, c) => {
     if (r === RIVER_ROW) {
-      if (c === 8) return "palaisJustice";
-      if (c === 9) return "islandWest";
-      if (c === 10) return "islandCathedral";
-      return BRIDGE_SET.has(c) ? "riverBridge" : "river";
+      if (c === 8) return "islandWest";
+      if (c === 9) return "islandCathedral";
+      if (c === 10) return "islandEast";
+      if (!BRIDGE_SET.has(c)) return "river";
+      return IRON_BRIDGES.has(c) ? "riverIronBridge" : "riverBridge";
     }
+    // Monuments and roundabouts.
     if (c === 3 && r === 3) return "starArch";
     if (c === 6 && r === 5) return "obeliskSquare";
-    if (ROUNDABOUTS.has(`c${c}r${r}`)) return "boulevard";
+    if (ROUNDABOUTS.has(`c${c}r${r}`)) return "rondPoint";
     if (c === 3 && r === 8) return "towerBase";
     if (c === 7 && r === 3) return "opera";
     if (c === 8 && r === 0) return "basilica";
+    if (c === 8 && r === 6) return "palaisJustice";
+    // Gardens.
     if ((c === 3 || c === 4) && r === 9) return "park";
     if (c === 14 && (r === 3 || r === 4)) return "park";
     if (c === 7 && r === 9) return "park";
-    if (c >= 10 && c <= 11 && r === 4) return "alleyCross";
-    if (c >= 9 && c <= 12 && r >= 3 && r <= 5) return "haussmannCafe";
-    if (r === 1) return "ringNorth";
-    if (r === 11) return "ringSouth";
-    if (r === 6 || r === 8) return "boulevard";
-    if (r === 2 || r === 10 || c === 2 || c === 13) return "boulevard";
-    if (key === "square") return (c + r) % 3 === 0 ? "haussmannCafe" : "haussmann";
+    // Le Vieux Marais: the two all-alley crossings.
+    if ((c === 10 || c === 11) && r === 4) return "alleyCross";
+    // Petite Ceinture, north and south legs: painted spans between the corner cells.
+    if ((r === 1 || r === 11) && c >= 2 && c <= 13) {
+      if (STATION_COLS.has(c)) return (c + r) % 2 ? "ringStationB" : "ringStation";
+      if (key === "market") return "market";
+      return (c + r) % 2 ? "ringNorthB" : "ringNorth";
+    }
+    // Streets that end at a closed north side.
+    if (["5,2", "12,10", "1,5", "12,5", "4,10", "7,10"].includes(`${c},${r}`)) return "teeNorth";
+    // Case addresses keep the frontage their doors were set against.
+    if (c === 7 && r === 5) return "garage"; // the étude
+    if (c === 5 && r === 4) return "garage"; // Crédit Sec
+    if (c === 6 && r === 6) return "haussmann"; // Résidence Mireille
+    if (c === 9 && r === 5) return "haussmannCafe"; // Le Boum
+    if (["4,4", "11,6", "6,9", "2,4", "13,8"].includes(`${c},${r}`)) return "marketHall";
+    if (c >= 9 && c <= 12 && r >= 3 && r <= 5) return (c + r) % 2 ? "haussmannCafe" : "haussmann";
+    // Tree-lined Grands Boulevards and quays, broken up with Haussmann blocks.
+    if (r === 6 || r === 8 || r === 2 || r === 10 || c === 2 || c === 13)
+      return (c * 3 + r) % 4 === 0 ? "haussmann" : (c + r * 2) % 5 === 0 ? "haussmannCafe" : "boulevard";
+    if (key === "square") return (c + r) % 3 === 0 ? "haussmannCafe" : (c * 2 + r) % 5 === 0 ? "square" : "haussmann";
     return key;
   }),
 );
@@ -383,7 +405,9 @@ const ring = {
   ],
 };
 
-// 7 Paris-inspired Port-Fer monuments.
+// Seven monuments, each where its painting stands. `footprint` is the outline on the map;
+// `piers` are the parts that stop a walker or a car when the footprint itself is open.
+const at = (col, row, polygon) => polygon.map(([x, y]) => [+(X(col) + x).toFixed(1), +(Y(row) + y).toFixed(1)]);
 const monuments = [
   {
     id: "arc-saisies",
@@ -393,6 +417,8 @@ const monuments = [
     x: X(3),
     y: Y(3),
     footprint: octagon(X(3), Y(3), 15, 13),
+    piers: paintings.starArch.solids.map((poly) => at(3, 3, poly)),
+    passUnder: true,
     style: "arch",
   },
   {
@@ -402,15 +428,10 @@ const monuments = [
     row: 8,
     x: X(3),
     y: Y(8),
-    // Outer base footprint for map/visuals; passUnder=true uses the 4 corner iron legs as collision piers so roads pass beneath.
-    footprint: boxPoly(X(3) - 44, Y(8) - 42, X(3) + 44, Y(8) + 42),
+    // Roads pass beneath; the two rear stone shoes stand in fenced gardens on the quay.
+    footprint: boxPoly(X(3) - 64, Y(8) - 42, X(3) + 65, Y(8) + 70),
     passUnder: true,
-    piers: [
-      boxPoly(X(3) - 44, Y(8) - 42, X(3) - 29, Y(8) - 30),
-      boxPoly(X(3) + 29, Y(8) - 42, X(3) + 44, Y(8) - 30),
-      boxPoly(X(3) - 44, Y(8) + 27, X(3) - 29, Y(8) + 41),
-      boxPoly(X(3) + 29, Y(8) + 27, X(3) + 44, Y(8) + 41),
-    ],
+    piers: paintings.towerBase.solids.map((poly) => at(3, 8, poly)),
     style: "tower",
   },
   {
@@ -428,9 +449,9 @@ const monuments = [
     name: { fr: "Hôtel des Ventes", en: "Grand Auction House" },
     col: 7,
     row: 3,
-    x: X(7) + 74,
+    x: X(7) - 79,
     y: Y(3) - 62,
-    footprint: boxPoly(X(7) + 36, Y(3) - 96, X(7) + 114, Y(3) - 33),
+    footprint: boxPoly(X(7) - 112, Y(3) - 100, X(7) - 44, Y(3) - 33),
     style: "opera",
   },
   {
@@ -438,32 +459,44 @@ const monuments = [
     name: { fr: "Sacré-Créancier", en: "Sacred Creditor Basilica" },
     col: 8,
     row: 0,
-    x: X(8),
+    x: X(8) - 80,
     y: Y(0) - 52,
-    footprint: boxPoly(X(8) - 64, 8, X(8) + 64, Y(0) - 33),
+    footprint: boxPoly(X(8) - 122, 6, X(8) - 44, Y(0) - 33),
     style: "basilica",
   },
   {
     id: "palais-justice",
     name: { fr: "Palais de Justice", en: "Law Courts" },
     col: 8,
-    row: 7,
-    x: X(8) - 64,
-    y: Y(7) - 49,
-    footprint: boxPoly(X(8) - 98, Y(7) - 68, X(8) - 31, Y(7) - 31),
+    row: 6,
+    x: X(8) - 76,
+    y: Y(6) - 60,
+    footprint: boxPoly(X(8) - 118, Y(6) - 100, X(8) - 32, Y(6) - 33),
     style: "palais",
   },
   {
     id: "notre-dame-port",
     name: { fr: "Notre-Dame-du-Port", en: "Our Lady of the Port" },
-    col: 10,
+    col: 9,
     row: 7,
-    x: X(10) + 66,
-    y: Y(7),
-    footprint: boxPoly(X(10) + 33, Y(7) - 60, X(10) + 98, Y(7) + 60),
+    x: X(9) + 11,
+    y: Y(7) - 73,
+    footprint: at(9, 7, paintings.islandCathedral.cathedral),
+    piers: paintings.islandCathedral.solids.map((poly) => at(9, 7, poly)),
     style: "cathedral",
   },
 ];
+
+// Painted obstacles outside the monuments: roundabout islands wider than their traffic
+// circle, and the water at the four corners of the island's bounding box.
+const solids = [];
+for (const [r, row] of cellKinds.entries())
+  for (const [c, key] of row.entries()) {
+    const painting = paintings[key];
+    if (painting.island && painting.roundabout) solids.push(at(c, r, painting.island));
+    if (painting.river && painting.solids && key !== "islandCathedral")
+      for (const poly of painting.solids) solids.push(at(c, r, poly));
+  }
 
 // Three Parisian night parks rendered as landscaped garden squares.
 const parks = [
@@ -480,6 +513,9 @@ export const definition = {
   roads: buildParisRoads(),
   ring,
   monuments,
+  solids,
+  // Painted bridge decks are wider than the 44-unit navigation span boats steer by.
+  bridgeDeck: (col) => (col >= 8 && col <= 10 ? 23 : IRON_BRIDGES.has(col) ? 28 : 34),
   parks,
   railways: [],
   // 5 case addresses relocated to central Paris-Port-Fer landmarks (all verified clear of props & obstacles).
@@ -488,7 +524,7 @@ export const definition = {
     { id: "repo", col: 5, row: 4, dx: 64, dy: -21, symbol: "R", color: "#ff79ae" },
     { id: "noise", col: 9, row: 5, dx: -64, dy: -21, symbol: "C", color: "#64ebd0" },
     { id: "flat", col: 6, row: 6, dx: 72, dy: -22, symbol: "S", color: "#ffa851" },
-    { id: "auction", col: 7, row: 3, dx: 62, dy: -22, symbol: "A", color: "#c2a0ff" },
+    { id: "auction", col: 7, row: 3, dx: -79, dy: -21, symbol: "A", color: "#c2a0ff" },
   ],
   interiors: [
     {

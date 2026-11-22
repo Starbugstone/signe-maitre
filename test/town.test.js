@@ -267,9 +267,9 @@ test("roundabouts block the island, open the ring, route around the island and c
   for (const arc of ringArcs) assert.ok(arc.deltaA < 0, `roundabout arc must be anticlockwise, got ${arc.deltaA}`);
 });
 
-test("Tour de Fer lets roads pass beneath while its four corner piers block actors", () => {
+test("Tour de Fer lets roads pass beneath while its fenced rear gardens block actors", () => {
   const tower = town.monuments.find((m) => m.id === "tour-fer");
-  assert.ok(tower?.passUnder && tower.piers?.length === 4);
+  assert.ok(tower?.passUnder && tower.piers?.length === 2);
   for (let d = -50; d <= 50; d += 10) {
     assert.equal(blockedIn(town, tower.x + d, tower.y, 2.6), false);
     assert.equal(blockedIn(town, tower.x, tower.y + d, 2.6), false);

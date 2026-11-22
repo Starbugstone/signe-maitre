@@ -191,6 +191,8 @@ export function buildTown({
   roads: roadsSpec,
   ring: ringSpec,
   monuments = [],
+  solids = [],
+  bridgeDeck,
   parks = [],
   railways = [],
   addresses = [],
@@ -505,7 +507,7 @@ export function buildTown({
         minY < river.bottom &&
         maxY > river.top &&
         bridgeCols.has(Math.round((na.x - X(0)) / CELL_W));
-      const hw = alley ? e.halfWidth : isBridge ? 22 : streetHW;
+      const hw = alley ? e.halfWidth : isBridge ? (bridgeDeck?.(Math.round((na.x - X(0)) / CELL_W)) ?? 22) : streetHW;
       const topPad = alley ? e.halfWidth : northPavement;
       const botPad = alley ? e.halfWidth : southPavement;
       openRectsAll.push({
@@ -629,6 +631,7 @@ export function buildTown({
     const polys = m.piers ? m.piers : m.footprint ? [m.footprint] : [];
     for (const poly of polys) solidPolysAll.push({ poly, bounds: polyBounds(poly), monument: m });
   }
+  for (const poly of solids) solidPolysAll.push({ poly, bounds: polyBounds(poly) });
 
   // 6. Index per cell for fast O(1) collision & rendering lookups.
   const cells = new Array(rows * cols);
