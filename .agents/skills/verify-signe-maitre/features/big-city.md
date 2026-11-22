@@ -13,7 +13,7 @@ Port-Fer expands to a 16×12 Paris-inspired city crossed by River la Ferre with 
 
 ## How to get to it (user POV)
 
-Open the map with **M** from the étude on Place de la Contrainte to see the whole city. Board the Étude 2000 sedan with **F**, drive west and circulate anticlockwise around the Obelisk roundabout, then drive south across Pont de la Contrainte over River la Ferre onto Quai Sud. Drive east to the mouth of Ruelle des Écoles at column 9: the wide sedan is stopped at the narrow mouth, while exiting with **F** lets you walk straight down the cobblestone alley. Re-board the sedan, drive down column 8 avenue to row 11 (Petite Ceinture South), get out and walk onto the Gare du Sud station landing under the elevated viaduct.
+Open the map with **M** from the étude on Place de la Contrainte to see the whole city. Board the Étude 2000 sedan with **F**, drive west and circulate anticlockwise around the Obelisk roundabout, then drive south across Pont de la Contrainte over River la Ferre onto Quai Sud. Drive east to the mouth of Ruelle des Écoles at column 9: the wide sedan is stopped at the narrow mouth, while exiting with **F** lets you walk straight down the cobblestone alley. Follow the column 8 avenue south on foot to row 11 (Petite Ceinture South) and walk onto the Gare du Sud station landing under the elevated viaduct.
 
 ## Driving it with pf
 
@@ -26,7 +26,7 @@ Run `pf run big-city --build probe` on `desktop/en` and `pf run big-city --build
 - **`on-river-bridge` / `drive-across-river-bridge`**: drives south down column 6 onto Pont de la Contrainte over River la Ferre (checking the river district name) and continues onto Quai Sud (checking the South Bank district name).
 - **`wide-car-refused-by-alley`**: drives east along Quai Sud to column 9, faces south into Ruelle des Écoles and confirms the wide sedan cannot enter the narrow `halfWidth = 7` alley.
 - **`walk-narrow-alley`**: parks clear on the Quai Sud riverside shoulder, exits on foot and walks down the same cobblestone alley.
-- **`ring-viaduct-and-station`**: re-boards the sedan, drives down column 8 avenue to Petite Ceinture South (row 11), exits and walks onto the Gare du Sud station stair landing under the elevated viaduct.
+- **`ring-viaduct-and-station`**: walks down column 8 avenue to Petite Ceinture South (row 11) and reaches the Gare du Sud station stair landing under the elevated viaduct.
 
 ## Gotchas
 

@@ -220,7 +220,7 @@ async function driveRouteTo(
     }
 
     // Target speed slows smoothly for turns, roundabouts and final approach.
-    let vTarget = tight ? 38 : maxSpeed;
+    let vTarget = tight ? 29 : maxSpeed;
     if (absErr > 0.7) vTarget = Math.min(vTarget, 30);
     if (stop && remDest < 68) vTarget = Math.min(vTarget, Math.max(16, remDest * 0.55));
 
@@ -434,20 +434,17 @@ export default async function (d) {
   });
 
   await d.step("ring-viaduct-and-station", async () => {
-    // Return to the sedan, drive south down avenue col 8 to Petite Ceinture South, and walk onto Gare du Sud station!
-    await d.walkTo({ x: X(9), y: Y(8) + 6 }, { tol: 8 });
-    const { sedan } = await d.state();
-    await d.walkTo(
-      { x: sedan.x, y: sedan.y + (sedan.y > Y(8) ? -15 : 15) },
-      { tol: 4, until: (hud) => hud.hint.includes(d.t("enterHint")) },
-    );
-    await d.press("car");
-    await d.waitFor("re-boarded sedan", ({ state }) => state.ride?.model === "Étude 2000");
-
+    // Continue on foot from the alley to the Gare du Sud landing.
     const station = town.ring.stations.find((st) => st.id === "gare-sud");
-    await driveRouteTo(d, { x: station.street.x - 24, y: Y(11) + 6 }, { tol: 20, stop: true, timeout: 95000, maxSpeed: 78 });
-    await d.press("car");
-    await d.waitFor("on foot near ring viaduct", ({ state }) => state.ride === null);
+    const avenue = X(8) - 17;
+    await d.walkTo({ x: X(9), y: Y(8) + 17 }, { tol: 5 });
+    await d.walkTo({ x: avenue, y: Y(8) + 17 }, { tol: 5 });
+    for (const row of [9, 10]) {
+      await d.walkTo({ x: avenue, y: Y(row) - 18 }, { tol: 5 });
+    }
+    const streetY = Y(11) - 10;
+    await d.walkTo({ x: avenue, y: streetY }, { tol: 3 });
+    await d.walkTo({ x: station.street.x, y: streetY }, { tol: 3 });
     await d.walkTo(station.street, { tol: 6 });
     const { p, ride } = await d.state();
     d.expect(
