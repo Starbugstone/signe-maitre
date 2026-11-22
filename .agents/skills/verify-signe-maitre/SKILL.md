@@ -26,7 +26,7 @@ Every `pf run` starts its own headless Chromium. Each journey gets a fresh brows
 Two builds can be driven.
 
 - **`--build shipped`** is the default. It drives `index.html` exactly as committed and refuses to start if `index.html` no longer matches a fresh build of `src/`. Journeys can only read what a player sees.
-- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians, moving traffic, boats and moorings. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
+- **`--build probe`** bundles the same `src/` with the same esbuild settings, writes `.verify/runs/<run-id>/probe.html` and adds the frozen `window.__pf.snapshot()` call. That call returns copies of player position, the active case, the wallet, the interior, the planned street route, the ambulance, downed pedestrians, pedestrians still on their feet (`walkers`), moving traffic (with fleet model ids, nameplates and dimensions), parked cars, bus stops, the ring trains, boats and moorings. Journeys use it to steer and to check side effects. It cannot change game state. All actions still go through real keys or touches.
 
 Use `--url <address>` to drive a deployed copy, such as `https://starbugstone.github.io/signe-maitre/`. In that mode, only journeys marked `needs: "hud"` can run. Others are reported as skipped.
 
@@ -67,8 +67,8 @@ The driver `d` provides these calls.
 Run the built-in gameplay journeys on keyboard and touch. The art journeys and their video review steps are in [Hero gait](features/hero-gait.md).
 
 ```sh
-pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --keep-going
-pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery --build probe --device phone --lang fr --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery ring-train ring-escape fleet --build probe --keep-going
+pf run boot map-view office-interior noise-case home-visit street-report ambulance street-life street-scenery ring-train ring-escape fleet --build probe --device phone --lang fr --keep-going
 ```
 
 Use `--keep-going` to continue to the next journey after a failure. Without it, the run stops at the first failure.
@@ -99,7 +99,7 @@ Proof standards:
 pf cleanup --run-id ID
 ```
 
-This stops only the recorded PIDs and removes the run state. Evidence in `.verify/evidence/` is never removed. Never stop Chromium by name, because other tools on this machine run their own headless Chromium. `.verify/probe.html` is rebuilt on every probe run and can be deleted.
+This stops only the recorded PIDs and removes the run state. Evidence in `.verify/evidence/` is never removed. Never stop Chromium by name, because other tools on this machine run their own headless Chromium.
 
 ## Helpers
 

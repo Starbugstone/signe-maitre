@@ -20,6 +20,8 @@ export const game = {
   artReady: false,
   konamiHero: false,
   ride: null,
+  // La Petite Ceinture: null, { phase: "platform", station } or { phase: "riding", set, car, boardedAt, alightAt }.
+  transit: null,
   time: 0,
   heat: 0,
   wallet: 0,

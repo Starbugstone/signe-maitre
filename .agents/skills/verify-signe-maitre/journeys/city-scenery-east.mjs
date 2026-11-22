@@ -27,10 +27,11 @@ export default async function (d) {
   await arrive("ile-de-la-ferre", { x: X(9) - 40, y: Y(7) + 6 }, "sedan on the island street", 48);
   await d.step("cathedral-forecourt-on-foot", async () => {
     await leaveCar(d);
-    const spot = { x: cathedral.x - 20, y: town.river.islands[0].top + 26 };
+    // The parvis: between the portals and the island street's north kerb.
+    const spot = { x: cathedral.x - 20, y: Y(town.riverRow) - 22 };
     await d.walkTo(spot, { tol: 5 });
     const { p } = await d.state();
-    d.expect(near(p, spot, 9), "player stands on the apron before Notre-Dame-du-Port", p);
+    d.expect(near(p, spot, 9), "player stands on the parvis before Notre-Dame-du-Port", p);
   });
   await d.step("back-to-the-sedan", () => boardCar(d));
 

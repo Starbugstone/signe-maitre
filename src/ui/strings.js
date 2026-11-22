@@ -1,3 +1,4 @@
+import { fleet } from "../game/fleet.js";
 const words = {
   goInside: ["Go inside the office", "Entrer dans l’étude"],
   leaveRoom: ["{job} · Return to the street", "{job} · Retourner dans la rue"],
@@ -78,6 +79,21 @@ const words = {
     "Votre voiture bloquait la circulation. La fourrière l’a ramenée devant l’étude.",
   ],
   towing: ["TOWED", "FOURRIÈRE"],
+  platformWait: [
+    "Platform ticket stamped, in triplicate. Waiting for the train at",
+    "Ticket de quai composté en trois exemplaires. En attente du train à",
+  ],
+  boarded: [
+    "Doors closing. The fare goes down as a travel expense.",
+    "Attention à la fermeture des portes. Le billet passera en frais de déplacement.",
+  ],
+  alightRequest: ["Stop requested:", "Arrêt demandé :"],
+  leftPlatform: ["Back down to the street.", "Retour dans la rue."],
+  alighted: ["Off the train at", "Descente à"],
+  lostTail: [
+    "The inspectors are still waiting at the other station. Heat dropped.",
+    "Les contrôleurs vous attendent encore à l’autre station. L’alerte retombe.",
+  ],
   recovery: ["Roadside assistance", "Dépannage"],
   recoveryText: [
     "Your mechanic accepts payment in exposure. Specifically, exposure to our expenses department. Order a repair?",
@@ -250,16 +266,16 @@ const words = {
     "↑ ↓ ← → / ZQSD / WASD　Marcher ou conduire　·　Maj  Courir　·　F  Monter / descendre　·　H  Klaxon / sirène　·　Espace  Gifle / frein à main　·　E  Acte　·　M  Plan　·　V  Réplique",
   ],
   helpText: [
-    "Arrows, WASD or ZQSD move you on foot. Hold Shift to run, or hold Run with a direction on the touch pad. F gets you into or out of a nearby car or a boat at a mooring. Slow down near an anchor before stepping ashore. Accelerate with up, brake or reverse with down, steer with left and right. Hold H or the horn button to signal. In the ambulance, press H or Siren to turn the siren on or off. Space slaps on foot or pulls the handbrake. E opens a job. Beside a downed pedestrian, press R or tap Incident report to hand over a copy. The ambulance collects anyone still waiting. M opens the city map. Press V or tap the speech button to deliver your signature line.",
-    "À pied, utilisez les flèches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une flèche sur l’écran tactile. F pour monter en voiture ou embarquer à un point d’amarrage. Ralentissez près d’une ancre avant de débarquer. Haut pour accélérer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou le bouton du klaxon pour signaler votre présence. Dans l’ambulance, appuyez sur H ou Sirène pour activer ou couper la sirène. Espace pour gifler ou tirer le frein à main. E pour un dossier. Près d’un passant à terre, R ou le bouton Signalement permet de remettre un double. L’ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de réplique pour sortir votre phrase fétiche.",
+    "Arrows, WASD or ZQSD move you on foot. Hold Shift to run, or hold Run with a direction on the touch pad. F gets you into or out of a nearby car or a boat at a mooring. Slow down near an anchor before stepping ashore. At a ring station sign, F climbs to the platform; on board, F gets you off at the next stop. Accelerate with up, brake or reverse with down, steer with left and right. Hold H or the horn button to signal. In the ambulance, press H or Siren to turn the siren on or off. Space slaps on foot or pulls the handbrake. E opens a job. Beside a downed pedestrian, press R or tap Incident report to hand over a copy. The ambulance collects anyone still waiting. M opens the city map. Press V or tap the speech button to deliver your signature line.",
+    "À pied, utilisez les flèches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une flèche sur l’écran tactile. F pour monter en voiture ou embarquer à un point d’amarrage. Ralentissez près d’une ancre avant de débarquer. Au panneau d’une gare de la Ceinture, F mène au quai ; à bord, F vous fait descendre au prochain arrêt. Haut pour accélérer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou le bouton du klaxon pour signaler votre présence. Dans l’ambulance, appuyez sur H ou Sirène pour activer ou couper la sirène. Espace pour gifler ou tirer le frein à main. E pour un dossier. Près d’un passant à terre, R ou le bouton Signalement permet de remettre un double. L’ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de réplique pour sortir votre phrase fétiche.",
   ],
   gamepadControls: [
     "Left stick · Move / steer　 RT / LT · Accelerate / brake　 Y · Car　 X · Slap / handbrake　 A · Job　 View · Map　 Menu · Controls",
     "Stick gauche · Marcher / tourner　 RT / LT · Accélérer / freiner　 Y · Auto　 X · Gifle / frein à main　 A · Acte　 View · Plan　 Menu · Commandes",
   ],
   controllerHelp: [
-    "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters and exits cars and moored boats. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
-    "Appuyez sur un bouton de la manette Xbox pour l’activer. Déplacez-vous avec le stick gauche ou la croix directionnelle et maintenez LB pour courir. Y sert à monter et à descendre des voitures et des bateaux à quai. Tournez avec le stick gauche. RT accélère, LT freine ou fait reculer. Maintenez RB pour klaxonner ou appuyez dessus pour actionner la sirène. X sert à gifler ou à tirer le frein à main. A ouvre un dossier. Enfoncez le stick droit (RS) pour signaler un incident. B lance une réplique. View ouvre le plan et Menu affiche les commandes.",
+    "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters and exits cars and moored boats, climbs to a ring station platform or gets you off the train at the next stop. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
+    "Appuyez sur un bouton de la manette Xbox pour l’activer. Déplacez-vous avec le stick gauche ou la croix directionnelle et maintenez LB pour courir. Y sert à monter et à descendre des voitures et des bateaux à quai, à monter sur le quai d’une gare de la Ceinture ou à descendre du train au prochain arrêt. Tournez avec le stick gauche. RT accélère, LT freine ou fait reculer. Maintenez RB pour klaxonner ou appuyez dessus pour actionner la sirène. X sert à gifler ou à tirer le frein à main. A ouvre un dossier. Enfoncez le stick droit (RS) pour signaler un incident. B lance une réplique. View ouvre le plan et Menu affiche les commandes.",
   ],
   dialogControls: [
     "Left stick / D-pad · Choose　 A · Select　 B · Back　 Right stick · Scroll",
@@ -267,10 +283,17 @@ const words = {
   ],
   cityMap: ["PORT-FER  /  STREET MAP", "PORT-FER  /  PLAN DE VILLE"],
   legend1: ["É Office · R Repo · C Noise report", "É Étude · R Saisie auto · C Constat"],
-  legend2: ["S Home visit · A Auction · ◆ You · ■ Mooring", "S Saisie à domicile · A Enchères · ◆ Vous · ■ Amarrage"],
+  legend2: ["S Home visit · A Auction · ◆ You · ○ Ring station · ■ Mooring", "S Saisie à domicile · A Enchères · ◆ Vous · ○ Gare de la Ceinture · ■ Amarrage"],
   mapHint: ["{map} / Map · Back to town", "{map} / Plan · Retour en ville"],
   outHint: ["{car} / Car · Get out", "{car} / Auto · Descendre"],
   enterHint: ["{car} / Car · Take the wheel", "{car} / Auto · Prendre le volant"],
+  stationHint: ["{car} / Car · Take the Petite Ceinture", "{car} / Auto · Prendre la Petite Ceinture"],
+  platformHint: ["On the platform · {car} / Car · Back to the street", "Sur le quai · {car} / Auto · Redescendre dans la rue"],
+  nextStopHint: ["Next stop:", "Prochain arrêt :"],
+  alightKey: ["{car} / Car · Get off there", "{car} / Auto · Descendre à cet arrêt"],
+  alightingHint: ["Getting off at", "Vous descendez à"],
+  doorsOpenHint: ["Doors open:", "Portes ouvertes :"],
+  alightNowKey: ["{car} / Car · Get off here", "{car} / Auto · Descendre ici"],
   footHint: ["On foot · {action} to slap", "À pied · {action} pour gifler"],
   jobKey: ["{job} / Job", "{job} / Acte"],
   quip: ["Quip", "Réplique"],
@@ -292,5 +315,7 @@ const words = {
   districtRiveGauche: ["Clerks’ Quarter", "Quartier des Clercs"],
   districtDocks: ["Ferre Docks", "Les Docks de la Ferre"],
 };
+
+for (const entry of Object.values(fleet)) words[entry.label] = [entry.name.en, entry.name.fr];
 
 export { words };

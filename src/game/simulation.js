@@ -11,6 +11,7 @@ import { boatFleet, river, updateBoats } from "./boats.js";
 import { strides } from "../art/gait.js";
 import { updateAmbulance } from "./rescue.js";
 import { updatePerson } from "./crowd.js";
+import { updateTransit } from "./transit.js";
 
 let inspectorClock = 0,
   radioClock = 35,
@@ -39,11 +40,14 @@ function update(dt) {
     renderMessage();
   }
   p.moving = false;
+  updateTransit(dt);
   updateBoats(river, boatFleet, dt, game.ride, throttleInput(), steeringInput(), (boat) => {
     const volume = Math.max(0, 1 - Math.hypot(boat.x - p.x, boat.y - p.y) / 240);
     if (volume) shipHornSound(volume);
   });
-  if (game.ride) {
+  if (game.transit) {
+    // On the platform or aboard: the train carries the player.
+  } else if (game.ride) {
     const v = game.ride;
     if (v.domain !== "water") drive(v, dt, throttleInput(), steeringInput(), held.has("action"));
     p.x = v.x;
@@ -80,7 +84,7 @@ function update(dt) {
   for (const n of people) updatePerson(n, dt);
   updateAmbulance(dt);
   inspectorClock -= dt;
-  if (game.heat > 1.3 && inspectorClock <= 0 && people.filter((n) => n.kind === "inspector").length < 4) {
+  if (game.heat > 1.3 && !game.transit && inspectorClock <= 0 && people.filter((n) => n.kind === "inspector").length < 4) {
     for (let dx of [-70, 70, 0])
       if (!blocked(p.x + dx, p.y + 28, 4)) {
         person(p.x + dx, p.y + 28, "inspector");

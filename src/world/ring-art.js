@@ -7,7 +7,7 @@ import { CELL_H, CELL_W, X, Y, town } from "./town.js";
 import { artwork, game } from "../core/state.js";
 import { g } from "../platform/canvas.js";
 import { fromSource, paintings, ringFoot } from "./paintings.js";
-import { sideSupports } from "./viaduct.js";
+import { cornerSupportAt, cornerSupports, sideSupports } from "./viaduct.js";
 
 const P = plateScale;
 const unit = (image) => ({ w: image.width / P, h: image.height / P });
@@ -215,7 +215,31 @@ export function drawOverTrain(ox, oy) {
   }
 }
 
-// The painted supports of the side legs, each sorted with the street at its foot.
+// One free-standing pier of the north-leg painting with its arch springers, for the corners.
+// `foot` is the centre of its base in the sprite, in world units.
+let column;
+function cornerColumn() {
+  if (column) return column;
+  const m = fromSource("ringNorth", { ring: true }),
+    pier = 897;
+  const xs = pierOutline.map(([dx]) => m.x(pier + dx)),
+    ys = pierOutline.map(([, y]) => m.y(y));
+  const left = Math.min(...xs),
+    top = Math.min(...ys);
+  const image = document.createElement("canvas");
+  image.width = Math.ceil((Math.max(...xs) - left) * P);
+  image.height = Math.ceil((Math.max(...ys) - top) * P);
+  const ctx = image.getContext("2d");
+  ctx.beginPath();
+  for (let i = 0; i < xs.length; i++) ctx.lineTo((xs[i] - left) * P, (ys[i] - top) * P);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(plates.ringNorth, -(left + CELL_W / 2) * P, -(top + CELL_H / 2) * P);
+  column = { image, w: image.width / P, h: image.height / P, foot: [m.x(pier) - left, m.y(377) - top] };
+  return column;
+}
+
+// The painted supports of the side legs and the corners, each sorted with the street at its foot.
 export function sideSupportSprites(ox, oy) {
   const ring = town.ring,
     sprites = [];
@@ -226,6 +250,21 @@ export function sideSupportSprites(ox, oy) {
   // Sprite anchors: the bracket's column foot and the portal's track centre line.
   const bracketFoot = ((564 - 474) * CELL_W) / 1500,
     portalCentre = ((1060 - 996) * CELL_W) / 1500;
+  for (const support of cornerSupports) {
+    const { x, y } = cornerSupportAt(ring, support);
+    if (x < ox - 40 || x > ox + game.vw + 40 || y < oy - 6 || y - 56 > oy + game.vh) continue;
+    sprites.push({
+      y,
+      draw: (overhead) => {
+        if (overhead) return;
+        if (support.kind === "portal") g.drawImage(portal, x - portalCentre, y - p.h + 0.4, p.w, p.h);
+        else {
+          const c = cornerColumn();
+          g.drawImage(c.image, x - c.foot[0], y - c.foot[1] + 0.4, c.w, c.h);
+        }
+      },
+    });
+  }
   const seen = new Set();
   for (const pier of ring.piers) {
     if (pier.orientation !== "vertical" || pier.abutment) continue;

@@ -8,6 +8,7 @@ import { box, refreshLanguage, say, setGamepadMode, setLanguage, speak, t } from
 import { reportIncident } from "./game/rescue.js";
 import { beep, enableAudio, gameMix, motorSound, vehicleSignalSound } from "./audio/mixer.js";
 import { board } from "./game/boarding.js";
+import { transitControl, transitFocus } from "./game/transit.js";
 import { interact } from "./game/cases.js";
 import { slap } from "./game/slap.js";
 import { prepareHero } from "./art/hero.js";
@@ -104,6 +105,11 @@ function press(k, source) {
     speak();
     return;
   }
+  // In a ring station or aboard a train, only the car key does anything: leave or get off.
+  if (game.transit) {
+    if (k === "car") transitControl();
+    return;
+  }
   if (k === "horn") {
     if (!game.ride || game.ride.condition === 0) return;
     if (game.ride.medical) game.ride.sirenOn = !game.ride.sirenOn;
@@ -188,7 +194,7 @@ addEventListener("gamepaddisconnected", (e) => {
 });
 
 function inputScene() {
-  return panel.open ? panel : game.viewMap ? "map" : interior || game.ride;
+  return panel.open ? panel : game.viewMap ? "map" : interior || game.ride || game.transit;
 }
 
 function controllerDialog(pressed, step) {
@@ -286,7 +292,13 @@ function loop(ms) {
   if (game.artReady && !panel.open && !game.viewMap) {
     const steps = Math.max(1, Math.ceil(dt * 60 - 1e-8));
     for (let step = 0; step < steps; step++) (interior ? updateInterior : update)(dt / steps);
-    if (!interior) {
+    const aboard = !interior && transitFocus();
+    if (aboard) {
+      // Track the raised carriage or platform rather than the ground beneath it.
+      const follow = 1 - Math.exp(-dt * 4);
+      game.camX += (aboard.x - game.camX) * follow;
+      game.camY += (aboard.y - game.camY) * follow;
+    } else if (!interior) {
       let follow = 1 - Math.exp(-dt * 6);
       game.camX +=
         (p.x +

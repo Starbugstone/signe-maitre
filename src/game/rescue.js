@@ -11,6 +11,7 @@ import { box, say } from "../ui/dialogs.js";
 import { beep } from "../audio/mixer.js";
 import { town, H, W, X, Y } from "../world/town.js";
 import { blocked, vehicleBlocked } from "../world/collision.js";
+import { fleet } from "./fleet.js";
 
 const incidents = [];
 let ambulance = null;
@@ -92,9 +93,9 @@ function dispatchAmbulance(n) {
     dy,
     a,
     medical: true,
-    model: "Ambulance",
-    halfLength: 13.3,
-    halfWidth: 5.45,
+    model: "ambulance",
+    halfLength: fleet.ambulance.halfLength,
+    halfWidth: fleet.ambulance.halfWidth,
     condition: 100,
     speed: 0,
     slideX: 0,
@@ -166,7 +167,7 @@ function medicalDrive(v, distance, dt) {
   if (!dt || !distance) return true;
   const next = { ...v, x: v.x + distance * v.dx, y: v.y + distance * v.dy };
   // The driver yields to the CJ crossing on foot, just as ordinary traffic does.
-  if (!game.ride && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
+  if (!game.ride && !game.transit && dist(next, p) < 10 && dist(next, p) < dist(v, p)) {
     stopMotion(v);
     v.yielding = true;
     return false;

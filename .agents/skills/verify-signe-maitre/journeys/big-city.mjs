@@ -8,7 +8,7 @@
 //    then exit on foot and walk straight through the same narrow cobblestone alley.
 // 6. Walk down avenue col 8 to Gare du Sud station under the Petite Ceinture ring viaduct.
 import { town, X, Y } from "../../../../src/world/town.js";
-import { findRoute } from "../../../../src/world/routes.js";
+import { compileNodeCycle, evalSegment, findRoute } from "../../../../src/world/routes.js";
 
 export const meta = { feature: "big-city", needs: "probe" };
 
@@ -108,7 +108,7 @@ function buildRightLaneRoute(from, dest, laneOffset = 6) {
 async function driveRouteTo(
   d,
   dest,
-  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null } = {},
+  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null, turnLookahead = 24 } = {},
 ) {
   const buildDense = (from) => (waypoints ? densifyPath([from, ...waypoints], 8) : buildRightLaneRoute(from, dest));
 
@@ -156,7 +156,7 @@ async function driveRouteTo(
     const curve = upcomingCurvature(dense, cursor, 72);
     const nearRb = isNearRoundabout(s.ride, 22);
     const tight = curve > 0.25 || nearRb;
-    const lookDist = tight ? 24 : 46;
+    const lookDist = tight ? turnLookahead : 46;
     let lookIdx = cursor,
       walked = 0;
     while (lookIdx < dense.length - 1 && walked < lookDist) {
@@ -173,15 +173,18 @@ async function driveRouteTo(
     }
     prev = s.ride;
 
-    // Yield briefly when moving traffic is directly ahead; if a car is dead-stopped nose-to-nose, back up and clear it.
+    // Yield to moving traffic and leave room to back away from a long parked body.
     const cos = Math.cos(s.p.a),
       sin = Math.sin(s.p.a);
-    const carAhead = s.traffic.find((c) => {
+    const carAhead = [...s.traffic, ...s.parked].find((c) => {
       const dx = c.x - s.ride.x,
         dy = c.y - s.ride.y;
       const fwd = dx * cos + dy * sin,
         side = -dx * sin + dy * cos;
-      return fwd > 8 && fwd < 28 && Math.abs(side) < 9.5;
+      const along = Math.abs(Math.cos(c.a - s.ride.a)) * c.halfLength +
+        Math.abs(Math.sin(c.a - s.ride.a)) * c.halfWidth;
+      const gap = fwd - along - s.ride.halfLength;
+      return fwd > 8 && gap < 14 && Math.abs(side) < 9.5;
     });
     if (carAhead) {
       if (carAhead.speed > 1.5 && trafficWaitTicks < 8) {
@@ -220,7 +223,7 @@ async function driveRouteTo(
     }
 
     // Target speed slows smoothly for turns, roundabouts and final approach.
-    let vTarget = tight ? 38 : maxSpeed;
+    let vTarget = tight ? Math.min(38, maxSpeed) : maxSpeed;
     if (absErr > 0.7) vTarget = Math.min(vTarget, 30);
     if (stop && remDest < 68) vTarget = Math.min(vTarget, Math.max(16, remDest * 0.55));
 
@@ -253,13 +256,13 @@ async function driveRouteTo(
 }
 
 // Turn with a small rolling radius and check the result after braking.
-async function turnSlowly(d, angle, speed) {
+async function turnSlowly(d, angle, speed, tolerance = 0.17) {
   let lastError = Infinity, stalled = 0;
   for (let i = 0; i < 54; i++) {
     const { p, ride } = await d.state();
     const error = wrapAngle(angle - p.a);
     const remaining = Math.abs(error);
-    if (remaining < 0.17) break;
+    if (remaining < tolerance) break;
     const steer = error > 0 ? "right" : "left";
     stalled = lastError - remaining < 0.035 ? stalled + 1 : 0;
     lastError = remaining;
@@ -273,6 +276,24 @@ async function turnSlowly(d, angle, speed) {
     }
   }
   return brakeToStop(d);
+}
+
+// If the turn carried the sedan wide, use the width of the quay to reverse
+// towards the alley centre before pointing the nose south again.
+async function adjustAlleyApproach(d, alleyX, quaiY, state) {
+  for (let i = 0; i < 38; i++) {
+    const { ride } = state;
+    const offset = ride.x - alleyX;
+    if (Math.abs(offset) <= 5 || ride.y < quaiY - 16) break;
+    const aim = Math.PI / 2 - Math.max(-0.9, Math.min(0.9, offset * 0.08));
+    const error = wrapAngle(aim - ride.a);
+    const power = ride.speed > -17 ? ["down"] : [];
+    const steering = Math.abs(error) > 0.1 ? [error < 0 ? "right" : "left"] : [];
+    await d.hold([...power, ...steering], 100);
+    state = await d.state();
+  }
+  await brakeToStop(d);
+  return turnSlowly(d, Math.PI / 2, 10);
 }
 
 export default async function (d) {
@@ -291,7 +312,7 @@ export default async function (d) {
     const { sedan } = await d.state();
     await d.walkTo({ x: sedan.x, y: sedan.y - 10 }, { tol: 14 });
     await d.press("car");
-    const { state } = await d.waitFor("in the sedan", ({ state }) => state.ride?.model === "Étude 2000");
+    const { state } = await d.waitFor("in the sedan", ({ state }) => state.ride?.label === "Étude 2000");
     d.expect(!!state.ride, "player boards the Étude 2000", state.ride);
   });
 
@@ -302,16 +323,32 @@ export default async function (d) {
     const turned = await turnSlowly(d, Math.PI, 19);
     d.expect(Math.abs(turned.p.a) > 2.8, "The sedan faces west towards Place de la Contrainte", turned.p);
 
+    const exit = { x: rb.x - 6, y: rb.y + 68 };
+    // Follow the east entry, circulating lane and south exit used by street traffic.
+    const segments = compileNodeCycle(town, ["c6r5", "c6r6", "c7r6", "c7r5"]);
+    const approach = segments.findIndex((seg) => seg.roundaboutEntry?.id === rb.id);
+    const waypoints = segments.slice(approach, approach + 4).flatMap((seg) => {
+      const steps = Math.ceil(seg.length / 5);
+      return Array.from({ length: steps }, (_, i) => {
+        const point = evalSegment(seg, (i * seg.length) / steps);
+        // Leave space from the seized vehicles until the path fans into the roundabout.
+        if (seg.type === "line") point.y += 2 * Math.min(1, (steps - i) / 8);
+        return point;
+      });
+    });
+    waypoints.push(exit);
     let sawNorth = false,
       sawWest = false;
     await driveRouteTo(
       d,
-      { x: rb.x - 10, y: rb.y + 62 },
+      exit,
       {
-        tol: 20,
+        tol: 14,
         stop: true,
-        timeout: 90000,
-        maxSpeed: 56,
+        timeout: 110000,
+        maxSpeed: 36,
+        turnLookahead: 15,
+        waypoints,
         onSample: ({ ride }) => {
           if (ride.y < rb.y - 16 && Math.abs(ride.x - rb.x) < rb.outerRadius + 6) sawNorth = true;
           if (ride.x < rb.x - 16 && Math.abs(ride.y - rb.y) < rb.outerRadius + 6) sawWest = true;
@@ -402,9 +439,14 @@ export default async function (d) {
     // Drive east along Quai Sud and turn south at the mouth of Ruelle des Écoles.
     const alleyX = X(9), quaiY = Y(8);
     await driveRouteTo(d, { x: alleyX - 39, y: quaiY + 6 }, { tol: 14, stop: true, timeout: 80000, maxSpeed: 65 });
-    const approach = { x: alleyX - 10, y: quaiY - 4 };
-    await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 18 });
-    const linedUp = await turnSlowly(d, Math.PI / 2, 12);
+    // Start the turn slightly farther west to leave room for the nose to swing.
+    const approach = { x: alleyX - 16, y: quaiY - 8 };
+    await driveRouteTo(d, approach, { tol: 4, waypoints: [approach], maxSpeed: 15 });
+    let linedUp = await turnSlowly(d, Math.PI / 2, 11);
+    if (Math.abs(linedUp.ride.x - alleyX) >= 9) {
+      d.note("reverse to centre the sedan on the alley", linedUp.ride);
+      linedUp = await adjustAlleyApproach(d, alleyX, quaiY, linedUp);
+    }
     d.expect(Math.abs(linedUp.ride.x - alleyX) < 15 && Math.abs(wrapAngle(linedUp.p.a - Math.PI / 2)) < 0.35,
       "The sedan faces the alley entrance", linedUp.ride);
     // Attempt to push the wide Étude 2000 (halfWidth 4.8 > 3.6) straight south into the narrow alley.
@@ -426,7 +468,9 @@ export default async function (d) {
     await d.press("car");
     await d.waitFor("on foot", ({ state }) => state.ride === null);
     // Walk straight into the exact same Ruelle des Écoles mouth that refused the sedan.
-    await d.walkTo({ x: X(9), y: Y(8) + 12 }, { tol: 6 });
+    await d.walkTo({ x: X(9), y: Y(8) + 12 }, { tol: 2.5 });
+    // Centre the walker in the narrow mouth before the long southbound stretch.
+    await d.walkTo({ x: X(9), y: Y(8) + 34 }, { tol: 2.5 });
     await d.walkTo({ x: X(9), y: Y(8) + 112 }, { tol: 5 });
     const { p, ride } = await d.state();
     d.expect(!ride && Math.abs(p.x - X(9)) < 8 && p.y > Y(8) + 95, "player walked through the narrow cobblestone alley on foot", p);
@@ -455,4 +499,4 @@ export default async function (d) {
 }
 
 // The landmark tour (city-scenery.mjs) drives with the same hands.
-export { brakeToStop, driveRouteTo };
+export { brakeToStop, driveRouteTo, turnSlowly };

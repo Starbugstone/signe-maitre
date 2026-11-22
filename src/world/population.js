@@ -2,9 +2,28 @@ import { cars, game, p, people, rand } from "../core/state.js";
 import { footBlocked, vehicleBlocked } from "./collision.js";
 import { town, office, CELL_W, TAU, X, Y } from "./town.js";
 import { buildTrafficLoop, evalSegment } from "./routes.js";
+import { fleet, pickModel, routeClass } from "../game/fleet.js";
+import { compileFleetLoop } from "../game/fleet-traffic.js";
+import { carContact } from "./vehicle-shape.js";
 
+// A name the fleet does not know ("Biscotte") is a sedan's nameplate.
 function car(x, y, a, tint, model, route) {
-  const v = { x, y, a, tint, model, route, condition: 100, speed: 0, slideX: 0, slideY: 0 };
+  const spec = fleet[model] || fleet.sedan;
+  const v = {
+    x,
+    y,
+    a,
+    tint,
+    model: spec.id,
+    label: fleet[model] ? spec.label : model,
+    halfLength: spec.halfLength,
+    halfWidth: spec.halfWidth,
+    route,
+    condition: 100,
+    speed: 0,
+    slideX: 0,
+    slideY: 0,
+  };
   cars.push(v);
   return v;
 }
@@ -97,10 +116,33 @@ export function person(x, y, kind = "local", axis = "x", random = rand) {
 }
 
 const loopCache = new Map();
-function cachedLoop(col, row) {
-  const key = col + "," + row;
-  if (!loopCache.has(key)) loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: 4.8 }));
+function cachedLoop(col, row, narrow) {
+  const key = [col, row, narrow].join(",");
+  if (!loopCache.has(key))
+    loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: narrow ? fleet.moto.halfWidth : fleet.sedan.halfWidth }));
   return loopCache.get(key);
+}
+
+function freeParking(x, y, model) {
+  const { halfLength, halfWidth } = fleet[model];
+  const pose = { x, y, a: Math.PI, halfLength, halfWidth };
+  return !vehicleBlocked(pose) && !cars.some((other) => carContact(pose, other));
+}
+
+// Five seized vehicles on the same avenue as the étude, clear of the office door and junctions.
+const showpieces = [
+  ["moto", 125], ["suv", 162], ["volta", 203], ["bus", -162], ["dumper", -95],
+];
+for (const [model, offset] of showpieces) {
+  const y = Y(office.row) - 16;
+  const preferred = X(office.col) + offset;
+  for (let delta = 0; delta < 32; delta++) {
+    const x = [preferred + delta, preferred - delta].find((x) => freeParking(x, y, model));
+    if (x === undefined) continue;
+    const v = car(x, y, Math.PI, model === "volta" ? "silver" : "blue", model);
+    v.showpiece = true;
+    break;
+  }
 }
 
 function populate(col, row, key) {
@@ -113,16 +155,27 @@ function populate(col, row, key) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
+  // Vehicle models draw from the cell's own well-mixed number, so the residents keep their
+  // places and neighbouring blocks do not all get the same model.
+  const cellSeed = seed;
+  const draw = (salt) => () => {
+    let h = (cellSeed ^ salt) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
 
   // Parked cars along wide east-west streets (never in alleys, river, roundabouts or at the office kerb).
+  const east = town.roadAdj.get(meta.node?.id)?.find(({ to }) => to === town.roadNodeAt(col + 1, row)?.id);
   if (
     col < town.cols - 1 &&
-    meta.wideArms.e &&
+    east && east.edge.class !== "alley" &&
     meta.node?.kind !== "roundabout" &&
     (col + row) % 2 &&
     !(col === office.col && row === office.row) &&
     !(col === 5 && row === 2)
   ) {
+    const model = pickModel(east.edge.class, draw(7), true);
     const kerbX = X(col) + 112,
       y = Y(row) - 16;
     for (let offset = 0; offset < CELL_W / 2 - 48; offset++) {
@@ -130,10 +183,10 @@ function populate(col, row, key) {
         (cand) =>
           Math.abs(cand - X(col)) > 58 &&
           !(town.ring?.stations || []).some((st) => Math.hypot(cand - st.street.x, y - st.street.y) < 28) &&
-          !vehicleBlocked({ x: cand, y, a: Math.PI }),
+          freeParking(cand, y, model),
       );
       if (x !== undefined) {
-        car(x, y, Math.PI, colors[(col + row) % 4], "Biscotte").homeCell = key;
+        car(x, y, Math.PI, colors[(col + row) % 4], model === "sedan" ? "Biscotte" : model).homeCell = key;
         break;
       }
     }
@@ -162,21 +215,28 @@ function populate(col, row, key) {
 
   // Moving city traffic on compiled road-graph loops (never entering alleys, using roundabouts anticlockwise).
   if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
-  const loop = cachedLoop(col, row);
+  const narrow = cachedLoop(col, row, true);
+  const loop = narrow?.class === "alley" ? narrow : cachedLoop(col, row, false);
   if (!loop) return;
 
-  // Pick a starting straight segment on the loop so the car spawns clear of junctions, roundabouts and parked cars.
-  const straights = loop.segments
+  const model = pickModel(routeClass(loop), draw(1));
+  const spec = fleet[model];
+  const segments = compileFleetLoop(town, loop, model);
+  if (!segments) return;
+  const clearance = Math.max(18, spec.halfLength + 4);
+  const straights = segments
     .map((seg, idx) => ({ seg, idx }))
-    .filter(({ seg }) => seg.type === "line" && seg.length > 60 && !seg.isAlley);
+    .filter(({ seg }) => seg.type === "line" && seg.length > 2 * clearance);
   if (!straights.length) return;
   const pick = straights[Math.floor(random() * straights.length)];
-  const s = 18 + random() * (pick.seg.length - 36);
+  const s = clearance + random() * (pick.seg.length - 2 * clearance);
   const pose = evalSegment(pick.seg, s);
-  if (vehicleBlocked({ ...pose })) return;
+  const body = { ...pose, halfLength: spec.halfLength, halfWidth: spec.halfWidth };
+  if (vehicleBlocked(body) || cars.some((other) => carContact(body, other))) return;
   const q = Math.floor(random() * 4);
-  car(pose.x, pose.y, pose.a, colors[q], "Citadine", {
-    segments: loop.segments,
+  car(pose.x, pose.y, pose.a, colors[q], model === "sedan" ? "Citadine" : model, {
+    class: loop.class,
+    segments,
     segIndex: pick.idx,
     s,
     pace: 24 + q * 6,

@@ -171,12 +171,13 @@ export function updatePerson(n, dt) {
   if (n.swing > 0) {
     const before = n.swing;
     n.swing = Math.max(0, n.swing - dt);
-    if (before > 0.21 && n.swing <= 0.21 && !game.ride && dist(n, p) < 15 && strikeClear(n.x, n.y, p.x, p.y)) hurtPlayer(n);
+    if (before > 0.21 && n.swing <= 0.21 && !game.ride && !game.transit && dist(n, p) < 15 && strikeClear(n.x, n.y, p.x, p.y)) hurtPlayer(n);
     return;
   }
   n.anger = Math.max(0, n.anger - dt);
   const d = dist(n, p),
-    chase = (n.anger > 0 || (n.kind === "inspector" && game.heat > 0.25)) && d < 190;
+    // Nobody follows the player up to a ring platform or onto a train.
+    chase = !game.transit && (n.anger > 0 || (n.kind === "inspector" && game.heat > 0.25)) && d < 190;
   if (game.ride && game.ride.domain !== "water" && d < 10 && Math.abs(game.ride.speed) > 40) {
     crashSound(Math.abs(game.ride.speed), "thud");
     knockDown(n, "traffic");

@@ -12,6 +12,9 @@ import { streetLayer } from "../../src/world/streets.js";
 import { streetProps } from "../../src/world/street-props.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
+import { cornerSupportAt, cornerSupports } from "../../src/world/viaduct.js";
+import { ringLine } from "../../src/game/transit.js";
+import { trainsetAt } from "../../src/game/ring-route.js";
 
 // Walking frames are timed by the clock. Hold it still, so that two renders of one pose match.
 const stillClock = performance.now();
@@ -248,6 +251,46 @@ function checkRingVerticalPier() {
   actorLayers(right - 30, Y(5), false);
 }
 
+// Each of the four 150-unit curves stands on a painted column and an iron portal. Their feet
+// stop a walker and a car; the street the north curves cross stays open beneath the deck; the
+// column covers whoever is behind it and the portal leaves whoever is in front of it clear.
+function checkRingCorners() {
+  const { top, bottom } = town.ring;
+  for (const support of cornerSupports) {
+    const { x, y } = cornerSupportAt(town.ring, support);
+    const feet = town.ring.piers.filter((q) => q.orientation === "corner" && Math.abs(q.centre - x) < 0.01 && q.y === y);
+    requireCheck(feet.length === (support.kind === "portal" ? 2 : 1), "Corner support feet missing at " + x + "," + y);
+    for (const foot of feet) {
+      requireCheck(blocked(foot.x, foot.y - 1, 2.6), "Corner support foot did not block walker at " + foot.x);
+      requireCheck(vehicleBlocked({ x: foot.x, y: foot.y - 1, a: 0 }), "Corner support foot did not block vehicle at " + foot.x);
+    }
+    const north = support.quadrant === 0 || support.quadrant === 3;
+    const where = (check) => {
+      try {
+        check();
+      } catch (error) {
+        throw new Error(`Corner ${support.quadrant} ${support.kind}: ${error.message}`);
+      }
+    };
+    if (support.kind === "column") {
+      // The column's shaft rises from the back of the pavement to the deck and hides the
+      // half of a walker behind it.
+      requireCheck(Math.abs(y - (north ? top : bottom)) < 0.01, "Corner column off the pavement line");
+      where(() => actorLayers(x + 3, y - 9, true));
+    } else {
+      // Behind the leg on the inside of the curve, clear of the deck passing overhead.
+      const east = support.quadrant === 0 || support.quadrant === 1;
+      where(() => actorLayers(x + (east ? -9.1 : 9.4), y - 6, true));
+      where(() => actorLayers(x, y + 10, false));
+    }
+  }
+  // The row-1 street runs clear under both north curves.
+  for (const x of [282, 4500 - 282]) {
+    requireCheck(!blocked(x, Y(1), 2.6), "Walker blocked under a north ring corner");
+    requireCheck(!vehicleBlocked({ x, y: Y(1), a: 0 }), "Vehicle blocked under a north ring corner");
+  }
+}
+
 // Arc des Saisies, the obelisk and the lamp standard rise from their islands: behind them a
 // walker on the ring road is covered, in front they stand clear.
 function checkMonumentIslands() {
@@ -460,7 +503,10 @@ function checkPaintedLanterns() {
     for (let col = 0; col < town.cols; col++) {
       const key = town.cellKinds[row][col];
       if (seen.has(key) || paintings[key].river) continue;
-      const lamp = streetProps(town, col, row).find((prop) => prop.item.painted && prop.item.radius && prop.item.key === key);
+      // The southernmost one: on a ring row the others stand beneath the deck and the platforms.
+      const lamp = streetProps(town, col, row)
+        .filter((prop) => prop.item.painted && prop.item.radius && prop.item.key === key)
+        .sort((a, b) => b.y - a.y)[0];
       if (!lamp) continue;
       seen.add(key);
       lanterns.push([lamp.x, lamp.y]);
@@ -616,6 +662,7 @@ const checks = {
   "river-bridge-and-island": checkRiverBridgeAndIsland,
   "tour-de-fer-underpass": checkTourDeFerUnderpass,
   "ring-side-legs": checkRingVerticalPier,
+  "ring-corners": checkRingCorners,
   "monument-islands": checkMonumentIslands,
   "closed-arms": checkClosedArms,
   "painted-river": checkPaintedRiver,
@@ -623,6 +670,24 @@ const checks = {
   "bridge-parapets-and-piers": checkBridgeParapets,
   "painted-lanterns": checkPaintedLanterns,
   "stations": checkStationsAndGardens,
+  // A walker behind the station's painted canopy is partly hidden while a train stands at the
+  // platform; one at the hall door on the street in front of it stays fully visible.
+  "ring-train-depth": () => {
+    const { ring, tt } = ringLine();
+    // A station on the north leg, where the deck runs east-west in front of the buildings.
+    const index = ring.stations.findIndex((st) => st.id === "porte-etoile"),
+      station = ring.stations[index];
+    let t = 0;
+    while (trainsetAt(tt, 0, t).station !== index) t += 0.1;
+    game.time = t + 2;
+    try {
+      // The lower edge of the painted canopy, redrawn over the train, crosses the sampled body.
+      actorLayers(station.stop.x - 15, station.stop.y - 18, true);
+      actorLayers(station.stop.x - 15, station.stop.y + 8, false);
+    } finally {
+      game.time = 0;
+    }
+  },
 };
 
 window.scenery = {

@@ -16,6 +16,12 @@ const { game, p, cars, people, held } = await import("../src/core/state.js");
 const { update } = await import("../src/game/simulation.js");
 const { X, Y, CELL_W, CELL_H, town } = await import("../src/world/town.js");
 
+const { fleet } = await import("../src/game/fleet.js");
+const { compileFleetLoop } = await import("../src/game/fleet-traffic.js");
+const { advanceTraffic } = await import("../src/game/driving.js");
+const { vehicleBlocked } = await import("../src/world/collision.js");
+const { buildTrafficLoop, evalSegment } = await import("../src/world/routes.js");
+
 // Stand in key blocks (ordinary cross streets, all four roundabouts, and river bridges) and let
 // traffic run for over two minutes: no car may lock up, on screen or off it.
 for (const [label, cx, cy, px, py, seconds] of [
@@ -129,4 +135,124 @@ test("a player boxed into a clear pocket between two wrecks and the south paveme
     held.clear();
   }
   assert.ok(Math.hypot(p.x - 520, p.y - 319.8) > 2, `still pinned at ${p.x},${p.y}`);
+});
+
+function driveFleetLoop(model, loop, visit) {
+  const { halfLength, halfWidth } = fleet[model];
+  const segments = compileFleetLoop(town, loop, model);
+  assert.ok(segments, `${model} needs a usable ${loop.class} loop`);
+  const savedCars = cars.splice(0);
+  const savedPeople = people.splice(0);
+  const savedRide = game.ride;
+  const c = {
+    ...evalSegment(segments[0], 0),
+    model, halfLength, halfWidth, condition: 100, speed: 0,
+    route: { class: loop.class, segments, segIndex: 0, s: 0, pace: 36 },
+  };
+  cars.push(c);
+  const visited = new Set();
+  let stopped = 0;
+  try {
+    game.ride = c;
+    for (let frame = 0; frame < 150 * 60; frame++) {
+      advanceTraffic(c, 1 / 60);
+      assert.ok(!vehicleBlocked(c), `${model} clips scenery on ${loop.nodeIds.join(", ")} at segment ${c.route.segIndex}`);
+      visited.add(c.route.segIndex);
+      stopped = c.speed < 0.5 ? stopped + 1 : 0;
+      assert.ok(stopped < 5 * 60, `${model} wedged for 5 seconds at segment ${c.route.segIndex}`);
+      visit(c, segments[c.route.segIndex]);
+    }
+    assert.equal(visited.size, segments.length, `${model} completes its circuit`);
+  } finally {
+    cars.splice(0, cars.length, ...savedCars);
+    people.push(...savedPeople);
+    game.ride = savedRide;
+  }
+}
+
+for (const model of ["bus", "dumper"]) {
+  for (const node of town.roads.nodes.filter((n) => n.kind === "roundabout")) {
+    test(`${model} circulates at ${node.id} for 150 seconds`, () => {
+      const loop = buildTrafficLoop(town, node.col, node.row, { maxHalfWidth: fleet[model].halfWidth });
+      assert.notEqual(loop.class, "alley");
+      let circulated = false;
+      driveFleetLoop(model, loop, (c, seg) => {
+        if (seg.roundabout?.id === node.id) {
+          assert.ok(seg.deltaA < 0);
+          circulated = true;
+        }
+        if (c.route.stopFor > 0) assert.equal(seg.roadClass, "avenue");
+      });
+      assert.ok(circulated);
+    });
+  }
+
+  test(`${model} crosses la Ferre for 150 seconds`, () => {
+    const loop = buildTrafficLoop(town, 6, 6, { maxHalfWidth: fleet[model].halfWidth });
+    const positions = new Set();
+    let stoppedOnAvenue = false;
+    driveFleetLoop(model, loop, (c, seg) => {
+      if (c.y > town.river.top && c.y < town.river.bottom) {
+        const bridge = town.river.bridges.find((b) => Math.abs(c.x - b.x) < b.halfWidth);
+        assert.ok(bridge);
+        positions.add(bridge.col);
+      }
+      if (c.route.stopFor > 0) {
+        assert.equal(seg.roadClass, "avenue");
+        stoppedOnAvenue ||= c.speed < 0.5;
+      }
+    });
+    assert.ok(positions.has(6));
+    if (model === "bus") assert.ok(stoppedOnAvenue, "the bus actually rested at an avenue stop");
+  });
+}
+
+test("a motorbike completes an alley loop and a sedan is refused", () => {
+  const { halfLength, halfWidth } = fleet.moto;
+  const loop = buildTrafficLoop(town, 10, 3, { maxHalfWidth: halfWidth });
+  assert.equal(loop.class, "alley");
+  assert.equal(compileFleetLoop(town, loop, "sedan"), null);
+  assert.notEqual(buildTrafficLoop(town, 10, 3, { maxHalfWidth: fleet.sedan.halfWidth })?.class, "alley");
+  const alley = loop.segments.find((seg) => seg.roadClass === "alley" && seg.length > 60);
+  const mid = evalSegment(alley, alley.length / 2);
+  assert.equal(vehicleBlocked({ ...mid, halfLength, halfWidth }), false);
+  assert.equal(vehicleBlocked({ ...mid, halfLength: fleet.sedan.halfLength, halfWidth: fleet.sedan.halfWidth }), true);
+  let inAlley = false;
+  driveFleetLoop("moto", loop, (c, seg) => { inAlley ||= seg.roadClass === "alley" && c.speed > 5; });
+  assert.ok(inAlley);
+});
+
+test("an offscreen bus clears the Obelisk entry when a second bus is left across the exit", () => {
+  const node = town.roadNodeById.get("c6r5");
+  const loop = buildTrafficLoop(town, node.col, node.row);
+  const segments = compileFleetLoop(town, loop, "bus");
+  const segIndex = segments.findIndex((seg) => seg.roundaboutEntry?.id === node.id && seg.y1 > node.y);
+  const approach = segments[segIndex];
+  const { halfLength, halfWidth } = fleet.bus;
+  const s = approach.length - approach.roundaboutEntry.stopOffset - halfLength - 2;
+  const trafficBus = {
+    ...evalSegment(approach, s),
+    model: "bus", halfLength, halfWidth, speed: 0, condition: 100,
+    route: { class: loop.class, segments, segIndex, s, pace: 36 },
+  };
+  const parkedBus = {
+    x: node.x + 41, y: node.y + 18, a: Math.PI,
+    model: "bus", halfLength, halfWidth, speed: 0, condition: 99,
+  };
+  const parkedCars = cars.splice(0, cars.length, trafficBus, parkedBus);
+  const savedPeople = people.splice(0);
+  const { camX, camY, vw, vh, ride } = game;
+  try {
+    Object.assign(game, { camX: X(7) + 50, camY: Y(5), vw: 300, vh: 175, ride: trafficBus });
+    let circulated = false;
+    for (let frame = 0; frame < 20 * 60; frame++) {
+      advanceTraffic(trafficBus, 1 / 60);
+      circulated ||= segments[trafficBus.route.segIndex].roundabout?.id === node.id;
+    }
+    assert.ok(circulated, "the bus proceeds into the roundabout after waiting");
+  } finally {
+    cars.splice(0, cars.length, ...parkedCars);
+    people.push(...savedPeople);
+    Object.assign(game, { camX, camY, vw, vh, ride });
+  }
 });

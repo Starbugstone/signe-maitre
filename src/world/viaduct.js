@@ -84,6 +84,46 @@ export const sideSupports = {
   east: { dx: [-9.1, 9.4], feet: [24], half: 3.4 },
 };
 
+// The four curves have no street of their own to stand on: each gets two supports from the
+// painted pieces. A column (a pier cut from the north-leg painting) stands where the track still
+// runs nearly east-west, an iron portal where it has turned towards the side leg. `at` is the
+// angle round the curve from the end that meets the north or south leg, in degrees. A column
+// stands on the leg's own pier line at the back of the pavement (`onLeg`); `shift` moves a
+// portal's feet north or south of the track centre line onto open ground, within the deck.
+// Quadrants: 0 north-east, 1 south-east, 2 south-west, 3 north-west.
+export const cornerSupports = [
+  // North corners: the back of the north pavement beside the cross street, then the south
+  // pavement of the street the curve crosses.
+  { quadrant: 0, at: 15, kind: "column", onLeg: true },
+  { quadrant: 0, at: 50.4, kind: "portal", shift: 0 },
+  { quadrant: 3, at: 15, kind: "column", onLeg: true },
+  { quadrant: 3, at: 50.4, kind: "portal", shift: 0 },
+  // South corners: the back of the south leg's pavement, then the garage forecourt (west)
+  // or yard (east) the curve sweeps over.
+  { quadrant: 1, at: 15, kind: "column", onLeg: true },
+  { quadrant: 1, at: 45, kind: "portal", shift: 0 },
+  { quadrant: 2, at: 15, kind: "column", onLeg: true },
+  { quadrant: 2, at: 45, kind: "portal", shift: 0 },
+];
+export const cornerSupportFeet = {
+  column: { dx: [0], half: 4 },
+  portal: { dx: [-9.1, 9.4], half: 3.4 },
+};
+
+// The ground point of a corner support and the heading of the track above it.
+export function cornerSupportAt(ring, { quadrant, at, onLeg = false, shift = 0 }) {
+  const { left, right, top, bottom, cornerR: R } = ring;
+  const east = quadrant === 0 || quadrant === 1,
+    north = quadrant === 0 || quadrant === 3;
+  const cx = east ? right - R : left + R,
+    cy = north ? top + R : bottom - R;
+  const a = (at * Math.PI) / 180;
+  return {
+    x: cx + (east ? 1 : -1) * R * Math.sin(a),
+    y: onLeg ? (north ? top : bottom) : cy + (north ? -1 : 1) * R * Math.cos(a) + shift,
+  };
+}
+
 // Compute every physical ground-level pier for the closed Petite Ceinture ring viaduct.
 // Horizontal legs reuse the registered market / ironwork pier bases; vertical legs place
 // iron piers between east-west streets and on the river banks (leaving clear headroom over roads and water).
@@ -103,9 +143,8 @@ export function buildRingPiers(layout) {
       for (const [bLeft, bRight] of section.bases) {
         const x1 = X(col) + bLeft,
           x2 = X(col) + bRight;
-        // Skip the very outer corner curve edge piers so the curve meets the vertical leg cleanly.
-        if (col === minCol && x1 < left + Math.max(12, cornerR)) continue;
-        if (col === maxCol && x2 > right - Math.max(12, cornerR)) continue;
+        // No horizontal pier under a corner curve: the curve has left the straight there.
+        if (x1 < left + cornerR || x2 > right - cornerR) continue;
         // Never drop a pier inside an intersection roadway or roundabout.
         if (Math.abs((x1 + x2) / 2 - X(col)) < 26) continue;
         piers.push({
@@ -169,6 +208,25 @@ export function buildRingPiers(layout) {
           side,
           abutment: true,
         });
+  }
+
+  // Corner supports: one box per foot.
+  for (const support of cornerSupports) {
+    const { x, y } = cornerSupportAt(ring, support);
+    const feet = cornerSupportFeet[support.kind];
+    for (const dx of feet.dx)
+      piers.push({
+        left: x + dx - feet.half,
+        right: x + dx + feet.half,
+        top: y - 3.5,
+        bottom: y,
+        x: x + dx,
+        y,
+        orientation: "corner",
+        kind: support.kind,
+        quadrant: support.quadrant,
+        centre: x,
+      });
   }
 
   return piers;

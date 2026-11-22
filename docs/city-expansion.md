@@ -75,12 +75,12 @@ Port-Fer is a **16 × 12** cell city (`cols 0..15`, `rows 0..11`, world size `45
 - **Grand Boulevards** form an avenue ring (`row 2`, `row 10`, `col 2`, `col 13`) linked to the riverside quays (`row 6`, `row 8`) and north–south axes (`col 3`, `col 6`, `col 8`, `col 10`). Four anticlockwise **roundabouts** anchor the network: **Étoile des Saisies** `(3, 3)` (`r = 22`, around Arc des Saisies), **Place de la Contrainte** `(6, 5)` (`r = 18`, around the obelisk), **Rond-Point du Timbre** `(13, 2)` (`r = 15`), and **Place de la Rive-Sud** `(10, 10)` (`r = 15`).
 - **Monuments (7)**: Arc des Saisies `(3, 3)`, Tour de Fer `(3, 8)` (roads pass beneath its four corner iron piers), Place de la Contrainte obelisk `(6, 5)`, Hôtel des Ventes opera/auction house `(7, 3)` and Sacré-Créancier hilltop basilica `(8, 0)` (both on the north-west block of their cell, as painted), Palais de Justice `(8, 6)`, and Notre-Dame-du-Port `(9, 7)`.
 - **Alleys, parks, tees & dead ends**: Dense *ruelles* (`halfWidth = 7`, admitting walkers and vehicles with `halfWidth ≤ 3.6`) fill **Le Vieux Marais** (`cols 9..12, rows 3..5`), **Quartier Latin** (`cols 9..10, row 9`), and **Butte du Créancier** (`cols 7..9, row 0`), plus four opened mid-cell seam passages (`9.5, 4..5`, `10.5, 3..4`, `6.5, 0..1`, `9.5, 8..9`). Three parks (**Champ-de-Fer** `(3..4, 9)`, **Parc des Buttes-Fiscales** `(14, 3..4)`, **Jardin du Sénat** `(7, 9)`) and five impasses (`(1,4)`, `(12,4)`, `(4,9)`, `(14,3)`, `(7,9)`) provide dead ends and T-junctions.
-- **Petite Ceinture ring railway** loops clockwise on a continuous elevated viaduct (`deckLift = 40`) along `row 1` (`y ≈ 271.65`), seam `col 14/15` (`x = 4280`, East Rail Bridge over la Ferre), `row 11` (`y ≈ 2551.65`), and seam `col 0/1` (`x = 220`, West Rail Bridge over la Ferre), with **8 stations** (`porte-etoile`, `butte-creancier`, `buttes-fiscales`, `viaduc-est`, `porte-docks`, `gare-sud`, `champ-fer`, `viaduc-ouest`). Straight-line trains are removed; `drawRingTrains(ctx, ring, ox, oy)` in `src/world/rail.js` is the single hook for Opus's ring train renderer.
+- **Petite Ceinture ring railway** loops clockwise on a continuous elevated viaduct (`deckLift = 40`) along `row 1` (`y ≈ 271.65`), seam `col 14/15` (`x = 4280`, East Rail Bridge over la Ferre), `row 11` (`y ≈ 2551.65`), and seam `col 0/1` (`x = 220`, West Rail Bridge over la Ferre), with **8 stations** (`porte-etoile`, `butte-creancier`, `buttes-fiscales`, `viaduc-est`, `porte-docks`, `gare-sud`, `champ-fer`, `viaduc-ouest`). Straight-line trains are removed. The corners have a 150-unit radius (`cornerR`, 24 steps per quarter) so the 18 m coaches stay over the deck; each curve stands on a painted column and an iron portal (`cornerSupports` in `src/world/viaduct.js`). The trains are drawn by `drawRingTrains(ox, oy, actors)` in `src/art/train.js`, which `src/ui/renderer.js` calls once after the overhead layers and before `drawOverTrain` (rail-bridge bracing and canopies).
 - **Paintings in place**: `town.cellKinds[row][col]` names the painting of every cell; `src/world/paintings.js` records what each shows (arms, pier lines, solids, silhouettes). `tools/art/bake-scenery.mjs` bakes `art-src/scenery/*.png` into `assets/scenery/*.webp` on the plate grid (5 px per world unit). Where a painting could not sit on the published geometry, its registration was adapted and the geometry kept:
   - *La Ferre.* The six river paintings (`<key>Tall.png`, 1500 × 2130 px) show a column at its true depth, 290 × 412.2 units from `Y(6) + 27` to the Quai Sud kerb, and are placed without stretching a row. A plate starts 10 units farther north, at the Quai Nord kerb; that band is quay setts and a bridge runs through it. The painted island sits on `town.river.islands[0]`: walls at y ≈ 1590 and 1746, points at x ≈ 2287 and 3083, 24-unit bevels. `src/world/paintings.js` (`riverMarks`) holds what was marked by hand on each painting: kerbs, decks, lanterns, pier bases, the island wall, gardens, buildings, trees and the silhouettes that stand in front of boats. The bake writes a `<key>Over.webp` mask of those silhouettes for every plate, and the game redraws the street layer through it over the river traffic.
     - *Bridges.* `bridgeDeck(col)` is half the width between the painted parapets: 29 on a stone bridge, 19.5 on an iron one, 18.4 on the island's. A stone bridge stands on a north abutment, three piers and two south turrets. `town.river.piers` lists their bases; `town.river.onWater` is false on them, so hulls stop and the traffic lanes route between them. A pier's bastion is painted a storey above its base: a boat north of a base passes behind the bastion.
     - *Centreline.* The pier boxes are kept inside the painted bases so that the published `town.river.centreline` stays on water with its 12-unit margin. It runs 13 units north of the middle pier's base at columns 3, 4, 13 and 14 and past that pier's south-east corner at column 11, so a boat on the centreline is hidden behind the middle bastion as it goes under. A centreline through the middle of an arch (y ≈ 1645 west of x = 1960 and east of x = 3410, and y ≈ 1740 held until x ≈ 3340) would keep it in view. That change has not been made.
-  - *Petite Ceinture.* `ringSouth` and the four corner paintings put the track 84 to 107 units from `town.ring` (south of the south street, and beside the side streets rather than on the cell seam). The south leg therefore uses the north-leg spans, and the side legs, corners and rail bridges are laid on `town.ring` from the painted deck, brackets, portals, canopies and truss. Corner decks are swept on `town.ring.cornerR`.
+  - *Petite Ceinture.* `ringSouth` and the four corner paintings put the track 84 to 107 units from `town.ring` (south of the south street, and beside the side streets rather than on the cell seam). The south leg therefore uses the north-leg spans, and the side legs, corners and rail bridges are laid on `town.ring` from the painted deck, brackets, portals, canopies and truss. Corner decks are swept on `town.ring.cornerR` and carried by `cornerSupports`.
   - *Stations.* The painted station stands west of its cross street; the ring stops are 88 units east of it. The baked `ringStation` plates set the station building on the east block so that the platform and the hall door meet `stations[].stop` and `.street`.
   - `riverFootbridge` is not placed: the road graph has no foot-only crossing.
   - *Lanterns.* The standing lanterns of the later paintings are marked by hand as `[x, finial, foot]` (`paintings[key].lamps`, `riverMarks[key].lamps`). Each covers whoever is behind its foot, and its post stops walkers and bumpers. `node tools/art/review-lamps.mjs DIR [--find]` draws the marks on the source paintings; `node tools/art/bake-scenery.mjs --review DIR` does the same for the river's masks and obstacles. Bollards are not marked.
@@ -128,28 +128,50 @@ Copy the framing of the existing street paintings in `assets/market.webp`, `asse
 
 ## Vehicle art contract (Astra C paints, Fable bakes every atlas)
 
-The game shows vehicles from the same elevated camera at 64 headings. The sedan and ambulance are baked from orthographic panel paintings onto a simple 3D body (`tools/art/bake-ambulance.py`, `assets/rescueVan.webp`). New vehicles use the same pipeline.
+The game shows vehicles from the same elevated camera at 64 headings. The sedan and ambulance are baked from orthographic panel paintings onto a simple 3D body (`tools/art/bake-vehicle.py`, `assets/rescueVan.webp`). New vehicles use the same pipeline.
 
 For each vehicle paint, on a transparent or flat magenta (#ff00ff) background, orthographic panels at the same pixel scale: left side, top (roof/deck), front and rear. Save as `art-src/vehicles/<id>/{side,top,front,rear}.png` plus `art-src/vehicles/<id>/spec.json` with the real length, width and height in metres and the pixel bounds of each panel. Also paint one 3/4 elevated hero view (`hero.png`) to check the baked result against.
 
-Ids: `volta` (electric saloon), `suv`, `bus`, `dumper` (dump truck, tipper body), `moto` (motorbike with a rider in the bailiff colours as a separate layer `rider.png`), `barge`, `riverboat`, `speedboat`, `launch`, `ringTrain` (one carriage plus a cab end, two-tone green like `assets/metro.webp`).
+Ids: `volta` (electric saloon), `suv`, `bus`, `dumper` (dump truck, tipper body), `moto` (motorbike with a rider in the bailiff colours as a separate layer `rider.png`), `barge`, `riverboat`, `speedboat`, `launch`, `ringTrain` (one carriage plus a cab end, two-tone green; baked into `assets/ringTrainTurns.webp` and `assets/ringTrainCabTurns.webp`).
 
-Finished atlases follow the ambulance layout: 64 headings in an 8 × 8 grid, one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length and ground or waterline origin in pixels) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
+Finished atlases follow the ambulance format: 64 headings in an 8 × 8 sheet, clockwise from east, square frames (192 px for a car-sized body, larger for long ones; the json gives the size), one atlas per state (`intact`, `dented`, `wreck` for road vehicles; boats and the train need `intact` only), baked by Fable into `art-src/baked/<id>Turns.webp`, `<id>Dented.webp` and `<id>Wreck.webp` in the main checkout, with `art-src/baked/<id>.json` (frame size, heading count, body length and ground or waterline origin in pixels) written last as the done marker. The owner of the gameplay copies them to `assets/` and registers them in `src/art/assets.js`. Until an atlas exists, draw a placeholder of the right size.
 
 ## Fleet contract (Fable publishes)
 
 `src/game/fleet.js` exports `fleet`, a map from id to:
 
 ```js
-{ id, name: { fr, en }, domain: "road" | "water" | "rail",
+{ id, label,                       // label is the interface-string key of the name: t(entry.label)
+  name: { fr, en }, domain: "road" | "water" | "rail",
   halfLength, halfWidth,           // world units; sedan is 10.95 × 4.8
-  mass, topSpeed, reverseSpeed, accel, brake, steer, grip,
+  mass, topSpeed, reverseSpeed, accel, reverseAccel, brake, steer, grip,
+  turn,                            // tightest turning radius: steering fades in below steer × turn,
+                                   // and traffic takes corners on max(8, turn)
+  pivot?,                          // a long body swings about a point this share of halfLength behind its centre
+  leans?,                          // a two-wheeler: driving keeps `vehicle.lean` in -1..1
   sound: "petrol" | "electric" | "diesel" | "moto" | "boat",
-  atlas: { intact, dented?, wreck? }, // artwork keys
-  traffic: { weight, lanes: ["avenue", "street", "alley"?] } }
+  atlas: { intact, dented, wreck, ridden?, courier?, riddenHeadings? } | null, // artwork keys; null = the sedan's run-time wrap
+  tints?: { [vehicle.tint]: { intact, dented, wreck } }, // other colours of the same model (the red Volta)
+  sprite: { frame, scale, cx, cy }, // atlas cell in px, px per world unit, ground centre in the cell
+  traffic: { weight, parked, lanes: ["avenue", "street", "alley"?], pace, stops? } }
 ```
 
-Vehicles in `cars` carry `model` (a fleet id). Driving, collision and rendering read the fleet entry instead of the sedan constants.
+It also exports `fleetOf(vehicle)` (the entry for a vehicle, the sedan for anything unknown), `pickModel(roadClass, random, parked?)` (a weighted draw of the models allowed on a class of road) and `routeClass(route)` (reads `route.class`, `"street"` when a route does not say).
+
+Vehicles in `cars` carry `model` (a fleet id), `label` (the name shown to the player: a string key or a nameplate such as "Biscotte") and their own `halfLength` and `halfWidth`, stamped from the fleet entry when they are made. `car(x, y, a, tint, model, route)` in `src/world/population.js` accepts a fleet id; any other string is kept as a sedan's nameplate. Driving, damage, boarding, sound and rendering read the fleet entry through `fleetOf`; collision reads the stamped half-extents. `src/art/fleet-art.js` exports `drawVehicle(vehicle)`, which the street renderer calls for every road vehicle.
+
+Car-class bodies keep the sedan's half-width (4.8): the lanes are 12 units apart and cars park 10 units off the lane line. The bus and dump truck use the 4.8-unit collision half-width and overhang it visually. They take wider corners and shallower roundabout entries and exits, with a 5.8-unit lane offset to clear the parked row. `buildTrafficLoop` sets `class` to the narrowest road on the loop and records `roadClass` on each straight segment. Motorbikes are the only fleet model picked for an alley loop. A bus may use a mixed avenue/street loop and stops only on its avenue straights.
+
+Atlases are baked by `tools/art/bake-vehicle.py` from `tools/art/fleet-bake.json`. The frame size varies with the body (a 12 m bus does not fit 192 px at a useful scale); the `sprite` block and each `art-src/baked/<id>.json` say what was used.
+
+## Ring train hooks (Opus publishes)
+
+The ring train reads `town.ring` through one adapter, `ringOf(town)` in `src/game/ring-route.js`, and throws if a town has none. Stations are sorted by `s`; a station without `s` is projected onto the loop from `stop`. Trains run clockwise at the height `deckLift` above the ground line, the centre of the deck that `src/world/rail.js` paints.
+
+- Each station's platform lies on the side of the track its `street` stair is on (`station.side`: +1 right of travel, −1 left). `src/world/rail.js` paints the platform from 7.4 to 16 units off the centre line, `PLATFORM_HALF_LENGTH` either side of the stop; riders wait 11 units out (`platformSpot`).
+- Trainsets are three 18 m coaches (`CAR_LENGTH` 85.6 units, from `art-src/baked/ringTrain.json`). The timetable brakes for curves: the speed limit is √(16 / curvature), held while any coach is on the bend, so about 50 units/s through the 150-unit corners against 92 on the straights. Four trainsets run on the 12 600-unit ring, about 73 s apart.
+- `src/ui/renderer.js` calls `drawRingTrains(ox, oy, actors)` after the overhead layers and overhead monuments. `ringActors(ox, oy)` adds the **PC** station roundels to the depth-sorted actors.
+- The carriages are the baked `ringTrainTurns` (coach) and `ringTrainCabTurns` (cab) atlases; the rear cab is the cab frame turned round.
 
 ## Verification
 

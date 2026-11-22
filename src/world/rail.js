@@ -1,7 +1,7 @@
 import { plates, plateScale } from "./streets.js";
-import { CELL_H, CELL_W, TAU, X, Y, town } from "./town.js";
+import { CELL_H, CELL_W, X, Y, town } from "./town.js";
 import { artwork, game } from "../core/state.js";
-import { g, rect } from "../platform/canvas.js";
+import { g } from "../platform/canvas.js";
 import {
   railTop,
   deckBottom,
@@ -14,16 +14,7 @@ import {
   viaductSection,
 } from "./viaduct.js";
 import { paintedViaduct } from "./viaduct.js";
-import { drawOverTrain, drawSideDeck, sideSupportSprites, spanForeground } from "./ring-art.js";
-
-// Single train rendering hook for the Petite Ceinture ring railway.
-// Opus (ring-train branch) replaces this function to draw and simulate trains along `town.ring`.
-export function drawRingTrains(ctx, ring, ox, oy) {
-  void ctx;
-  void ring;
-  void ox;
-  void oy;
-}
+import { drawSideDeck, sideSupportSprites, spanForeground } from "./ring-art.js";
 
 // The market artist painted one full open span between these two pier centre lines.
 // Extract its silhouette once, keeping the roadway visible through the ironwork.
@@ -231,15 +222,13 @@ export function visibleRails(ox, oy) {
   // 2. The painted supports of the side legs, each sorted with the street at its foot.
   rails.push(...sideSupportSprites(ox, oy));
 
-  // 3. Overhead: the side-leg and corner decks, then Opus's single ring train drawing hook,
-  // then whatever stands over a train (rail-bridge bracing, platform canopies).
+  // 3. Overhead: the side-leg and corner decks. The trains ride on them: the renderer calls
+  // drawRingTrains from src/art/train.js once all the overhead layers are down, then
+  // drawOverTrain for whatever stands over a train (rail-bridge bracing, platform canopies).
   rails.push({
     y: -1e9,
     draw: (overhead) => {
-      if (!overhead) return;
-      drawSideDeck(ox, oy);
-      drawRingTrains(g, ring, ox, oy);
-      drawOverTrain(ox, oy);
+      if (overhead) drawSideDeck(ox, oy);
     },
   });
 
