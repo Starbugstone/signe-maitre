@@ -53,7 +53,10 @@ export default async (d) => {
   const home = initial.river.moorings.find((m) => m.id === launch.mooring);
   const bridge = initial.river.bridges.find((b) => b.x > home.x);
   await d.step("walk down to the quay", async () => {
-    const avenue = { x: X(7) + 17, y: Y(5) - 17 };
+    const avenue = { x: X(7) + 17, y: Y(5) - 16 };
+    const pastSedan = initial.p.x - 9;
+    await d.walkTo({ x: pastSedan, y: initial.p.y }, { tol: 2.5 });
+    await d.walkTo({ x: pastSedan, y: avenue.y }, { tol: 2.5 });
     await d.walkTo(avenue, { tol: 4 });
     await d.walkTo({ x: avenue.x, y: home.quay.y }, { tol: 4, timeout: 45000 });
     await d.walkTo(home.quay, { tol: 4 });
