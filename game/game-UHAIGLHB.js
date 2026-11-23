@@ -565,6 +565,8 @@
       return cells[r * cols + c];
     };
     layout.roadNodeAt = (col, row) => roadNodeById.get(`c${col}r${row}`) || null;
+    const waterRows = singleBandCanal ? [canalRow2] : [canalRow2, riverRow];
+    layout.backLane = (row) => row >= 0 && row < rows2 - 1 && !waterRows.includes(row);
     return layout;
   }
 
@@ -581,6 +583,7 @@
       return target2[i] + (target2[i + 1] - target2[i]) * (v - source[i]) / (source[i + 1] - source[i]);
     };
   }
+  var alleyHalf = 7;
   var xTargets = [-CELL_W / 2, -kerbX, 0, kerbX, CELL_W / 2];
   var yTargets = [-CELL_H / 2, -kerbY, 0, kerbY, CELL_H / 2];
   var kerbs = {
@@ -599,13 +602,45 @@
     ringNorth: [[668, 753, 838], [430, 500, 570]],
     ringCornerNE: [[667, 752, 838], [430, 500, 571]],
     ringCornerNW: [[668, 753, 838], [429, 501, 573]],
-    ringStationNorth: [[668, 753, 838], [430, 500, 570]]
+    ringStationNorth: [[668, 753, 838], [430, 500, 570]],
+    teeSouth: [[662, 750, 838], [428, 499, 570]],
+    alleyEast: [[662, 750, 838], [428, 499, 570]],
+    alleySouth: [[662, 750, 838], [427, 498, 569]],
+    alleySouthB: [[662, 750, 838], [428, 499, 570]],
+    alleyNorth: [[662, 750, 838], [428, 499, 570]],
+    alleyNorthB: [[662, 749.5, 837], [428, 499, 570]]
   };
   kerbs.rondPoint = kerbs.obeliskSquare;
+  var lanes = {
+    alleyCross: { x: [724, 749, 774], y: [474, 499, 524] },
+    alleyCrossB: { x: [714, 750, 786], y: [468, 499, 530] },
+    alleyEast: { y: [468, 499, 530] },
+    alleySouth: { x: [714, 749.5, 785] },
+    alleySouthB: { x: [714, 750, 786] },
+    alleyNorth: { x: [714, 750, 786] },
+    alleyNorthB: { x: [714, 750, 786] }
+  };
+  function stops(size, half, kerb, lane, wide) {
+    const source = [0, size], target2 = [-half, half];
+    const add = (px, units) => {
+      const at2 = source.findIndex((stop) => stop > px);
+      source.splice(at2, 0, px);
+      target2.splice(at2, 0, units);
+    };
+    if (kerb) for (const [i, units] of [-wide, 0, wide].entries()) add(kerb[i], units);
+    if (lane) {
+      for (const [i, units] of [-alleyHalf, 0, alleyHalf].entries()) if (!kerb || i !== 1) add(lane[i], units);
+    }
+    return { source, target: target2 };
+  }
+  function registration(key) {
+    const [kx, ky] = kerbs[key] || [], lane = lanes[key] || {};
+    return { x: stops(1500, CELL_W / 2, kx, lane.x, kerbX), y: stops(1e3, CELL_H / 2, ky, lane.y, kerbY) };
+  }
   function fromSource(key, { ring: ring2 = false } = {}) {
-    const [xs, ys] = kerbs[key];
-    const x = mapper([0, ...xs, 1500], xTargets);
-    const y = ring2 ? mapper([0, 182, 378, ...ys, 1e3], [-CELL_H / 2, ringDeck, ringFoot, ...yTargets.slice(1)]) : mapper([0, ...ys, 1e3], yTargets);
+    const r = registration(key);
+    const x = mapper(r.x.source, r.x.target);
+    const y = ring2 ? mapper([0, 182, 378, ...kerbs[key][1], 1e3], [-CELL_H / 2, ringDeck, ringFoot, ...yTargets.slice(1)]) : mapper(r.y.source, r.y.target);
     return { x, y, point: ([px, py]) => [x(px), y(py)] };
   }
   var lantern = [
@@ -857,6 +892,12 @@
     marketHall: { arms: "nesw" },
     park: { arms: "nesw", garden: true },
     teeNorth: { arms: "esw" },
+    teeSouth: { arms: "new" },
+    alleyEast: { arms: "nsw", alleys: "e" },
+    alleySouth: { arms: "new", alleys: "s" },
+    alleySouthB: { arms: "new", alleys: "s" },
+    alleyNorth: { arms: "esw", alleys: "n" },
+    alleyNorthB: { arms: "esw", alleys: "n" },
     opera: { arms: "nesw" },
     basilica: { arms: "nesw" },
     palaisJustice: { arms: "nesw" },
@@ -865,6 +906,7 @@
     obeliskSquare: { arms: "nesw", roundabout: true },
     rondPoint: { arms: "nesw", roundabout: true },
     alleyCross: { arms: "", alleys: "nesw" },
+    alleyCrossB: { arms: "", alleys: "nesw" },
     ringNorth: { arms: "nesw", viaduct: { source: "ringNorth", piers: [89, 412, 609, 897, 1256, 1470] } },
     ringNorthB: {
       arms: "nesw",
@@ -1042,7 +1084,41 @@
     Object.assign(paintings.ringNorthB, { lamps: cornerWest, eastLamps: cornerEast });
     Object.assign(paintings.ringStationB, { lamps: cornerWest, eastLamps: [cornerEast[2]] });
   }
-  paintings.basilica.forecourt = { w: 100 };
+  var swapped = (dirs = "") => [...dirs].map((d) => ({ e: "w", w: "e" })[d] || d).join("");
+  for (const [key, source] of [
+    ["alleyWest", "alleyEast"],
+    ["teeNorthTurned", "teeNorth"],
+    ["teeSouthTurned", "teeSouth"]
+  ]) {
+    const { arms, alleys, lamps } = paintings[source];
+    paintings[key] = { arms: swapped(arms), ...alleys ? { alleys: swapped(alleys) } : {}, lamps, turned: source };
+  }
+  var partyWall = { source: "teeSouth", width: 4.8, north: [0, 87.4], fill: [20, 6.4], south: [136.8, 225.2] };
+  {
+    const all = ["nw", "ne", "sw", "se"], south = ["sw", "se"];
+    const blocks2 = {
+      garage: all,
+      docks: all,
+      square: all,
+      market: south,
+      haussmann: all,
+      haussmannCafe: all,
+      boulevard: all,
+      marketHall: all,
+      teeNorth: all,
+      starArch: all,
+      opera: ["ne", "sw", "se"],
+      basilica: ["ne", "sw", "se"],
+      palaisJustice: ["ne", "sw", "se"],
+      obeliskSquare: south,
+      rondPoint: south,
+      ringNorth: south,
+      ringNorthB: south,
+      ringStation: south,
+      ringStationB: south
+    };
+    for (const [key, list] of Object.entries(blocks2)) paintings[key].walls = list;
+  }
   var paintingKeys = Object.keys(paintings);
 
   // src/world/street-props.js
@@ -1162,7 +1238,7 @@
       key,
       x: map2.x(x),
       y: map2.y(foot2),
-      radius: Math.min(1.8, (right.at(-1)[0] - left2[0][0]) / 2),
+      radius: Math.min(1.8, Math.abs(right.at(-1)[0] - left2[0][0]) / 2),
       outline: [...right, ...left2],
       painted: true
     };
@@ -1175,8 +1251,10 @@
     if (painting.river) {
       for (const lamp of riverMarks[key].lamps || []) items.push(lanternProp(key, fromRiver(key), lamp));
     } else if (painting.lamps) {
-      const { source = key, east } = painting.viaduct || {}, ring2 = !!painting.viaduct;
-      for (const lamp of painting.lamps) items.push(lanternProp(key, fromSource(source, { ring: ring2 }), lamp));
+      const { source = painting.turned || key, east } = painting.viaduct || {}, ring2 = !!painting.viaduct;
+      let map2 = fromSource(source, { ring: ring2 });
+      if (painting.turned) map2 = { x: (px) => -fromSource(source).x(px), y: map2.y, point: ([px, py]) => [-fromSource(source).x(px), map2.y(py)] };
+      for (const lamp of painting.lamps) items.push(lanternProp(key, map2, lamp));
       for (const lamp of painting.eastLamps || []) items.push(lanternProp(key, fromSource(east, { ring: ring2 }), lamp));
     }
     if (items.length) props[key] = items;
@@ -1255,11 +1333,14 @@
           if (wx < isl.left + 8 || wx > isl.right - 8 || wy < isl.top + 8 || wy > isl.bottom - 8) return false;
         }
       }
+      if (item.y > CELL_H / 2 - 12 && layout.backLane?.(row)) return false;
       if (meta) {
-        if (item.x < -28 && !meta.wideArms.w) return false;
-        if (item.x > 28 && !meta.wideArms.e) return false;
-        if (item.y < -30 && !meta.wideArms.n) return false;
-        if (item.y > 26 && !meta.wideArms.s) return false;
+        if (paintings[key]?.legacy) {
+          if (item.x < -28 && !meta.wideArms.w) return false;
+          if (item.x > 28 && !meta.wideArms.e) return false;
+          if (item.y < -30 && !meta.wideArms.n) return false;
+          if (item.y > 26 && !meta.wideArms.s) return false;
+        }
         for (const rb of meta.roundabouts)
           if (Math.hypot(wx - rb.x, wy - rb.y) < rb.outerRadius + 4) return false;
         for (const poly of meta.solidPolys) if (nearPoly(wx, wy, poly, 4)) return false;
@@ -1545,6 +1626,19 @@
   ];
   var IRON_BRIDGES = /* @__PURE__ */ new Set([1, 6, 12]);
   var STATION_COLS = /* @__PURE__ */ new Set([3, 8, 12]);
+  var RUELLES = {
+    "10,4": "alleyCross",
+    "11,4": "alleyCrossB",
+    "9,4": "alleyEast",
+    "12,4": "alleyWest",
+    "10,3": "alleySouth",
+    "11,3": "alleySouthB",
+    "10,5": "alleyNorth",
+    "11,5": "alleyNorthB",
+    "9,8": "alleySouthB",
+    "9,9": "alleyNorth"
+  };
+  var TEES = { "1,4": "teeSouth", "1,5": "teeNorth", "12,9": "teeSouthTurned", "12,10": "teeNorthTurned" };
   var cellKinds = blocks.map(
     (row, r) => row.map((key, c) => {
       if (r === RIVER_ROW) {
@@ -1564,13 +1658,13 @@
       if ((c === 3 || c === 4) && r === 9) return "park";
       if (c === 14 && (r === 3 || r === 4)) return "park";
       if (c === 7 && r === 9) return "park";
-      if ((c === 10 || c === 11) && r === 4) return "alleyCross";
+      if (RUELLES[`${c},${r}`]) return RUELLES[`${c},${r}`];
       if ((r === 1 || r === 11) && c >= 2 && c <= 13) {
         if (STATION_COLS.has(c)) return (c + r) % 2 ? "ringStationB" : "ringStation";
         if (key === "market") return "market";
         return (c + r) % 2 ? "ringNorthB" : "ringNorth";
       }
-      if (["5,2", "12,10", "1,5", "12,5", "4,10", "7,10"].includes(`${c},${r}`)) return "teeNorth";
+      if (TEES[`${c},${r}`]) return TEES[`${c},${r}`];
       if (c === 7 && r === 5) return "garage";
       if (c === 5 && r === 4) return "garage";
       if (c === 6 && r === 6) return "haussmann";
@@ -1611,35 +1705,15 @@
     }
     const edgeKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
     const omitted = /* @__PURE__ */ new Set([
-      // Impasse de l'Ouest at (1, 4): connects only east to (2, 4).
-      edgeKey("c0r4", "c1r4"),
-      edgeKey("c1r3", "c1r4"),
+      // Rue de l'Ouest stops at (1, 4); Rue des Écoles stops at (12, 9).
       edgeKey("c1r4", "c1r5"),
-      // Impasse du Parchemin at (12, 4) inside Marais: alley dead end off (11, 4).
-      edgeKey("c12r3", "c12r4"),
-      edgeKey("c12r4", "c12r5"),
-      edgeKey("c12r4", "c13r4"),
-      // Allée du Champ-de-Fer at (4, 9) inside SW park: dead end off (4, 8).
-      edgeKey("c3r9", "c4r9"),
-      edgeKey("c4r9", "c5r9"),
-      edgeKey("c4r9", "c4r10"),
-      // Impasse des Buttes at (14, 3) inside Parc des Buttes-Fiscales: dead end off (13, 3).
-      edgeKey("c14r2", "c14r3"),
-      edgeKey("c14r3", "c14r4"),
-      edgeKey("c14r3", "c15r3"),
-      // Cour du Sénat at (7, 9) inside Jardin du Sénat: dead end off (7, 8).
-      edgeKey("c6r9", "c7r9"),
-      edgeKey("c7r9", "c8r9"),
-      edgeKey("c7r9", "c7r10"),
-      // Additional T-junctions for natural Parisian street rhythm.
-      edgeKey("c5r1", "c5r2"),
       edgeKey("c12r9", "c12r10"),
       // Island centre square (9, 7) has no N/S bridges (bridges are at col 8 and col 10).
       edgeKey("c9r6", "c9r7"),
       edgeKey("c9r7", "c9r8")
     ]);
     const alleyEdges = /* @__PURE__ */ new Set([
-      // Le Vieux Marais (centre-east dense old quarter).
+      // Le Vieux Marais: two crossings of ruelles and the lanes that reach them from the streets around.
       edgeKey("c10r3", "c10r4"),
       edgeKey("c10r4", "c10r5"),
       edgeKey("c11r3", "c11r4"),
@@ -1647,14 +1721,8 @@
       edgeKey("c9r4", "c10r4"),
       edgeKey("c10r4", "c11r4"),
       edgeKey("c11r4", "c12r4"),
-      edgeKey("c10r3", "c11r3"),
-      edgeKey("c10r5", "c11r5"),
-      // Quartier Latin (Rive Gauche old quarter).
-      edgeKey("c9r8", "c9r9"),
-      edgeKey("c9r9", "c10r9"),
-      // Montmartre / Butte du Créancier narrow lanes flanking Sacré-Créancier.
-      edgeKey("c7r0", "c8r0"),
-      edgeKey("c8r0", "c9r0")
+      // Quartier Latin: Ruelle des Écoles, from Quai Sud down to the street behind it.
+      edgeKey("c9r8", "c9r9")
     ]);
     function edgeClass(c1, r1, c2, r2) {
       const k = edgeKey(`c${c1}r${r1}`, `c${c2}r${r2}`);
@@ -1709,41 +1777,6 @@
         if (!nodeIds.has(a) || !nodeIds.has(b)) continue;
         pushEdge(a, b, edgeClass(c, r, c, r + 1));
       }
-    }
-    const seamAlleys = [
-      { col: 9.5, rowA: 4, rowB: 5 },
-      // Passage des Greffes (right next to Le Boum / Marais)
-      { col: 10.5, rowA: 3, rowB: 4 },
-      // Passage du Sceau (Marais heart)
-      { col: 6.5, rowA: 0, rowB: 1 },
-      // Passage de la Butte (Montmartre steps shortcut, clear of market west pier)
-      { col: 9.5, rowA: 8, rowB: 9 }
-      // Passage des Écoles (Quartier Latin)
-    ];
-    function splitHorizontalEdge(cLeft, row, midCol) {
-      const a = `c${cLeft}r${row}`, b = `c${cLeft + 1}r${row}`;
-      const midId = `c${midCol}r${row}`;
-      if (!nodeIds.has(midId)) {
-        nodes.push({ id: midId, col: midCol, row, x: X(midCol), y: Y(row), kind: "tee" });
-        nodeIds.add(midId);
-      }
-      const idx = edges.findIndex((e) => e.a === a && e.b === b || e.a === b && e.b === a);
-      if (idx >= 0) {
-        const orig = edges[idx];
-        edges.splice(
-          idx,
-          1,
-          { a, b: midId, class: orig.class, halfWidth: orig.halfWidth },
-          { a: midId, b, class: orig.class, halfWidth: orig.halfWidth }
-        );
-      }
-      return midId;
-    }
-    for (const s of seamAlleys) {
-      const cLeft = Math.floor(s.col);
-      const topId = splitHorizontalEdge(cLeft, s.rowA, s.col);
-      const botId = splitHorizontalEdge(cLeft, s.rowB, s.col);
-      edges.push({ a: topId, b: botId, class: "alley", halfWidth: ROAD_HALF_WIDTH.alley, seam: true });
     }
     return { nodes, edges };
   }
@@ -2225,7 +2258,14 @@
     }
     return true;
   }
-  function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam) {
+  var backLaneDepth = 7;
+  function inBackLane(layout, x, y, margin) {
+    const { row } = layout.cellAt(x, y);
+    if (!layout.backLane(row)) return false;
+    const above = Y(row) + CELL_H / 2 - y;
+    return above >= margin && above <= backLaneDepth - margin && !layout.river?.onWater(x, y, 0);
+  }
+  function pointInOpenSpace(layout, cell, x, y, allowAlley, onFoot) {
     for (const r of cell.openRects) {
       if (r.alley && !allowAlley) continue;
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
@@ -2234,16 +2274,7 @@
       const dx = x - rb.x, dy = y - rb.y;
       if (dx * dx + dy * dy <= rb.outerRadius * rb.outerRadius) return true;
     }
-    if (allowServiceSeam) {
-      if (!layout.river || !layout.river.onWater(x, y, 0)) {
-        const { col, row } = layout.cellAt(x, y);
-        const dx = Math.abs(x - X(col)), dy = Math.abs(y - Y(row));
-        if (Math.abs(dx - CELL_W / 2) < 2.9 || Math.abs(dy - CELL_H / 2) < 2.9) {
-          const m = layout.cellMeta(col, row);
-          if (!m.isRiverRow || m.isIsland) return true;
-        }
-      }
-    }
+    if (onFoot && inBackLane(layout, x, y, 0)) return true;
     return false;
   }
   var CIRCLE_DIRS = Array.from({ length: 8 }, (_, i) => {
@@ -2268,7 +2299,7 @@
     const { col, row } = layout.cellAt(x, y);
     const cell = layout.cellMeta(col, row);
     const allowAlley = r <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
-    const allowServiceSeam = r < 4;
+    const onFoot = r < 4;
     for (const post of streetProps(layout, col, row)) {
       const radius = post.item.radius;
       if (!radius) continue;
@@ -2287,11 +2318,7 @@
       if (circleHitsBox(x, y, r, pier)) return true;
     }
     if (hitsLegacyLines(layout, x, y, r)) return true;
-    if (allowServiceSeam && (!layout.river || !layout.river.onWater(x, y, 0)) && (!cell.isRiverRow || cell.isIsland)) {
-      const seamX = Math.abs(Math.abs(x - X(col)) - CELL_W / 2);
-      const seamY = Math.abs(Math.abs(y - Y(row)) - CELL_H / 2);
-      if (seamX < 2.9 || seamY < 2.9) return false;
-    }
+    if (onFoot && inBackLane(layout, x, y, 1.5)) return false;
     for (const rect2 of cell.openRects) {
       if (rect2.alley && !allowAlley) continue;
       if (x >= rect2.left + r && x <= rect2.right - r && y >= rect2.top + r && y <= rect2.bottom - r) return false;
@@ -2303,12 +2330,12 @@
         if (dx * dx + dy * dy <= maxR * maxR) return false;
       }
     }
-    if (!pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam)) return true;
+    if (!pointInOpenSpace(layout, cell, x, y, allowAlley, onFoot)) return true;
     for (const [cx, cy] of CIRCLE_DIRS) {
       const sx = x + cx * r, sy = y + cy * r;
       const sc = layout.cellAt(sx, sy);
       const sCell = sc.col === col && sc.row === row ? cell : layout.cellMeta(sc.col, sc.row);
-      if (!pointInOpenSpace(layout, sCell, sx, sy, allowAlley, allowServiceSeam)) return true;
+      if (!pointInOpenSpace(layout, sCell, sx, sy, allowAlley, onFoot)) return true;
     }
     return false;
   }
@@ -5750,8 +5777,8 @@
   }
   function startPass(c, route, probe, here) {
     if (probe.turning || probe.inRoundabout || probe.seg.isAlley || probe.remaining < 20) return;
-    const lanes = route.wait > 4 ? [...passingLanes, ...pavementLanes] : passingLanes;
-    const lane = lanes.find(
+    const lanes2 = route.wait > 4 ? [...passingLanes, ...pavementLanes] : passingLanes;
+    const lane = lanes2.find(
       (l) => [8, 22, 36, 50].every((d) => clearPose(c, placed(pathAt(route, d, l), l))) && lookAhead(c, here, l, l, 60).gap > 50
     );
     if (lane === void 0) return;
@@ -8633,8 +8660,40 @@
       clearMarkings(plate, false, CELL_W / 2, 2.45, 35);
       plates[key] = plate;
     }
-    for (const key of [...Object.keys(paintings), "alleyStripV", "alleyStripH", "towerIron"])
-      if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+    for (const key of [...Object.keys(paintings), "towerIron"]) if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+    const pier = plates[partyWall.source];
+    for (const [key, { legacy, walls }] of Object.entries(paintings)) {
+      if (!legacy || !walls || !plates[key] || !pier) continue;
+      const ctx = plates[key].getContext("2d"), px = (v) => Math.round(v * plateScale), w = px(partyWall.width);
+      for (const block of walls) {
+        const [top2, foot2] = (block[0] === "n" ? partyWall.north : partyWall.south).map(px);
+        const [from, depth] = partyWall.fill.map(px);
+        ctx.save();
+        if (block[1] === "e") {
+          ctx.translate(plates[key].width, 0);
+          ctx.scale(-1, 1);
+        }
+        if (block[0] === "n") ctx.drawImage(pier, 0, from, w, depth, 0, 0, w, depth);
+        const start = block[0] === "n" ? depth : top2;
+        ctx.drawImage(pier, 0, start, w, foot2 - start, 0, start, w, foot2 - start);
+        ctx.fillStyle = "#24163538";
+        ctx.fillRect(0, top2, w, foot2 - top2);
+        ctx.fillStyle = "#1b1226b0";
+        ctx.fillRect(w, top2, 1.5, foot2 - top2);
+        ctx.restore();
+      }
+    }
+    for (const [key, { turned: turned2 }] of Object.entries(paintings)) {
+      if (!turned2 || !plates[turned2]) continue;
+      const source = plates[turned2], plate = document.createElement("canvas");
+      plate.width = source.width;
+      plate.height = source.height;
+      const ctx = plate.getContext("2d");
+      ctx.translate(plate.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(source, 0, 0);
+      plates[key] = plate;
+    }
     roadPaint = paintPattern(artwork.market, 32, 498, 39, 4, 0.2, "#80627362");
   }
   function cellPlateKey(col, row) {
@@ -8646,144 +8705,25 @@
     for (const dir of "nesw") arms[dir] = meta.allArms[dir] === "alley" ? "alley" : meta.wideArms[dir] ? "wide" : null;
     return arms;
   }
-  function blit(ctx, plate, left2, top2, w, h, dx, dy, dw = w, dh = h) {
-    ctx.drawImage(
-      plate,
-      (left2 + CELL_W / 2) * plateScale,
-      (top2 + CELL_H / 2) * plateScale,
-      w * plateScale,
-      h * plateScale,
-      dx,
-      dy,
-      dw,
-      dh
-    );
-  }
-  var scrap = document.createElement("canvas");
-  var scrapContext = scrap.getContext("2d");
-  function blitSoft(ctx, plate, left2, top2, w, h, dx, dy, edges, soft = 5) {
-    const pw = Math.round(w * plateScale), ph = Math.round(h * plateScale), f = soft * plateScale;
-    scrap.width = pw;
-    scrap.height = ph;
-    scrapContext.drawImage(plate, (left2 + CELL_W / 2) * plateScale, (top2 + CELL_H / 2) * plateScale, pw, ph, 0, 0, pw, ph);
-    scrapContext.globalCompositeOperation = "destination-in";
-    for (const edge of edges) {
-      const across = edge === "l" || edge === "r", far = edge === "r" || edge === "b";
-      const size = across ? pw : ph;
-      const fade = scrapContext.createLinearGradient(0, 0, across ? pw : 0, across ? 0 : ph);
-      fade.addColorStop(far ? 1 - f / size : 0, far ? "#000" : "#0000");
-      fade.addColorStop(far ? 1 : f / size, far ? "#0000" : "#000");
-      scrapContext.fillStyle = fade;
-      scrapContext.fillRect(0, 0, pw, ph);
-    }
-    scrapContext.globalCompositeOperation = "source-over";
-    ctx.drawImage(scrap, dx, dy, w, h);
-  }
-  var capHalf = 25.6;
-  function drawArmCaps(ctx, col, row) {
-    const key = cellPlateKey(col, row), painting = paintings[key];
-    if (!painting?.arms) return;
-    const plate = plates[key], cx = X(col), cy = Y(row), arms = cellArms(col, row);
-    const shows = (dir) => painting.arms.includes(dir);
-    const slice = (col + row) % 2 ? 74 : -74;
-    if (!arms.n && shows("n") && row !== town.riverSouthRow)
-      blitSoft(ctx, plate, 74 - capHalf - 3, -CELL_H / 2, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy - CELL_H / 2, "lr");
-    if (!arms.s && shows("s"))
-      blitSoft(ctx, plate, slice - capHalf - 3, 16.3, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy + 16.3, "lr");
-    const from = painting.capFrom ?? 46, depth = CELL_H / 2 - from;
-    if (!arms.e && shows("e"))
-      blitSoft(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbl");
-    if (!arms.w && shows("w"))
-      blitSoft(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbr");
-  }
-  var stripV = { width: 43.2, lane: 21.72 };
-  var stripH = { height: 47.2, lane: 23.42 };
-  function alleyV(ctx, x, y0, y1, fit = 1) {
-    if (y1 <= y0) return;
-    const top2 = Y(town.cellAt(x, (y0 + y1) / 2).row) - CELL_H / 2;
-    ctx.drawImage(
-      plates.alleyStripV,
-      0,
-      (y0 - top2) * plateScale,
-      stripV.width * plateScale,
-      (y1 - y0) * plateScale,
-      x - stripV.lane * fit,
-      y0,
-      stripV.width * fit,
-      y1 - y0 + 0.03
-    );
-  }
-  function alleyH(ctx, y, x0, x1, fit = 1) {
-    if (x1 <= x0) return;
-    const left2 = X(town.cellAt((x0 + x1) / 2, y).col) - CELL_W / 2;
-    ctx.drawImage(
-      plates.alleyStripH,
-      (x0 - left2) * plateScale,
-      0,
-      (x1 - x0) * plateScale,
-      stripH.height * plateScale,
-      x0,
-      y - stripH.lane * fit,
-      x1 - x0 + 0.03,
-      stripH.height * fit
-    );
-  }
-  var corridorV = 1.16;
-  var corridorH = 1.13;
-  function drawAlleyArms(ctx, col, row) {
-    const painting = paintings[cellPlateKey(col, row)];
-    if (!painting?.arms) return;
-    const arms = cellArms(col, row), cx = X(col), cy = Y(row);
-    const lane = (dir) => arms[dir] === "alley" && !painting.alleys?.includes(dir);
-    const forecourt = painting.forecourt?.w ?? 25;
-    if (lane("n")) alleyV(ctx, cx, cy - CELL_H / 2, cy - 28, corridorV);
-    if (lane("s")) alleyV(ctx, cx, cy + 23, cy + CELL_H / 2, corridorV);
-    if (lane("w")) alleyH(ctx, cy, cx - CELL_W / 2, cx - forecourt, corridorH);
-    if (lane("e")) alleyH(ctx, cy, cx + 25, cx + CELL_W / 2, corridorH);
-  }
-  function drawSeams(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
-    const land = (row) => row >= 0 && row < town.rows && row !== town.riverRow;
-    for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
-      if (!land(row)) continue;
-      const cy = Y(row);
-      const top2 = row === town.riverSouthRow ? -16 : -CELL_H / 2, bottom = row === canalRow ? 18 : CELL_H / 2;
-      for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
-        const x = X(col) - CELL_W / 2;
-        if (!visible(x - 24, cy - CELL_H / 2, 48, CELL_H)) continue;
-        const crossed = cellArms(col - 1, row).e || cellArms(col, row).w;
-        if (crossed) {
-          alleyV(ctx, x, cy + top2, cy - 28);
-          alleyV(ctx, x, cy + 23, cy + bottom);
-        } else alleyV(ctx, x, cy + top2, cy + bottom);
-      }
-    }
-    for (let row = Math.max(1, firstRow); row <= lastRow; row++) {
-      if (!land(row) || !land(row - 1)) continue;
-      const y = Y(row) - CELL_H / 2;
-      for (let col = Math.max(0, firstCol); col <= lastCol; col++) {
-        const cx = X(col);
-        if (!visible(cx - CELL_W / 2, y - 26, CELL_W, 52)) continue;
-        const crossed = cellArms(col, row - 1).s || cellArms(col, row).n;
-        if (crossed) {
-          alleyH(ctx, y, cx - CELL_W / 2, cx - 25);
-          alleyH(ctx, y, cx + 25, cx + CELL_W / 2);
-        } else alleyH(ctx, y, cx - CELL_W / 2, cx + CELL_W / 2);
-      }
-      for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
-        const x = X(col) - CELL_W / 2;
-        if (visible(x - 24, y - 26, 48, 52))
-          blit(ctx, plates.alleyCross, -stripV.lane, -stripH.lane, stripV.width, stripH.height, x - stripV.lane, y - stripH.lane);
-      }
-    }
-  }
+  var laneJoin = 8.5;
+  var passageJoin = 6;
   function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
     for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
       if (row === town.riverRow) continue;
       for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
         const x = X(col) - CELL_W / 2, y = Y(row);
-        if (!visible(x - 14, y - 30, 28, 58)) continue;
-        if (cellArms(col - 1, row).e !== "wide" || cellArms(col, row).w !== "wide") continue;
+        if (!visible(x - 14, y - 30, 28, CELL_H / 2 + 30)) continue;
         const l = cellPlateKey(col - 1, row), r = cellPlateKey(col, row);
+        if (town.backLane(row)) {
+          const passage = getJoin("passage:" + l + r, plates[l], plates[r], true, CELL_H - passageJoin, passageJoin, 12);
+          ctx.drawImage(passage, x - 12, y + CELL_H / 2 - passageJoin, 24, passageJoin);
+        }
+        if (cellArms(col - 1, row).e === "alley" && cellArms(col, row).w === "alley") {
+          const lane = getJoin("lane:" + l + r, plates[l], plates[r], true, CELL_H / 2 - laneJoin, 2 * laneJoin, 9);
+          ctx.drawImage(lane, x - 9, y - laneJoin, 18, 2 * laneJoin);
+          continue;
+        }
+        if (cellArms(col - 1, row).e !== "wide" || cellArms(col, row).w !== "wide") continue;
         const top2 = row === town.riverSouthRow ? 16 : 29, bottom = row === canalRow ? 17 : 27;
         const road = getJoin("road:" + l + r + top2 + bottom, plates[l], plates[r], true, CELL_H / 2 - top2, top2 + bottom, 14);
         ctx.drawImage(road, x - 14, y - top2, 28, top2 + bottom);
@@ -8794,8 +8734,13 @@
       for (let col = Math.max(0, firstCol); col <= lastCol; col++) {
         const x = X(col), y = Y(row) - CELL_H / 2;
         if (!visible(x - 27, y - 12, 54, 24)) continue;
-        if (cellArms(col, row - 1).s !== "wide" || cellArms(col, row).n !== "wide") continue;
         const n = cellPlateKey(col, row - 1), s = cellPlateKey(col, row);
+        if (cellArms(col, row - 1).s === "alley" && cellArms(col, row).n === "alley") {
+          const lane = getJoin("alley:" + n + s, plates[n], plates[s], false, CELL_W / 2 - laneJoin, 2 * laneJoin, 9);
+          ctx.drawImage(lane, x - laneJoin, y - 9, 2 * laneJoin, 18);
+          continue;
+        }
+        if (cellArms(col, row - 1).s !== "wide" || cellArms(col, row).n !== "wide") continue;
         const road = getJoin("cross:" + n + s, plates[n], plates[s], false, CELL_W / 2 - 26.5, 53, 12);
         ctx.drawImage(road, x - 26.5, y - 12, 53, 24);
       }
@@ -8859,10 +8804,7 @@
     }
     for (const [col, row] of cells)
       ctx.drawImage(plates[cellPlateKey(col, row)], X(col) - CELL_W / 2, Y(row) - CELL_H / 2, CELL_W + 0.03, CELL_H + 0.03);
-    for (const [col, row] of cells) drawArmCaps(ctx, col, row);
     drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible);
-    for (const [col, row] of cells) drawAlleyArms(ctx, col, row);
-    drawSeams(ctx, firstCol, lastCol, firstRow, lastRow, visible);
     if (lastRow >= canalRow && firstRow <= town.riverSouthRow) drawRiver(ctx, firstCol, lastCol, visible);
     drawLaneMarks(ctx, visible);
   }
@@ -9750,23 +9692,35 @@
   // assets/scenery/alleyCross.webp
   var alleyCross_default = "game/alleyCross-QS5TJWJ5.webp";
 
-  // assets/scenery/alleyStripH.webp
-  var alleyStripH_default = "game/alleyStripH-7ROADJ25.webp";
+  // assets/scenery/alleyCrossB.webp
+  var alleyCrossB_default = "game/alleyCrossB-BWWU34TM.webp";
 
-  // assets/scenery/alleyStripV.webp
-  var alleyStripV_default = "game/alleyStripV-2SGB3FKV.webp";
+  // assets/scenery/alleyEast.webp
+  var alleyEast_default = "game/alleyEast-PGBWKFIL.webp";
+
+  // assets/scenery/alleyNorth.webp
+  var alleyNorth_default = "game/alleyNorth-PA74ACTX.webp";
+
+  // assets/scenery/alleyNorthB.webp
+  var alleyNorthB_default = "game/alleyNorthB-LFRCVDHR.webp";
+
+  // assets/scenery/alleySouth.webp
+  var alleySouth_default = "game/alleySouth-QU5DLGXD.webp";
+
+  // assets/scenery/alleySouthB.webp
+  var alleySouthB_default = "game/alleySouthB-CGGX7RZT.webp";
 
   // assets/scenery/basilica.webp
-  var basilica_default = "game/basilica-EIRV52RI.webp";
+  var basilica_default = "game/basilica-2R5ZWH3C.webp";
 
   // assets/scenery/boulevard.webp
-  var boulevard_default = "game/boulevard-PB3MIQOA.webp";
+  var boulevard_default = "game/boulevard-VIYJXYYH.webp";
 
   // assets/scenery/haussmann.webp
-  var haussmann_default = "game/haussmann-EFW3QEPL.webp";
+  var haussmann_default = "game/haussmann-5Z666J32.webp";
 
   // assets/scenery/haussmannCafe.webp
-  var haussmannCafe_default = "game/haussmannCafe-MSOFIZUT.webp";
+  var haussmannCafe_default = "game/haussmannCafe-A32R2JQM.webp";
 
   // assets/scenery/islandCathedral.webp
   var islandCathedral_default = "game/islandCathedral-A6JTOQLK.webp";
@@ -9778,16 +9732,16 @@
   var islandWest_default = "game/islandWest-KEDIFGQT.webp";
 
   // assets/scenery/marketHall.webp
-  var marketHall_default = "game/marketHall-DBU4ERMN.webp";
+  var marketHall_default = "game/marketHall-2QBWQCAU.webp";
 
   // assets/scenery/obeliskSquare.webp
-  var obeliskSquare_default = "game/obeliskSquare-R53NNFWG.webp";
+  var obeliskSquare_default = "game/obeliskSquare-6EB4GDG6.webp";
 
   // assets/scenery/opera.webp
-  var opera_default = "game/opera-76AI7GTN.webp";
+  var opera_default = "game/opera-MCJXAEXQ.webp";
 
   // assets/scenery/palaisJustice.webp
-  var palaisJustice_default = "game/palaisJustice-TDUMUONC.webp";
+  var palaisJustice_default = "game/palaisJustice-F3WF7DFN.webp";
 
   // assets/scenery/park.webp
   var park_default = "game/park-5J5GTOE5.webp";
@@ -9808,19 +9762,19 @@
   var ringDeck_default = "game/ringDeck-5NZUWYFL.webp";
 
   // assets/scenery/ringNorth.webp
-  var ringNorth_default = "game/ringNorth-6YCD6CAH.webp";
+  var ringNorth_default = "game/ringNorth-WVDWXDOF.webp";
 
   // assets/scenery/ringNorthB.webp
-  var ringNorthB_default = "game/ringNorthB-CYL4QEVY.webp";
+  var ringNorthB_default = "game/ringNorthB-6L7Z6MWM.webp";
 
   // assets/scenery/ringPortal.webp
   var ringPortal_default = "game/ringPortal-U5XWV4OU.webp";
 
   // assets/scenery/ringStation.webp
-  var ringStation_default = "game/ringStation-JWK2PVGQ.webp";
+  var ringStation_default = "game/ringStation-XJ2T3JP2.webp";
 
   // assets/scenery/ringStationB.webp
-  var ringStationB_default = "game/ringStationB-FRF2TTM7.webp";
+  var ringStationB_default = "game/ringStationB-GH5VDQKD.webp";
 
   // assets/scenery/river.webp
   var river_default = "game/river-XHQNO4ED.webp";
@@ -9832,13 +9786,16 @@
   var riverIronBridge_default = "game/riverIronBridge-B4VQSPE6.webp";
 
   // assets/scenery/rondPoint.webp
-  var rondPoint_default = "game/rondPoint-3UC7MDEY.webp";
+  var rondPoint_default = "game/rondPoint-C5SEWK4Z.webp";
 
   // assets/scenery/starArch.webp
-  var starArch_default = "game/starArch-A4OB42X2.webp";
+  var starArch_default = "game/starArch-IJF4JQQY.webp";
 
   // assets/scenery/teeNorth.webp
-  var teeNorth_default = "game/teeNorth-VQOZRZTJ.webp";
+  var teeNorth_default = "game/teeNorth-VBZFGBUX.webp";
+
+  // assets/scenery/teeSouth.webp
+  var teeSouth_default = "game/teeSouth-Q6B7JJYR.webp";
 
   // assets/scenery/towerBase.webp
   var towerBase_default = "game/towerBase-GWYTJFI4.webp";
@@ -9935,8 +9892,12 @@
     docks: docks_default,
     square: square_default,
     alleyCross: alleyCross_default,
-    alleyStripH: alleyStripH_default,
-    alleyStripV: alleyStripV_default,
+    alleyCrossB: alleyCrossB_default,
+    alleyEast: alleyEast_default,
+    alleyNorth: alleyNorth_default,
+    alleyNorthB: alleyNorthB_default,
+    alleySouth: alleySouth_default,
+    alleySouthB: alleySouthB_default,
     basilica: basilica_default,
     boulevard: boulevard_default,
     haussmann: haussmann_default,
@@ -9965,6 +9926,7 @@
     rondPoint: rondPoint_default,
     starArch: starArch_default,
     teeNorth: teeNorth_default,
+    teeSouth: teeSouth_default,
     towerBase: towerBase_default,
     towerIron: towerIron_default,
     riverOver: riverOver_default,

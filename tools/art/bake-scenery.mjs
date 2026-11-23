@@ -18,7 +18,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { lantern, paintings, registration, riverMarks, riverPlate } from "../../src/world/paintings.js";
+import { lantern, paintings, partyWall, registration, riverMarks, riverPlate } from "../../src/world/paintings.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const args = process.argv.slice(2);
@@ -61,10 +61,12 @@ try {
       .filter((key) => !paintings[key].river && !paintings[key].turned)
       .map((key) => [key, registration(key)]),
   );
-  const names = await page.evaluate(([manifest, river, registered]) => bake.init(manifest, river, registered), [
+  const walls = Object.fromEntries(Object.entries(paintings).filter(([, p]) => p.walls && !p.legacy).map(([key, p]) => [key, p.walls]));
+  const names = await page.evaluate(([manifest, river, registered, party]) => bake.init(manifest, river, registered, party), [
     manifest,
     { marks: riverMarks, lantern },
     registered,
+    { walls, wall: partyWall },
   ]);
   let total = 0;
   for (const name of names) {

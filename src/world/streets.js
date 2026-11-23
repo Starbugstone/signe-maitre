@@ -2,7 +2,7 @@ import { canvas, g, rect } from "../platform/canvas.js";
 import { town, canalRow, CELL_H, CELL_W, X, Y } from "./town.js";
 import { artwork, game } from "../core/state.js";
 import { kerbX, kerbY, plateRegistration, streetProps } from "./street-props.js";
-import { paintings, riverPlate } from "./paintings.js";
+import { paintings, partyWall, riverPlate } from "./paintings.js";
 
 const plateScale = 5;
 const plates = {},
@@ -156,6 +156,32 @@ function prepareTown() {
     plates[key] = plate;
   }
   for (const key of [...Object.keys(paintings), "towerIron"]) if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+  // The first four paintings get their party walls here; the bake gives the others theirs.
+  const pier = plates[partyWall.source];
+  for (const [key, { legacy, walls }] of Object.entries(paintings)) {
+    if (!legacy || !walls || !plates[key] || !pier) continue;
+    const ctx = plates[key].getContext("2d"),
+      px = (v) => Math.round(v * plateScale),
+      w = px(partyWall.width);
+    for (const block of walls) {
+      const [top, foot] = (block[0] === "n" ? partyWall.north : partyWall.south).map(px);
+      const [from, depth] = partyWall.fill.map(px);
+      ctx.save();
+      if (block[1] === "e") {
+        ctx.translate(plates[key].width, 0);
+        ctx.scale(-1, 1);
+      }
+      if (block[0] === "n") ctx.drawImage(pier, 0, from, w, depth, 0, 0, w, depth);
+      const start = block[0] === "n" ? depth : top;
+      ctx.drawImage(pier, 0, start, w, foot - start, 0, start, w, foot - start);
+      // A shade darker than the lit facades either side, so that the wall recedes.
+      ctx.fillStyle = "#24163538";
+      ctx.fillRect(0, top, w, foot - top);
+      ctx.fillStyle = "#1b1226b0";
+      ctx.fillRect(w, top, 1.5, foot - top);
+      ctx.restore();
+    }
+  }
   // A turned painting is its source plate mirrored about the north-south street.
   for (const [key, { turned }] of Object.entries(paintings)) {
     if (!turned || !plates[turned]) continue;

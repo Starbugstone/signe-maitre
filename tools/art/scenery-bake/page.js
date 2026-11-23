@@ -16,7 +16,9 @@
 
   const images = {};
   let manifest = {},
-    registrations = {};
+    registrations = {},
+    walls = {},
+    wall = {};
 
   async function load(name, url) {
     if (images[name]) return images[name];
@@ -207,10 +209,42 @@
     alleyCrossB: { markings: false, grade: "alley" },
   };
   for (const [key, options] of Object.entries(districts))
-    recipes[key] = async () => grade(await districtPlate(key, options), options.grade || "district");
+    recipes[key] = async () => walled(key, grade(await districtPlate(key, options), options.grade || "district"));
+
+  // Party walls on the paintings that were made to be cut by the frame (`walls` and
+  // `partyWall` in src/world/paintings.js): the graded pier of a later painting, at the west
+  // or east edge of a north or south block. src/world/streets.js does the same for the first four.
+  let pier;
+  async function walled(key, plate) {
+    const blocks = walls[key];
+    if (!blocks) return plate;
+    pier ||= await recipes[wall.source]();
+    const ctx = plate.getContext("2d"),
+      w = Math.round(wall.width * P);
+    for (const block of blocks) {
+      const [top, foot] = (block[0] === "n" ? wall.north : wall.south).map((v) => Math.round(v * P));
+      ctx.save();
+      if (block[1] === "e") {
+        ctx.translate(plate.width, 0);
+        ctx.scale(-1, 1);
+      }
+      // The source pier starts below its painting's roof band: its own stone runs on to the top.
+      const [from, depth] = wall.fill.map((v) => Math.round(v * P));
+      if (block[0] === "n") ctx.drawImage(pier, 0, from, w, depth, 0, 0, w, depth);
+      const start = block[0] === "n" ? depth : top;
+      ctx.drawImage(pier, 0, start, w, foot - start, 0, start, w, foot - start);
+      // A shade darker than the lit facades either side, so that the wall recedes.
+      ctx.fillStyle = "#24163538";
+      ctx.fillRect(0, top, w, foot - top);
+      ctx.fillStyle = "#1b1226b0";
+      ctx.fillRect(w, top, 1.5, foot - top);
+      ctx.restore();
+    }
+    return plate;
+  }
 
   // Horizontal ring viaduct. Railheads and pier feet land on town.ring (deck 40 above the feet).
-  recipes.ringNorth = async () => grade(await ringPlate("ringNorth"), "ring");
+  recipes.ringNorth = async () => walled("ringNorth", grade(await ringPlate("ringNorth"), "ring"));
   // The straight halves of the two northern corner paintings make a second through-span.
   recipes.ringNorthB = async () => {
     const west = await ringPlate("ringCornerNE"),
@@ -218,10 +252,10 @@
     const half = (CW / 2) * P;
     paste(west, east, half - 8, 0, half + 8, CH * P, half - 8, 0, 8);
     west.getContext("2d").drawImage(east, half, 0, half, CH * P, half, 0, half, CH * P);
-    return grade(west, "ring");
+    return walled("ringNorthB", grade(west, "ring"));
   };
   // The station stands east of the cross street, platform centred on the ring stop at +88.
-  async function stationOn(baseKey) {
+  async function stationOn(baseKey, key) {
     const base = await recipes[baseKey].ungraded();
     const station = await ringPlate("ringStationNorth");
     const from = plateMap("ringStationNorth", true);
@@ -231,7 +265,7 @@
     const platform = from.x(entry("ringStationNorth").rail.platformCentre[0]);
     const dx = Math.round((CW / 2 + 88) * P - platform);
     paste(base, station, left, 0, right - left, bottom, left + dx, 0, 7);
-    return grade(base, "ring");
+    return walled(key, grade(base, "ring"));
   }
   recipes.ringNorth.ungraded = () => ringPlate("ringNorth");
   recipes.ringNorthB.ungraded = async () => {
@@ -242,8 +276,8 @@
     west.getContext("2d").drawImage(east, half, 0, half, CH * P, half, 0, half, CH * P);
     return west;
   };
-  recipes.ringStation = () => stationOn("ringNorth");
-  recipes.ringStationB = () => stationOn("ringNorthB");
+  recipes.ringStation = () => stationOn("ringNorth", "ringStation");
+  recipes.ringStationB = () => stationOn("ringNorthB", "ringStationB");
 
 
   // ---------------------------------------------------------------------------------------
@@ -751,15 +785,16 @@
     ctx.fillRect(dx - sw, dy - sw, 3 * sw, sh + sw);
     ctx.globalCompositeOperation = "source-over";
     ctx.drawImage(standard, dx, dy);
-    return grade(plate, "district");
+    return walled("rondPoint", grade(plate, "district"));
   };
 
   window.bake = {
     recipes,
     helpers: { P, CW, CH, KX, KY, XT, YT, RING_YT, load, canvas, context, mapper, register, grade, grades, paste, plateMap, kerbStops, entry, clearMarkings },
-    init(list, river, registered) {
+    init(list, river, registered, party) {
       manifest = Object.fromEntries(list.map((e) => [e.key, e]));
       registrations = registered;
+      ({ walls, wall } = party);
       marks = river.marks;
       lantern = river.lantern;
       return Object.keys(recipes);

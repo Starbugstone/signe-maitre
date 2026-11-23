@@ -461,4 +461,23 @@ for (const [key, source] of [
   paintings[key] = { arms: swapped(arms), ...(alleys ? { alleys: swapped(alleys) } : {}), lamps, turned: source };
 }
 
+// Party walls. The later paintings end each block in a stone pier, so that two paintings meet
+// as two houses do. The earlier ones were painted to be cut by the frame: they get the same
+// pier, lifted from `teeSouth`, on the blocks named here (north or south block, west or east
+// edge). The bake paints it into the plates; the first four paintings get it when they load.
+// Gardens, monuments that reach the frame, plazas and the viaduct's side of a ring row have none.
+export const partyWall = { source: "teeSouth", width: 4.8, north: [0, 87.4], fill: [20, 6.4], south: [136.8, 225.2] };
+{
+  const all = ["nw", "ne", "sw", "se"],
+    south = ["sw", "se"];
+  const blocks = {
+    garage: all, docks: all, square: all, market: south,
+    haussmann: all, haussmannCafe: all, boulevard: all, marketHall: all, teeNorth: all, starArch: all,
+    opera: ["ne", "sw", "se"], basilica: ["ne", "sw", "se"], palaisJustice: ["ne", "sw", "se"],
+    obeliskSquare: south, rondPoint: south,
+    ringNorth: south, ringNorthB: south, ringStation: south, ringStationB: south,
+  };
+  for (const [key, list] of Object.entries(blocks)) paintings[key].walls = list;
+}
+
 export const paintingKeys = Object.keys(paintings);
