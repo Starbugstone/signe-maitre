@@ -3129,11 +3129,51 @@
     }
     return "sedan";
   }
-  function routeClass(route) {
-    return route?.class || route?.roadClass || "street";
-  }
 
   // src/game/fleet-traffic.js
+  function planTraffic(town2) {
+    const slots = /* @__PURE__ */ new Map();
+    const streets2 = [];
+    for (let row = 0; row < town2.rows - 1; row++) {
+      for (let col = 0; col < town2.cols - 1; col++) {
+        const meta = town2.cellMeta(col, row);
+        if (meta.isRiverRow && !meta.isIsland || (col + row * 2) % 5 === 4) continue;
+        const loop2 = buildTrafficLoop(town2, col, row) ?? buildTrafficLoop(town2, col, row, { maxHalfWidth: fleet.moto.halfWidth });
+        if (!loop2) continue;
+        const slot = { loop: loop2, x: town2.roadsX[col], y: town2.roadsY[row] };
+        slots.set(col + "," + row, slot);
+        if (loop2.class === "alley") slot.model = pickModel("alley", () => 0);
+        else streets2.push(slot);
+      }
+    }
+    const models = Object.keys(trafficPercent).filter((model) => trafficPercent[model].moving > 0).sort((a, b) => trafficPercent[a].moving - trafficPercent[b].moving);
+    const batchSize = Math.ceil(100 / trafficPercent[models[0]].moving);
+    const assigned = Object.fromEntries(models.map((model) => [model, 0]));
+    const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const cityCentre = { x: town2.width / 2, y: town2.height / 2 };
+    const remaining = new Set(streets2);
+    while (remaining.size) {
+      const anchor = [...remaining].reduce((best, slot) => distance(slot, cityCentre) < distance(best, cityCentre) ? slot : best);
+      const batch = [...remaining].sort((a, b) => distance(a, anchor) - distance(b, anchor)).slice(0, batchSize);
+      const total = streets2.length - remaining.size + batch.length;
+      const centre = {
+        x: batch.reduce((sum, slot) => sum + slot.x, 0) / batch.length,
+        y: batch.reduce((sum, slot) => sum + slot.y, 0) / batch.length
+      };
+      for (const slot of batch) remaining.delete(slot);
+      batch.sort((a, b) => distance(a, centre) - distance(b, centre));
+      for (const model of batch.length >= models.length ? models : []) {
+        batch.shift().model = model;
+        assigned[model]++;
+      }
+      for (const slot of batch) {
+        const deficit = (model) => total * trafficPercent[model].moving / 100 - assigned[model];
+        slot.model = models.reduce((best, model) => deficit(model) > deficit(best) ? model : best);
+        assigned[slot.model]++;
+      }
+    }
+    return slots;
+  }
   function compileFleetLoop(town2, loop2, model) {
     const { halfLength, halfWidth, turn, pivot, traffic } = fleetOf({ model });
     if (!traffic.lanes.includes(loop2.class)) return null;
@@ -3280,13 +3320,7 @@
     people.push(n);
     return n;
   }
-  var loopCache = /* @__PURE__ */ new Map();
-  function cachedLoop(col, row, narrow) {
-    const key = [col, row, narrow].join(",");
-    if (!loopCache.has(key))
-      loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: narrow ? fleet.moto.halfWidth : fleet.sedan.halfWidth }));
-    return loopCache.get(key);
-  }
+  var trafficSlots;
   function freeParking(x, y, model) {
     const { halfLength, halfWidth } = fleet[model];
     const pose = { x, y, a: Math.PI, halfLength, halfWidth };
@@ -3356,30 +3390,33 @@
         person(ax, ay, "local", random() < 0.5 ? "x" : "y", random).homeCell = key;
       }
     }
-    if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
-    const narrow = cachedLoop(col, row, true);
-    const loop2 = narrow?.class === "alley" ? narrow : cachedLoop(col, row, false);
-    if (!loop2) return;
-    const model = pickModel(routeClass(loop2), draw2(31));
+    const slot = (trafficSlots ??= planTraffic(town)).get(key);
+    if (!slot) return;
+    const { loop: loop2, model } = slot;
     const spec = fleet[model];
     const segments = compileFleetLoop(town, loop2, model);
     if (!segments) return;
     const clearance = Math.max(18, spec.halfLength + 4);
     const straights = segments.map((seg, idx) => ({ seg, idx })).filter(({ seg }) => seg.type === "line" && seg.length > 2 * clearance);
-    if (!straights.length) return;
-    const pick = straights[Math.floor(random() * straights.length)];
-    const s = clearance + random() * (pick.seg.length - 2 * clearance);
-    const pose = evalSegment(pick.seg, s);
-    const body = { ...pose, halfLength: spec.halfLength, halfWidth: spec.halfWidth };
-    if (vehicleBlocked(body) || cars.some((other) => carContact(body, other))) return;
     const q = Math.floor(random() * 4);
-    car2(pose.x, pose.y, pose.a, colors[q], model === "sedan" ? "Citadine" : model, {
-      class: loop2.class,
-      segments,
-      segIndex: pick.idx,
-      s,
-      pace: 24 + q * 6
-    }).homeCell = key;
+    const positions = straights.flatMap(({ seg, idx }) => [0.5, 0.25, 0.75].map((fraction) => {
+      const s = clearance + fraction * (seg.length - 2 * clearance);
+      const pose = evalSegment(seg, s);
+      return { idx, s, pose, distance: Math.hypot(pose.x - slot.x, pose.y - slot.y) };
+    }));
+    positions.sort((a, b) => a.distance - b.distance);
+    for (const { idx, s, pose } of positions) {
+      const body = { ...pose, halfLength: spec.halfLength, halfWidth: spec.halfWidth, footprint: spec.footprint };
+      if (vehicleBlocked(body) || cars.some((other) => carContact(body, other))) continue;
+      car2(pose.x, pose.y, pose.a, colors[q], model === "sedan" ? "Citadine" : model, {
+        class: loop2.class,
+        segments,
+        segIndex: idx,
+        s,
+        pace: 24 + q * 6
+      }).homeCell = key;
+      return;
+    }
   }
   var sleeping = /* @__PURE__ */ new Map();
   var loaded = /* @__PURE__ */ new Set();
@@ -5802,7 +5839,7 @@
     return { gap, what };
   }
   function clearPose(c, pose) {
-    const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
+    const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth, footprint: c.footprint };
     if (vehicleBlocked(body)) return false;
     if (!game.ride && !game.transit && distanceToBody(body, p.x, p.y) < 3) return false;
     return !cars.some((o) => o !== c && carContact(body, o));
@@ -5824,14 +5861,17 @@
   function offscreen(o) {
     return outsideView(o, viewport(game.camX, game.camY, game.vw || 300, game.vh || 220, W, H), 16);
   }
-  function backOff(c, route, probe, dt) {
-    if (probe.turning || route.s < 2) return;
-    const back = Math.min(route.s, 10 * dt);
-    const nextS = route.s - back;
-    const pt = evalSegment(probe.seg, nextS);
-    const pose = placed(pt, route.lane);
+  function backOff(c, route, dt) {
+    let index = route.segIndex;
+    let s = route.s - 10 * dt;
+    while (s < 0) {
+      index = (index + route.segments.length - 1) % route.segments.length;
+      s += route.segments[index].length;
+    }
+    const pose = placed(evalSegment(route.segments[index], s), route.lane);
     if (!clearPose(c, pose)) return;
-    route.s = nextS;
+    route.segIndex = index;
+    route.s = s;
     Object.assign(c, { x: pose.x, y: pose.y, a: pose.a });
   }
   function honk(c, at2) {
@@ -5916,7 +5956,7 @@
     const reach2 = 12 + route.speed * 0.9;
     const straight = !probe.turning ? Math.min(reach2, Math.max(0, probe.remaining)) : 0;
     const watchFrom = route.laneTarget !== 0 ? route.laneTarget : route.lane;
-    let { gap, what } = lookAhead(c, here, watchFrom, route.laneTarget, straight);
+    let { gap, what } = probe.turning ? { gap: Infinity, what: null } : lookAhead(c, here, watchFrom, route.laneTarget, straight);
     if (straight < reach2) {
       const curved = vehicleOnPath(c, route, route.laneTarget || route.lane, straight, reach2);
       if (curved.gap < gap) ({ gap, what } = curved);
@@ -5999,7 +6039,7 @@
     const body = (lane2, shift) => {
       const pose = placed(path, lane2);
       if (shift) pose.a = path.a + clamp(Math.atan2(shift, Math.max(step, 0.5)), -0.4, 0.4);
-      return { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
+      return { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth, footprint: c.footprint };
     };
     const lateral = step > 0 ? step * 0.45 + 5 * dt : 4 * dt;
     const wantShift = clamp(route.laneTarget - route.lane, -lateral, lateral);
@@ -6042,15 +6082,15 @@
     else if (!ghost) route.wait = Math.max(0, route.wait - dt * 2);
     else if (!yieldCar && !exitCar2 && gap > 15 && !cars.some((o) => o !== c && carContact(c, o))) route.wait = 0;
     const other = typeof blocker === "object" ? blocker : null;
-    if (other?.route && other.route.blocker === c && !probe.turning && !route.lane && !other.route.lane && route.wait > 1.5) {
-      if (!(other.route.id < route.id)) route.backing = game.time + 1;
-    }
+    if (other?.route && other.route.blocker === c && route.id > other.route.id && route.wait > 1.5) route.backing = game.time + 1;
     if (route.lane && what?.route && Math.cos(what.a - probe.a) < -0.5 && desired < 1 && route.wait > 1.5)
+      route.backing = game.time + 1;
+    if (outside && route.lane && yieldCar?.route?.heldBy === c && route.wait > 1.5)
       route.backing = game.time + 1;
     if (other && !other.route && isStalled(other) && !probe.turning && !route.lane && route.wait > 2 && route.laneTarget === 0)
       route.backing = game.time + 0.6;
     if (route.backing > game.time) {
-      backOff(c, route, probe, dt);
+      backOff(c, route, dt);
       route.blocker = other;
       route.heldBy = other || what;
       stalledTimer(c, route, dt);

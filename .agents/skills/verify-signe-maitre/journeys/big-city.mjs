@@ -108,7 +108,7 @@ function buildRightLaneRoute(from, dest, laneOffset = 6) {
 async function driveRouteTo(
   d,
   dest,
-  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null, turnLookahead = 24 } = {},
+  { tol = 20, stop = true, timeout = 80000, maxSpeed = 76, waypoints = null, onSample = null, turnLookahead = 24, until = null } = {},
 ) {
   const buildDense = (from) => (waypoints ? densifyPath([from, ...waypoints], 8) : buildRightLaneRoute(from, dest));
 
@@ -129,7 +129,7 @@ async function driveRouteTo(
     if (onSample) onSample(s);
 
     const remDest = Math.hypot(dest.x - s.ride.x, dest.y - s.ride.y);
-    if (remDest <= tol && cursor >= dense.length - 8) {
+    if (until?.(s) || (remDest <= tol && cursor >= dense.length - 8)) {
       return stop ? brakeToStop(d) : s;
     }
 

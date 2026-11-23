@@ -308,7 +308,7 @@ function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 ||
 }
 
 function clearPose(c, pose) {
-  const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
+  const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth, footprint: c.footprint };
   if (vehicleBlocked(body)) return false;
   if (!game.ride && !game.transit && distanceToBody(body, p.x, p.y) < 3) return false;
   return !cars.some((o) => o !== c && carContact(body, o));
@@ -337,15 +337,18 @@ function offscreen(o) {
   return outsideView(o, viewport(game.camX, game.camY, game.vw || 300, game.vh || 220, W, H), 16);
 }
 
-// Reverse a few units along the straight, if the road behind is clear.
-function backOff(c, route, probe, dt) {
-  if (probe.turning || route.s < 2) return;
-  const back = Math.min(route.s, 10 * dt);
-  const nextS = route.s - back;
-  const pt = evalSegment(probe.seg, nextS);
-  const pose = placed(pt, route.lane);
+// Reverse along the same route, including out of a turn if another car has entered it.
+function backOff(c, route, dt) {
+  let index = route.segIndex;
+  let s = route.s - 10 * dt;
+  while (s < 0) {
+    index = (index + route.segments.length - 1) % route.segments.length;
+    s += route.segments[index].length;
+  }
+  const pose = placed(evalSegment(route.segments[index], s), route.lane);
   if (!clearPose(c, pose)) return;
-  route.s = nextS;
+  route.segIndex = index;
+  route.s = s;
   Object.assign(c, { x: pose.x, y: pose.y, a: pose.a });
 }
 
@@ -453,7 +456,10 @@ function advanceTraffic(c, dt) {
   const reach = 12 + route.speed * 0.9;
   const straight = !probe.turning ? Math.min(reach, Math.max(0, probe.remaining)) : 0;
   const watchFrom = route.laneTarget !== 0 ? route.laneTarget : route.lane;
-  let { gap, what } = lookAhead(c, here, watchFrom, route.laneTarget, straight);
+  // A turning nose can point at a parked car that the swept route clears.
+  let { gap, what } = probe.turning
+    ? { gap: Infinity, what: null }
+    : lookAhead(c, here, watchFrom, route.laneTarget, straight);
 
   // Round the corner, in a roundabout, or nearing a turn: check along the real swept path.
   if (straight < reach) {
@@ -567,7 +573,7 @@ function advanceTraffic(c, dt) {
   const body = (lane, shift) => {
     const pose = placed(path, lane);
     if (shift) pose.a = path.a + clamp(Math.atan2(shift, Math.max(step, 0.5)), -0.4, 0.4);
-    return { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
+    return { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth, footprint: c.footprint };
   };
 
   const lateral = step > 0 ? step * 0.45 + 5 * dt : 4 * dt;
@@ -637,20 +643,19 @@ function advanceTraffic(c, dt) {
   if (
     other?.route &&
     other.route.blocker === c &&
-    !probe.turning &&
-    !route.lane &&
-    !other.route.lane &&
+    route.id > other.route.id &&
     route.wait > 1.5
-  ) {
-    if (!(other.route.id < route.id)) route.backing = game.time + 1;
-  }
+  ) route.backing = game.time + 1;
   if (route.lane && what?.route && Math.cos(what.a - probe.a) < -0.5 && desired < 1 && route.wait > 1.5)
+    route.backing = game.time + 1;
+  // A driver passing in the opposite lane must yield room to a vehicle already turning out.
+  if (outside && route.lane && yieldCar?.route?.heldBy === c && route.wait > 1.5)
     route.backing = game.time + 1;
   if (other && !other.route && isStalled(other) && !probe.turning && !route.lane && route.wait > 2 && route.laneTarget === 0)
     route.backing = game.time + 0.6;
 
   if (route.backing > game.time) {
-    backOff(c, route, probe, dt);
+    backOff(c, route, dt);
     route.blocker = other;
     route.heldBy = other || what;
     stalledTimer(c, route, dt);
