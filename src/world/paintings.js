@@ -54,14 +54,14 @@ const kerbs = {
   alleySouth: [[662, 750, 838], [427, 498, 569]],
   alleySouthB: [[662, 750, 838], [428, 499, 570]],
   alleyNorth: [[662, 750, 838], [428, 499, 570]],
-  alleyNorthB: [[662, 750, 838], [428, 499, 570]],
+  alleyNorthB: [[662, 749.5, 837], [428, 499, 570]],
 };
 kerbs.rondPoint = kerbs.obeliskSquare;
 const lanes = {
   alleyCross: { x: [724, 749, 774], y: [474, 499, 524] },
   alleyCrossB: { x: [714, 750, 786], y: [468, 499, 530] },
-  alleyEast: { y: [467, 498, 529] },
-  alleySouth: { x: [714, 750, 786] },
+  alleyEast: { y: [468, 499, 530] },
+  alleySouth: { x: [714, 749.5, 785] },
   alleySouthB: { x: [714, 750, 786] },
   alleyNorth: { x: [714, 750, 786] },
   alleyNorthB: { x: [714, 750, 786] },
