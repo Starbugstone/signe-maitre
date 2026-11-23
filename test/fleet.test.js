@@ -2,9 +2,35 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fleet, fleetOf, pickModel, trafficPercent } from "../src/game/fleet.js";
+import { planTraffic } from "../src/game/fleet-traffic.js";
+import { cars, p } from "../src/core/state.js";
+import { streamPopulation } from "../src/world/population.js";
+import { town } from "../src/world/town.js";
 import { sedanHalfLength, sedanHalfWidth } from "../src/world/vehicle-shape.js";
 
 const bake = JSON.parse(readFileSync(new URL("../tools/art/fleet-bake.json", import.meta.url), "utf8")).vehicles;
+
+test("the road roster rounds the citywide shares to whole cars", () => {
+  const slots = [...planTraffic(town).values()];
+  const wide = slots.filter(({ loop }) => loop.class !== "alley");
+  for (const [model, { moving }] of Object.entries(trafficPercent)) {
+    const count = wide.filter((slot) => slot.model === model).length;
+    assert.ok(Math.abs(count - wide.length * moving / 100) < 1, `${model}: ${count} of ${wide.length}`);
+  }
+  for (const { loop, model } of slots) assert.ok(fleet[model].traffic.lanes.includes(loop.class));
+});
+
+test("the starting neighbourhood spawns each road model and retains the roster on revisit", () => {
+  const roster = () => cars.filter((car) => car.route).map((car) => [car.homeCell, car.model]).sort();
+  const { x, y } = p;
+  streamPopulation(x, y, 280, 185);
+  const first = roster();
+  const models = Object.keys(trafficPercent).filter((model) => trafficPercent[model].moving > 0);
+  assert.deepEqual([...new Set(first.map(([, model]) => model))].sort(), models.sort());
+  streamPopulation(0, 0, 280, 185);
+  streamPopulation(x, y, 280, 185);
+  assert.deepEqual(roster(), first);
+});
 
 test("every fleet entry carries the contract's fields", () => {
   for (const [id, entry] of Object.entries(fleet)) {

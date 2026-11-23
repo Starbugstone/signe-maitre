@@ -1,9 +1,9 @@
 import { cars, game, p, people, rand } from "../core/state.js";
 import { footBlocked, vehicleBlocked } from "./collision.js";
 import { town, office, CELL_W, TAU, X, Y } from "./town.js";
-import { buildTrafficLoop, evalSegment } from "./routes.js";
-import { fleet, pickModel, routeClass } from "../game/fleet.js";
-import { compileFleetLoop } from "../game/fleet-traffic.js";
+import { evalSegment } from "./routes.js";
+import { fleet, pickModel } from "../game/fleet.js";
+import { compileFleetLoop, planTraffic } from "../game/fleet-traffic.js";
 import { carContact } from "./vehicle-shape.js";
 
 // A name the fleet does not know ("Biscotte") is a sedan's nameplate.
@@ -116,13 +116,7 @@ export function person(x, y, kind = "local", axis = "x", random = rand) {
   return n;
 }
 
-const loopCache = new Map();
-function cachedLoop(col, row, narrow) {
-  const key = [col, row, narrow].join(",");
-  if (!loopCache.has(key))
-    loopCache.set(key, buildTrafficLoop(town, col, row, { maxHalfWidth: narrow ? fleet.moto.halfWidth : fleet.sedan.halfWidth }));
-  return loopCache.get(key);
-}
+let trafficSlots;
 
 function freeParking(x, y, model) {
   const { halfLength, halfWidth } = fleet[model];
@@ -156,8 +150,7 @@ function populate(col, row, key) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  // Vehicle models draw from the cell's own well-mixed number, so the residents keep their
-  // places and neighbouring blocks do not all get the same model.
+  // Give parked cars their own draw without changing the residents' positions.
   const cellSeed = seed;
   const draw = (salt) => () => {
     let h = (cellSeed ^ salt) >>> 0;
@@ -214,14 +207,9 @@ function populate(col, row, key) {
     }
   }
 
-  // Moving city traffic on compiled road-graph loops (never entering alleys, using roundabouts anticlockwise).
-  if (col >= town.cols - 1 || row >= town.rows - 1 || (col + row * 2) % 5 === 4) return;
-  const narrow = cachedLoop(col, row, true);
-  const loop = narrow?.class === "alley" ? narrow : cachedLoop(col, row, false);
-  if (!loop) return;
-
-  // Keep the moving draw independent of parked cars, with all six models seeded near the étude.
-  const model = pickModel(routeClass(loop), draw(31));
+  const slot = (trafficSlots ??= planTraffic(town)).get(key);
+  if (!slot) return;
+  const { loop, model } = slot;
   const spec = fleet[model];
   const segments = compileFleetLoop(town, loop, model);
   if (!segments) return;
@@ -229,20 +217,22 @@ function populate(col, row, key) {
   const straights = segments
     .map((seg, idx) => ({ seg, idx }))
     .filter(({ seg }) => seg.type === "line" && seg.length > 2 * clearance);
-  if (!straights.length) return;
-  const pick = straights[Math.floor(random() * straights.length)];
-  const s = clearance + random() * (pick.seg.length - 2 * clearance);
-  const pose = evalSegment(pick.seg, s);
-  const body = { ...pose, halfLength: spec.halfLength, halfWidth: spec.halfWidth };
-  if (vehicleBlocked(body) || cars.some((other) => carContact(body, other))) return;
   const q = Math.floor(random() * 4);
-  car(pose.x, pose.y, pose.a, colors[q], model === "sedan" ? "Citadine" : model, {
-    class: loop.class,
-    segments,
-    segIndex: pick.idx,
-    s,
-    pace: 24 + q * 6,
-  }).homeCell = key;
+  // Start in the cell that earned the slot, away from the mouth of a junction.
+  const positions = straights.flatMap(({ seg, idx }) => [0.5, 0.25, 0.75].map((fraction) => {
+    const s = clearance + fraction * (seg.length - 2 * clearance);
+    const pose = evalSegment(seg, s);
+    return { idx, s, pose, distance: Math.hypot(pose.x - slot.x, pose.y - slot.y) };
+  }));
+  positions.sort((a, b) => a.distance - b.distance);
+  for (const { idx, s, pose } of positions) {
+    const body = { ...pose, halfLength: spec.halfLength, halfWidth: spec.halfWidth, footprint: spec.footprint };
+    if (vehicleBlocked(body) || cars.some((other) => carContact(body, other))) continue;
+    car(pose.x, pose.y, pose.a, colors[q], model === "sedan" ? "Citadine" : model, {
+      class: loop.class, segments, segIndex: idx, s, pace: 24 + q * 6,
+    }).homeCell = key;
+    return;
+  }
 }
 
 // Only the neighbourhood around the CJ is simulated. Archived residents retain

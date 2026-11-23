@@ -1,6 +1,55 @@
-import { compileNodeCycle, evalSegment } from "../world/routes.js";
+import { buildTrafficLoop, compileNodeCycle, evalSegment } from "../world/routes.js";
 import { vehicleBlockedIn } from "../world/collision.js";
-import { fleetOf } from "./fleet.js";
+import { fleet, fleetOf, pickModel, trafficPercent } from "./fleet.js";
+
+// Plan against the whole road graph so streaming order and viewport size cannot change a cell's model.
+export function planTraffic(town) {
+  const slots = new Map();
+  const streets = [];
+  for (let row = 0; row < town.rows - 1; row++) {
+    for (let col = 0; col < town.cols - 1; col++) {
+      const meta = town.cellMeta(col, row);
+      if ((meta.isRiverRow && !meta.isIsland) || (col + row * 2) % 5 === 4) continue;
+      const loop = buildTrafficLoop(town, col, row) ??
+        buildTrafficLoop(town, col, row, { maxHalfWidth: fleet.moto.halfWidth });
+      if (!loop) continue;
+      const slot = { loop, x: town.roadsX[col], y: town.roadsY[row] };
+      slots.set(col + "," + row, slot);
+      if (loop.class === "alley") slot.model = pickModel("alley", () => 0);
+      else streets.push(slot);
+    }
+  }
+
+  const models = Object.keys(trafficPercent).filter((model) => trafficPercent[model].moving > 0)
+    .sort((a, b) => trafficPercent[a].moving - trafficPercent[b].moving);
+  const batchSize = Math.ceil(100 / trafficPercent[models[0]].moving);
+  const assigned = Object.fromEntries(models.map((model) => [model, 0]));
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const cityCentre = { x: town.width / 2, y: town.height / 2 };
+  const remaining = new Set(streets);
+  while (remaining.size) {
+    const anchor = [...remaining].reduce((best, slot) => distance(slot, cityCentre) < distance(best, cityCentre) ? slot : best);
+    const batch = [...remaining].sort((a, b) => distance(a, anchor) - distance(b, anchor)).slice(0, batchSize);
+    const total = streets.length - remaining.size + batch.length;
+    const centre = {
+      x: batch.reduce((sum, slot) => sum + slot.x, 0) / batch.length,
+      y: batch.reduce((sum, slot) => sum + slot.y, 0) / batch.length,
+    };
+    for (const slot of batch) remaining.delete(slot);
+    batch.sort((a, b) => distance(a, centre) - distance(b, centre));
+    // Give each model a place in a full neighbourhood, then repay the largest citywide shortfall.
+    for (const model of batch.length >= models.length ? models : []) {
+      batch.shift().model = model;
+      assigned[model]++;
+    }
+    for (const slot of batch) {
+      const deficit = (model) => total * trafficPercent[model].moving / 100 - assigned[model];
+      slot.model = models.reduce((best, model) => deficit(model) > deficit(best) ? model : best);
+      assigned[slot.model]++;
+    }
+  }
+  return slots;
+}
 
 // Long bodies use gentler approaches and a wider orbit so their ends clear the island
 // before they swing across the entry and exit lanes.

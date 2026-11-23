@@ -9,7 +9,7 @@ Five more road vehicles share the streets with the sedan and the ambulance. Each
 - `fleet-moto` shows the bailiff on the motorbike while he rides it and a courier in blue on motorbikes in traffic; the picture banks into a turn. A parked motorbike stands without a rider.
 - `fleet-damage` shares an impact by mass: the lighter vehicle takes more, a heavy one shoves parked cars and wrecks aside, and a wall costs a motorbike far more than a truck. Dented and wreck pictures follow the condition.
 - `fleet-exit` puts the player beside the body at the sedan's door distance whatever the length or width.
-- `fleet-traffic` draws moving and parked vehicles from the [traffic percentage table](../../../../src/game/fleet.js). Alleys only draw vehicles narrow enough to fit. Long vehicles stop with their nose at the junction line and take corners on a wider arc.
+- `fleet-traffic` uses the [traffic percentage table](../../../../src/game/fleet.js) for moving and parked vehicles. Moving traffic is assigned in groups of nearby road loops. Each full group includes all six ordinary road models, and the remaining slots follow the citywide shares. Cells keep their assignments across visits. Alleys only draw vehicles narrow enough to fit. Long vehicles stop with their nose at the junction line and take corners on a wider arc.
 - `fleet-bus-stop` makes a line bus pull up for about 3.4 s after about 240 units of travel when it has a clear avenue straight; cars behind pull out around it.
 - `fleet-sound` uses an electric whine for the Volta E, a diesel with a firing pulse for the bus and dump truck and a higher four-gear engine for the motorbike. Sound cannot be checked from a silent capture.
 
