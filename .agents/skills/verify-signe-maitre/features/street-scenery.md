@@ -19,9 +19,11 @@ Walk east from the étude along the north pavement of Place de la Contrainte (co
 
 ## Driving it with pf
 
+Preconditions: fresh probe game, starting beside the étude with the company sedan. Allow several minutes per landmark tour.
+
 `pf run south-pavement --build probe` walks onto the south pavement past the kerb line, along it both ways, then drives the étude sedan off its spot and along the south kerb. Before the fix, walkers and cars met an invisible wall at the kerb line (`southPavement` was 17; the painted pavement runs to the bollards at about 23).
 
-`pf run city-scenery --build probe` (about four minutes) boards the étude's sedan and drives the road graph to Place de la Contrainte, Arc des Saisies, under Tour de Fer, onto Île de la Ferre, past the Palais de Justice and the Hôtel des Ventes, under the ring at Butte-du-Créancier, up to Sacré-Créancier and out to the north-east turn of the ring. It gets out on foot beneath the tower, on the cathedral's apron and at the station door. Each step's screenshot shows the painting at gameplay scale with the player, pedestrians and traffic; read them, the checks only prove the places are reachable.
+`pf run city-scenery city-scenery-east --build probe` drives both halves of the landmark tour. The western journey boards the sedan and visits Place de la Contrainte and Arc des Saisies, then crosses the river and walks under Tour de Fer. The eastern journey drives onto Île de la Ferre, walks the cathedral forecourt, visits Palais de Justice and Hôtel des Ventes, walks to the Butte-du-Créancier station door and drives past Sacré-Créancier to the north-east turn of the ring. The checks prove the player reaches these places. At gameplay scale, inspect each changed obstacle from the front and rear, including its base and join, with the player, an NPC and a vehicle.
 
 Run `npm run test:scenery` after every scenery edit. Its `street-scenery` journey visits the two reported locations through real controls using the read-only probe. Review the screenshots under `.verify/evidence/`. Run `pf run street-scenery --build probe --device phone --lang fr` for the touch route.
 

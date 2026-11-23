@@ -16,6 +16,8 @@ Walk west from the office and face the tough near the starting sedan. Land three
 
 ## Driving it with pf
 
+Preconditions: a fresh probe game. Start on foot with the tough near the étude and allow the game clock to run during dispatch.
+
 - `pf run street-report --build probe` opens a scuffle report through play, files copy № 1 and reads the same report back at the office.
 - `pf run ambulance --build probe` starts a fresh game, chooses to wait and observes the crew reach the stretcher-loading stage. Add `--video` to inspect the approach and animation.
 - Repeat both with `--device phone --lang fr`. Compare `01-report-open.png` with `03-office-record.png` or `03-stretcher-loading.png`.

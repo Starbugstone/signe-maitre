@@ -3,10 +3,10 @@
 // Usage: see ../SKILL.md, or run `pf.mjs help`.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile, appendFile } from "node:fs/promises";
+import { constants, existsSync, readdirSync } from "node:fs";
+import { access, mkdir, readFile, rm, writeFile, appendFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const skill = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,7 +63,7 @@ function args(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith("--")) out._.push(a);
-    else if (["--video", "--headed", "--mute", "--keep-going"].includes(a)) out[a.slice(2)] = true;
+    else if (["--video", "--headed", "--mute", "--keep-going", "--probe"].includes(a)) out[a.slice(2)] = true;
     else out[a.slice(2)] = argv[++i];
   }
   return out;
@@ -168,16 +168,52 @@ window.__pf = Object.freeze({
 `;
 }
 
-async function buildFiles(mode, runDir) {
+async function buildProbe(runDir) {
   const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
-  if (mode === "probe") {
-    const html = await renderGame({ entry: await probeEntry() });
-    await mkdir(runDir, { recursive: true });
-    const file = join(runDir, "probe.html");
-    await writeFile(file, html);
-    return file;
+  const html = await renderGame({ entry: await probeEntry() });
+  const file = join(runDir, "probe.html");
+  await writeFile(file, html);
+  return file;
+}
+
+async function publishedBuildHash() {
+  const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
+  const { html, files } = await renderGame({ inline: false });
+  for (const { path, contents } of [{ path: join(root, "index.html"), contents: Buffer.from(html) }, ...files]) {
+    const actual = await readFile(path).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!actual?.equals(contents))
+      throw Error(relative(root, path) + " is missing or stale. Run `npm run build`.");
   }
-  return join(root, "index.html");
+  return sha(html).slice(0, 12);
+}
+
+async function createRunDir(id) {
+  if (!/^[\w-]+$/.test(id)) throw Error("Run IDs may contain letters, digits, underscores and hyphens.");
+  await mkdir(runsRoot, { recursive: true });
+  const dir = join(runsRoot, id);
+  await mkdir(dir);
+  if (existsSync(join(evidenceRoot, id))) {
+    await rm(dir, { recursive: true, force: true });
+    throw Error("Evidence already exists for " + id + ". Choose a new run ID.");
+  }
+  return dir;
+}
+
+function runId(opts) {
+  return opts["run-id"] || new Date().toISOString().slice(0, 19).replace(/:/g, "-") + "-" + process.pid;
+}
+
+async function build(opts) {
+  const dir = await createRunDir(runId(opts));
+  try {
+    console.log(await buildProbe(dir));
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 async function doctor(opts) {
@@ -203,24 +239,26 @@ async function doctor(opts) {
     check("HUD key labels match src/ui/dialogs.js", false, e.message);
   }
   const chrome = findChromium();
-  check("chromium binary", !!chrome, chrome || "set PF_CHROMIUM or run `npx playwright-core install chromium-headless-shell`");
+  const executable = chrome && await access(chrome, constants.X_OK).then(() => true, () => false);
+  check("chromium binary", executable, chrome || "set PF_CHROMIUM or run `npx playwright-core install chromium-headless-shell`");
   if (!opts.url) {
     try {
-      const { publishedPage } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
-      const fresh = sha(await publishedPage());
-      const shipped = sha(await readFile(join(root, "index.html"), "utf8"));
-      check("index.html matches src/ (fresh build)", fresh === shipped, fresh === shipped ? shipped.slice(0, 12) : "stale: run `npm run build`");
+      check("index.html and game/ match a fresh build", true, await publishedBuildHash());
     } catch (e) {
-      check("index.html matches src/ (fresh build)", false, e.message);
+      check("index.html and game/ match a fresh build", false, e.message);
     }
   }
-  if (pw && chrome) {
-    const browser = await pw.chromium.launch({ executablePath: chrome, args: ["--no-sandbox", "--allow-file-access-from-files"] });
+  if (pw && executable) {
+    let browser;
     try {
+      const url = opts.url || pathToFileURL(join(root, "index.html")).href;
+      browser = await pw.chromium.launch({
+        executablePath: chrome,
+        args: url.startsWith("file:") ? ["--no-sandbox", "--allow-file-access-from-files"] : ["--no-sandbox"],
+      });
       const page = await browser.newPage({ ...DEVICES.desktop, locale: "en-US" });
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      const url = opts.url || pathToFileURL(join(root, "index.html")).href;
       await page.goto(url);
       await page.waitForFunction(() => document.querySelector("#stats")?.textContent.includes("€"), null, { timeout: 20000 });
       const stats = (await page.locator("#stats").innerText()).replace(/\s+/g, " ").trim();
@@ -229,11 +267,12 @@ async function doctor(opts) {
     } catch (e) {
       check("game boots to a playable street", false, e.message.split("\n")[0]);
     } finally {
-      await browser.close();
+      await browser?.close();
     }
   }
   const live = existsSync(runsRoot) ? readdirSync(runsRoot) : [];
-  check("no stranded runs", live.length === 0, live.length ? "run `pf.mjs cleanup` for: " + live.join(", ") : "none");
+  check("no active or stranded run state", live.length === 0,
+    live.length ? "let active runs finish, then clean stopped runs by ID: " + live.join(", ") : "none");
   for (const c of report.checks) console.log((c.ok ? "ok   " : "FAIL ") + c.name + " — " + c.detail);
   process.exitCode = report.ok ? 0 : 1;
 }
@@ -276,23 +315,24 @@ async function run(opts) {
   if (!DEVICES[device]) throw Error("Unknown device " + device + ". Use " + Object.keys(DEVICES).join(", "));
   const lang = opts.lang || "en";
   const mode = opts.url ? "url" : opts.build || "shipped";
-  const id = opts["run-id"] || new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "-" + process.pid;
-  const runDir = join(runsRoot, id);
-  const file = mode === "url" ? null : await buildFiles(mode, runDir);
-  if (mode === "shipped") {
-    const { publishedPage } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
-    if (sha(await publishedPage()) !== sha(await readFile(file, "utf8")))
-      throw Error("index.html is stale against src/. Run `npm run build` first, or pass --build probe.");
-  }
-  const url = opts.url || pathToFileURL(file).href;
-  const build = file ? sha(await readFile(file, "utf8")).slice(0, 12) : "remote";
-  await mkdir(runDir, { recursive: true });
-  const server = await pw.chromium.launchServer({ executablePath: chrome, args: ["--no-sandbox", "--allow-file-access-from-files"], headless: !opts.headed });
-  await writeFile(join(runDir, "pids.json"), JSON.stringify({ harness: process.pid, chromium: server.process().pid }));
-  let browser,
+  if (!["url", "shipped", "probe"].includes(mode) || (mode === "url" && !opts.url))
+    throw Error("Unknown build " + mode + ". Use shipped or probe, or supply --url.");
+  const id = runId(opts);
+  const runDir = await createRunDir(id);
+  let browser, server,
     failed = 0,
     skipped = 0;
   try {
+    const file = mode === "probe" ? await buildProbe(runDir) : join(root, "index.html");
+    const url = opts.url || pathToFileURL(file).href;
+    const hash = mode === "shipped" ? await publishedBuildHash()
+      : mode === "probe" ? sha(await readFile(file)).slice(0, 12) : "remote";
+    server = await pw.chromium.launchServer({
+      executablePath: chrome,
+      args: url.startsWith("file:") ? ["--no-sandbox", "--allow-file-access-from-files"] : ["--no-sandbox"],
+      headless: !opts.headed,
+    });
+    await writeFile(join(runDir, "pids.json"), JSON.stringify({ harness: process.pid, chromium: server.process().pid }));
     browser = await pw.chromium.connect(server.wsEndpoint());
     const words = (await import(pathToFileURL(join(root, "src/ui/strings.js")).href)).words;
     for (const journeyFile of journeys) {
@@ -347,22 +387,25 @@ async function run(opts) {
         lang,
         mode,
         url,
-        build,
-        commit: git("rev-parse", "--short", "HEAD") + (git("status", "--porcelain", "--", "src", "index.html") ? "+dirty" : ""),
+        build: hash,
+        commit: git("rev-parse", "--short", "HEAD") + (git("status", "--porcelain", "--", "src", "assets", "index.html", "game") ? "+dirty" : ""),
         seconds: +((Date.now() - started) / 1000).toFixed(1),
         steps: d.steps,
         video: videoFile,
         evidence: out,
       };
       await writeFile(join(out, "summary.json"), JSON.stringify(summary, null, 2));
-      console.log(`${result.toUpperCase()} ${name} [${device}/${lang}/${mode} ${build}] ${summary.seconds}s → ${out}`);
+      console.log(`${result.toUpperCase()} ${name} [${device}/${lang}/${mode} ${hash}] ${summary.seconds}s → ${out}`);
       if (error) console.log(error);
       if (failed && !opts["keep-going"]) break;
     }
   } finally {
     await browser?.close().catch(() => {});
-    await server.close();
-    await rm(runDir, { recursive: true, force: true });
+    try {
+      await server?.close();
+    } finally {
+      await rm(runDir, { recursive: true, force: true });
+    }
   }
   // 1 = a journey failed, 3 = nothing failed but something was skipped (not a pass).
   process.exitCode = failed ? 1 : skipped ? 3 : 0;
@@ -593,11 +636,11 @@ function driver({ page, out, mode, device, lang, words }) {
 
 const opts = args(process.argv.slice(2));
 const command = opts._.shift();
-const commands = { doctor, run, cleanup, build: async (o) => console.log(await buildFiles(o.probe ? "probe" : o.build || "probe")) };
+const commands = { doctor, run, cleanup, build };
 if (!commands[command]) {
   console.log(`pf.mjs doctor [--url URL]
 pf.mjs run <journey...> [--build shipped|probe] [--url URL] [--device desktop|phone|phone-portrait] [--lang en|fr] [--video] [--mute] [--headed] [--keep-going] [--run-id ID]
-pf.mjs build --probe
+pf.mjs build --probe [--run-id ID]
 pf.mjs cleanup [--run-id ID]
 Journeys: ${readdirSync(join(skill, "journeys")).map((f) => f.replace(".mjs", "")).join(", ")}`);
   process.exitCode = command && command !== "help" ? 2 : 0;
