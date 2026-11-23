@@ -303,7 +303,7 @@ function draw() {
   const stopToWalk = trip && game.ride && dist(p, trip.point) < 32;
   const end = ridingBoat || game.transit ? null : trip?.point ?? goal();
   const travelPath = trip && !atTrip && !stopToWalk && !game.viewMap ? tripPath(trip) : null;
-  const travelBearing = travelPath ? routeBearing(travelPath) : undefined;
+  const travelBearing = travelPath ? routeBearing(travelPath, !game.ride && trip.kind === "mooring" && dist(p, trip.point) < 115) : undefined;
   if (end && visible(end)) {
     g.save();
     g.strokeStyle = "#ffe080";

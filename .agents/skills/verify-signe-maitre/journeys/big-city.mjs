@@ -173,35 +173,39 @@ async function driveRouteTo(
     }
     prev = s.ride;
 
-    // Yield to moving traffic and leave room to back away from a long parked body.
+    // Check the whole body ahead, including the nose of a vehicle across our lane.
     const cos = Math.cos(s.p.a),
       sin = Math.sin(s.p.a);
-    const carAhead = [...s.traffic, ...s.parked].find((c) => {
+    let carAhead = null;
+    let nearestGap = 14 + Math.max(0, s.ride.speed) * 0.25;
+    for (const c of [...s.traffic, ...s.parked]) {
       const dx = c.x - s.ride.x,
         dy = c.y - s.ride.y;
       const fwd = dx * cos + dy * sin,
         side = -dx * sin + dy * cos;
-      const along = Math.abs(Math.cos(c.a - s.ride.a)) * c.halfLength +
-        Math.abs(Math.sin(c.a - s.ride.a)) * c.halfWidth;
+      const acrossAngle = Math.abs(Math.sin(c.a - s.ride.a));
+      const alongAngle = Math.abs(Math.cos(c.a - s.ride.a));
+      const along = alongAngle * c.halfLength + acrossAngle * c.halfWidth;
+      const across = acrossAngle * c.halfLength + alongAngle * c.halfWidth;
       const gap = fwd - along - s.ride.halfLength;
-      return fwd > 8 && gap < 14 && Math.abs(side) < 9.5;
-    });
-    if (carAhead) {
-      if (carAhead.speed > 1.5 && trafficWaitTicks < 8) {
-        trafficWaitTicks++;
-        if (s.ride.speed > 6) await d.hold(["down"], 90);
-        else await d.page.waitForTimeout(160);
-        stuckTicks = 0;
-        continue;
+      if (fwd > 0 && gap < nearestGap && Math.abs(side) < across + s.ride.halfWidth + 0.5) {
+        nearestGap = gap;
+        carAhead = c;
       }
-      if (carAhead.speed <= 1.5 && trafficWaitTicks < 3) {
-        trafficWaitTicks++;
-        await d.hold(["down", "right"], 320);
-        await brakeToStop(d, 800);
-        await d.page.waitForTimeout(260);
-        stuckTicks = 0;
-        continue;
+    }
+    if (carAhead?.routeId !== undefined) {
+      if (s.ride.speed > 3.5) await d.hold(["action"], 240);
+      else if (trafficWaitTicks++ < 6) await d.page.waitForTimeout(200);
+      else {
+        // The other driver may be yielding to our nose. Make room and let them go first.
+        d.note("reverse to give traffic room", { vehicle: carAhead.label, gap: nearestGap, x: s.ride.x, y: s.ride.y });
+        await d.hold(["down"], 800);
+        await d.hold(["action"], 850);
+        await d.page.waitForTimeout(950);
+        trafficWaitTicks = 0;
       }
+      stuckTicks = 0;
+      continue;
     }
     trafficWaitTicks = 0;
 

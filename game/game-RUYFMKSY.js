@@ -7970,18 +7970,16 @@
   }
 
   // src/ui/waypoint.js
-  function routeBearing(path) {
+  function routeBearing(path, keepCorners = false) {
     let ahead = game.ride ? 52 : 40;
     let aim = p;
     for (const node of path.slice(1)) {
       const length = dist(aim, node);
-      if (length > ahead) {
-        const f = ahead / length;
-        aim = { x: aim.x + f * (node.x - aim.x), y: aim.y + f * (node.y - aim.y) };
-        break;
-      }
+      const next = length > ahead ? { x: aim.x + ahead / length * (node.x - aim.x), y: aim.y + ahead / length * (node.y - aim.y) } : node;
+      if (keepCorners && aim !== p && !walkableBetween(p, next, 2.6)) break;
+      aim = next;
+      if (length > ahead) break;
       ahead -= length;
-      aim = node;
     }
     return Math.atan2(aim.y - p.y, aim.x - p.x);
   }
@@ -9617,6 +9615,12 @@
   }
   function tripPath(guide, origin = p) {
     const { point, approach: approach2, departure } = guide;
+    if (guide.kind === "mooring" && !game.ride && dist(origin, point) < 115) {
+      if (walkableBetween(origin, point, 2.6)) return [origin, point];
+      const promenade = { x: origin.x, y: point.y };
+      if (walkableBetween(origin, promenade, 2.6) && walkableBetween(promenade, point, 2.6))
+        return [origin, promenade, point];
+    }
     const viaQuay = departure && !game.ride && dist(origin, departure) < 145 && walkableBetween(origin, departure, 2.6) && !walkableBetween(origin, { x: origin.x, y: departure.streetY }, 2.6);
     const from = viaQuay ? departure : origin;
     const to = approach2 && (dist(origin, point) >= 115 || !walkableBetween(origin, point, 2.6)) ? approach2 : point;
@@ -10755,7 +10759,7 @@
     const stopToWalk = trip2 && game.ride && dist(p, trip2.point) < 32;
     const end = ridingBoat || game.transit ? null : trip2?.point ?? goal();
     const travelPath = trip2 && !atTrip && !stopToWalk && !game.viewMap ? tripPath(trip2) : null;
-    const travelBearing = travelPath ? routeBearing(travelPath) : void 0;
+    const travelBearing = travelPath ? routeBearing(travelPath, !game.ride && trip2.kind === "mooring" && dist(p, trip2.point) < 115) : void 0;
     if (end && visible(end)) {
       g.save();
       g.strokeStyle = "#ffe080";

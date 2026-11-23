@@ -1,19 +1,20 @@
 import { dist, game, p } from "../core/state.js";
 import { g } from "../platform/canvas.js";
+import { walkableBetween } from "../world/ambulance-route.js";
 
 // Look a little way around the next turn while keeping the guide on the street route.
-export function routeBearing(path) {
+export function routeBearing(path, keepCorners = false) {
   let ahead = game.ride ? 52 : 40;
   let aim = p;
   for (const node of path.slice(1)) {
     const length = dist(aim, node);
-    if (length > ahead) {
-      const f = ahead / length;
-      aim = { x: aim.x + f * (node.x - aim.x), y: aim.y + f * (node.y - aim.y) };
-      break;
-    }
+    const next = length > ahead
+      ? { x: aim.x + (ahead / length) * (node.x - aim.x), y: aim.y + (ahead / length) * (node.y - aim.y) }
+      : node;
+    if (keepCorners && aim !== p && !walkableBetween(p, next, 2.6)) break;
+    aim = next;
+    if (length > ahead) break;
     ahead -= length;
-    aim = node;
   }
   return Math.atan2(aim.y - p.y, aim.x - p.x);
 }

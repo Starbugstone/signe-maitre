@@ -59,6 +59,13 @@ function quayApproach(point) {
 
 export function tripPath(guide, origin = p) {
   const { point, approach, departure } = guide;
+  if (guide.kind === "mooring" && !game.ride && dist(origin, point) < 115) {
+    if (walkableBetween(origin, point, 2.6)) return [origin, point];
+    // A lamp can interrupt the diagonal approach while the edge of the quay is clear.
+    const promenade = { x: origin.x, y: point.y };
+    if (walkableBetween(origin, promenade, 2.6) && walkableBetween(promenade, point, 2.6))
+      return [origin, promenade, point];
+  }
   const viaQuay = departure && !game.ride && dist(origin, departure) < 145 &&
     walkableBetween(origin, departure, 2.6) &&
     !walkableBetween(origin, { x: origin.x, y: departure.streetY }, 2.6);
