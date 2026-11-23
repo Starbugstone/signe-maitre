@@ -715,6 +715,10 @@ export function buildTown({
     return cells[r * cols + c];
   };
   layout.roadNodeAt = (col, row) => roadNodeById.get(`c${col}r${row}`) || null;
+  // Whether a paved passage runs along the south edge of a row: between two rows of blocks,
+  // never along the water.
+  const waterRows = singleBandCanal ? [canalRow] : [canalRow, riverRow];
+  layout.backLane = (row) => row >= 0 && row < rows - 1 && !waterRows.includes(row);
 
   return layout;
 }

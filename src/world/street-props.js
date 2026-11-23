@@ -129,7 +129,7 @@ function lanternProp(key, map, [x, top, foot]) {
     key,
     x: map.x(x),
     y: map.y(foot),
-    radius: Math.min(1.8, (right.at(-1)[0] - left[0][0]) / 2),
+    radius: Math.min(1.8, Math.abs(right.at(-1)[0] - left[0][0]) / 2),
     outline: [...right, ...left],
     painted: true,
   };
@@ -147,9 +147,12 @@ for (const [key, painting] of Object.entries(paintings)) {
     for (const lamp of riverMarks[key].lamps || []) items.push(lanternProp(key, fromRiver(key), lamp));
   } else if (painting.lamps) {
     // A ring-row plate is registered on its viaduct painting, or on two of them.
-    const { source = key, east } = painting.viaduct || {},
+    const { source = painting.turned || key, east } = painting.viaduct || {},
       ring = !!painting.viaduct;
-    for (const lamp of painting.lamps) items.push(lanternProp(key, fromSource(source, { ring }), lamp));
+    let map = fromSource(source, { ring });
+    // A turned painting carries its source's lanterns on the other side of the street.
+    if (painting.turned) map = { x: (px) => -fromSource(source).x(px), y: map.y, point: ([px, py]) => [-fromSource(source).x(px), map.y(py)] };
+    for (const lamp of painting.lamps) items.push(lanternProp(key, map, lamp));
     for (const lamp of painting.eastLamps || []) items.push(lanternProp(key, fromSource(east, { ring }), lamp));
   }
   if (items.length) props[key] = items;
@@ -248,18 +251,23 @@ export function streetProps(layout, col, row) {
         if (wx < isl.left + 8 || wx > isl.right - 8 || wy < isl.top + 8 || wy > isl.bottom - 8) return false;
       }
     }
+    // A post painted in the passage behind the block is part of the ground there.
+    if (item.y > CELL_H / 2 - 12 && layout.backLane?.(row)) return false;
     if (meta) {
-      // Remove furniture along missing or alley-only arms so posts never block alley mouths or float in walls.
-      if (item.x < -28 && !meta.wideArms.w) return false;
-      if (item.x > 28 && !meta.wideArms.e) return false;
-      if (item.y < -30 && !meta.wideArms.n) return false;
-      if (item.y > 26 && !meta.wideArms.s) return false;
+      // The first four paintings show four streets wherever they stand: their furniture along
+      // a side the river plate or the map edge takes away goes with it.
+      if (paintings[key]?.legacy) {
+        if (item.x < -28 && !meta.wideArms.w) return false;
+        if (item.x > 28 && !meta.wideArms.e) return false;
+        if (item.y < -30 && !meta.wideArms.n) return false;
+        if (item.y > 26 && !meta.wideArms.s) return false;
+      }
       // Suppress base-plate kerb furniture overlapping roundabout plazas.
       for (const rb of meta.roundabouts)
         if (Math.hypot(wx - rb.x, wy - rb.y) < rb.outerRadius + 4) return false;
       // Suppress furniture inside monument footprints / piers.
       for (const poly of meta.solidPolys) if (nearPoly(wx, wy, poly, 4)) return false;
-      // Keep opened seam alley mouths clear.
+      // Keep the mouths of the ruelles clear.
       for (const rect of meta.openRects)
         if (rect.alley && wx >= rect.left - 3 && wx <= rect.right + 3 && wy >= rect.top - 3 && wy <= rect.bottom + 3)
           return false;

@@ -18,7 +18,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { lantern, paintings, riverMarks, riverPlate } from "../../src/world/paintings.js";
+import { lantern, paintings, partyWall, registration, riverMarks, riverPlate } from "../../src/world/paintings.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const args = process.argv.slice(2);
@@ -32,7 +32,7 @@ const only = option("only", "")
   .split(",")
   .filter(Boolean);
 const quality = Number(option("quality", "0.62"));
-const pieces = new Set(["alleyStripV", "alleyStripH", "ringDeck", "ringPortal", "ringBracket", "ringCanopies", "railBridgeBed", "railBridgeTop", "towerIron"]);
+const pieces = new Set(["ringDeck", "ringPortal", "ringBracket", "ringCanopies", "railBridgeBed", "railBridgeTop", "towerIron"]);
 const pngDir = option("png", "");
 const reviewDir = option("review", "");
 const decode = (url) => Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
@@ -55,7 +55,19 @@ try {
   });
   await page.goto("http://bake.local/");
   await page.addScriptTag({ path: join(root, "tools/art/scenery-bake/page.js") });
-  const names = await page.evaluate(([manifest, river]) => bake.init(manifest, river), [manifest, { marks: riverMarks, lantern }]);
+  // Street paintings are laid on their plates as src/world/paintings.js registers them.
+  const registered = Object.fromEntries(
+    Object.keys(paintings)
+      .filter((key) => !paintings[key].river && !paintings[key].turned)
+      .map((key) => [key, registration(key)]),
+  );
+  const walls = Object.fromEntries(Object.entries(paintings).filter(([, p]) => p.walls && !p.legacy).map(([key, p]) => [key, p.walls]));
+  const names = await page.evaluate(([manifest, river, registered, party]) => bake.init(manifest, river, registered, party), [
+    manifest,
+    { marks: riverMarks, lantern },
+    registered,
+    { walls, wall: partyWall },
+  ]);
   let total = 0;
   for (const name of names) {
     if (only.length && !only.includes(name)) continue;

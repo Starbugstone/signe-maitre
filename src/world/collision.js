@@ -103,7 +103,17 @@ function obbHitsPoly(pose, poly) {
   return true;
 }
 
-function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam, apron = 0) {
+// Behind every block runs the paved passage its south-facing houses open on: the lowest band
+// of the painting north of the cell edge. Walkers use it; nothing on wheels fits.
+export const backLaneDepth = 7;
+function inBackLane(layout, x, y, margin) {
+  const { row } = layout.cellAt(x, y);
+  if (!layout.backLane(row)) return false;
+  const above = Y(row) + CELL_H / 2 - y;
+  return above >= margin && above <= backLaneDepth - margin && !layout.river?.onWater(x, y, 0);
+}
+
+function pointInOpenSpace(layout, cell, x, y, allowAlley, onFoot, apron = 0) {
   for (const r of cell.openRects) {
     if (r.alley && !allowAlley) continue;
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
@@ -113,19 +123,7 @@ function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam, apro
       dy = y - rb.y;
     if (dx * dx + dy * dy <= (rb.outerRadius + apron) ** 2) return true;
   }
-  if (allowServiceSeam) {
-    // Unopened service alleys between painted blocks remain walkable on foot away from river water.
-    if (!layout.river || !layout.river.onWater(x, y, 0)) {
-      const { col, row } = layout.cellAt(x, y);
-      const dx = Math.abs(x - X(col)),
-        dy = Math.abs(y - Y(row));
-      if (Math.abs(dx - CELL_W / 2) < 2.9 || Math.abs(dy - CELL_H / 2) < 2.9) {
-        // Do not open a seam straight across open river water or along a river-row gap.
-        const m = layout.cellMeta(col, row);
-        if (!m.isRiverRow || m.isIsland) return true;
-      }
-    }
-  }
+  if (onFoot && inBackLane(layout, x, y, 0)) return true;
   return false;
 }
 
@@ -156,7 +154,7 @@ export function blockedIn(layout, x, y, r) {
   const { col, row } = layout.cellAt(x, y);
   const cell = layout.cellMeta(col, row);
   const allowAlley = r <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
-  const allowServiceSeam = r < 4;
+  const onFoot = r < 4;
 
   // 1. Street furniture (lamps and bollards) in this cell.
   for (const post of streetProps(layout, col, row)) {
@@ -185,12 +183,8 @@ export function blockedIn(layout, x, y, r) {
   }
   if (hitsLegacyLines(layout, x, y, r)) return true;
 
-  // 4b. Unopened service lanes between painted blocks remain walkable on foot away from river water.
-  if (allowServiceSeam && (!layout.river || !layout.river.onWater(x, y, 0)) && (!cell.isRiverRow || cell.isIsland)) {
-    const seamX = Math.abs(Math.abs(x - X(col)) - CELL_W / 2);
-    const seamY = Math.abs(Math.abs(y - Y(row)) - CELL_H / 2);
-    if (seamX < 2.9 || seamY < 2.9) return false;
-  }
+  // 4b. The passage behind a block, on foot.
+  if (onFoot && inBackLane(layout, x, y, 1.5)) return false;
 
   // 5. Fast-path open ground check: strictly inside a single allowed open rect or roundabout plaza.
   for (const rect of cell.openRects) {
@@ -206,15 +200,15 @@ export function blockedIn(layout, x, y, r) {
     }
   }
 
-  // 6. Slow path (near corners, seams, bridge mouths, alley mouths, roundabout transitions):
+  // 6. Slow path (near corners, back lanes, bridge mouths, alley mouths, roundabout transitions):
   // verify centre and 8 perimeter points of the circle all lie in the union of allowed open shapes.
-  if (!pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam)) return true;
+  if (!pointInOpenSpace(layout, cell, x, y, allowAlley, onFoot)) return true;
   for (const [cx, cy] of CIRCLE_DIRS) {
     const sx = x + cx * r,
       sy = y + cy * r;
     const sc = layout.cellAt(sx, sy);
     const sCell = sc.col === col && sc.row === row ? cell : layout.cellMeta(sc.col, sc.row);
-    if (!pointInOpenSpace(layout, sCell, sx, sy, allowAlley, allowServiceSeam)) return true;
+    if (!pointInOpenSpace(layout, sCell, sx, sy, allowAlley, onFoot)) return true;
   }
   return false;
 }
