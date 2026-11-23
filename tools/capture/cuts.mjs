@@ -13,7 +13,7 @@ const mix = (mode) => [
 const city = [
   clip("findRides", "city-map", "map-and-legend:start", 0.3, 4.5,
     "Port-Fer · 16 columns × 12 rows", "Avenues link roundabouts and bridges. Local streets and narrow ruelles fill the blocks between them.", [[2, "city-map"]]),
-  clip("bigCity", "obelisk", "drive-around-roundabout:end", -7, 4.5,
+  clip("bigCity", "obelisk", "observe-roundabout-traffic:end", -2.8, 4.5,
     "Place de la Contrainte", "Traffic circles the obelisk anticlockwise. Drivers yield to circulating traffic before entering."),
   clip("cityWest", "arc", "arc-des-saisies:end", -2.5, 3.2,
     "Arc des Saisies", "The avenues meet at the arch’s star-shaped roundabout.", [[2.5, "city-arc"]]),
@@ -32,7 +32,7 @@ const city = [
   clip("marais", "marais-mouth", "ruelle-mouth-west:end", -1.4, 2.6,
     "Le Vieux Marais", "A narrow cobbled ruelle opens onto the wider street."),
   clip("marais", "marais", "crossing-of-four:end", -2.4, 3.4,
-    "Marais ruelles", "Paving carries across joins. Stone party walls close the blocks on either side.", [[2.45, "city-marais"]]),
+    "Marais ruelles", "Cobbles continue across the joins. Stone party walls meet between blocks.", [[2.45, "city-marais"]]),
 ];
 
 const board = (id, heading, description, stills) =>
@@ -52,7 +52,7 @@ const fleet = [
     "Dented · Volta E", "The HUD shows condition as a percentage. A dented car still runs.", [[0.3, "fleet-volta-dented"]]),
   clip("moto", "wreck", "impact", -1.0, 3.5,
     "Wrecked · Pétrolette", "At 0% condition the motorbike is a wreck. The HUD offers roadside assistance.", [[1.5, "fleet-motorbike-wreck"]]),
-  clip("suv", "moving-mix", "drive-suv:end", -6.4, 5.8, "Moving traffic spawn mix", mix("moving")),
+  clip("suv", "moving-mix", "drive-suv:end", 0.1, 5.8, "Moving fleet across neighbourhoods", mix("moving")),
   clip("parkedMix", "parked-mix", "boot", 0.1, 4.5, "Parked traffic spawn mix", mix("parked")),
 ];
 

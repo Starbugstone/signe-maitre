@@ -53,7 +53,7 @@ export async function concatenate(files, path, manifest, { trailer = false } = {
   const escape = (file) => file.replaceAll("'", "'\\''");
   await writeFile(manifest, files.map((file) => "file '" + escape(file) + "'").join("\n") + "\n");
   const codec = trailer
-    ? ["-c:v", "libx264", "-preset", "fast", "-threads", "3", "-crf", "20", "-maxrate", "4M", "-bufsize", "8M",
+    ? ["-c:v", "libx264", "-preset", "fast", "-threads", "3", "-crf", "20", "-maxrate", "3800k", "-bufsize", "7600k",
       "-pix_fmt", "yuv420p", "-fps_mode", "passthrough"]
     : ["-c", "copy"];
   await start(["-f", "concat", "-safe", "0", "-i", manifest, ...codec, "-movflags", "+faststart", path]).done;

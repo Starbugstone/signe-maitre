@@ -51,7 +51,7 @@ async function assemble() {
   results[combined] = await verifyVideo(combined, allFrames);
 
   const highlights = [
-    ["city", "obelisk"], ["city", "cathedral"], ["fleet", "board-volta"], ["fleet", "board-moto"],
+    ["fleet", "bus-lap"], ["city", "cathedral"], ["fleet", "board-volta"], ["fleet", "board-moto"],
     ["train", "train-bridge"], ["boats", "iron"],
   ];
   const rootVideo = resolve("port-fer-gameplay.mp4");
@@ -70,7 +70,7 @@ async function assemble() {
   const table = [
     "# Port-Fer showcase outputs", "",
     "FFmpeg decoded each video and confirmed a constant 60 FPS cadence and distinct frame checksums.", "",
-    "- **City** shows the 16×12 map, streets, avenues and Marais alleys, the obelisk roundabout and its priority rule, la Ferre and its bridges, and all seven monuments.",
+    "- **City** shows the 16×12 map, streets, avenues, Marais ruelles and painted joins, the obelisk roundabout and its priority rule, la Ferre and its bridges, and all seven monuments.",
     "- **Fleet** shows boarding six road models, the moving and parked spawn weights, a city bus lap, the dented Volta E and the wrecked Pétrolette.",
     "- **Train** shows walking to the station, climbing to the platform, automatic boarding, the ring’s corner and rail bridge, requesting the next stop and stepping off.",
     "- **Boats** shows boarding a launch and boarding a barge beside its hull, sailing under stone and iron bridges, going around the island and mooring.",
@@ -112,8 +112,8 @@ async function captureTopic(device, topic, sources, probe) {
       if (!(cut.cue in trace.marks)) throw Error("Missing cue " + cut.cue + " in " + file);
       const frames = toFrames(cut.seconds);
       const stills = cut.stills.map(([offset, name]) => ({ offset: toFrames(offset), path: stillPath(device, name) }));
-      if (device === "desktop" && cut.name === "obelisk") {
-        stills.push({ offset: toFrames(2.2), path: join(work, "clean-gameplay.png"), clean: true });
+      if (device === "desktop" && cut.name === "bus-lap") {
+        stills.push({ offset: toFrames(4.9), path: join(work, "clean-gameplay.png"), clean: true });
       }
       return {
         ...cut, frames, stills, path: fragmentPath(device, topic, cut.name),
