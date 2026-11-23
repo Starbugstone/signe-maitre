@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
-import { buildFiles } from "../../.agents/skills/verify-signe-maitre/scripts/pf.mjs";
+import { buildProbe } from "../../.agents/skills/verify-signe-maitre/scripts/pf.mjs";
 import { publishedPage } from "../../scripts/build.mjs";
 import { fps, profiles } from "./browser.mjs";
 import { cutsFor, topics } from "./cuts.mjs";
@@ -146,7 +146,7 @@ if (command === "assemble" && !device) {
   if (await publishedPage() !== await readFile("index.html", "utf8")) throw Error("Run npm run build first.");
   const temporary = await mkdtemp(join(tmpdir(), "port-fer-showcase-"));
   try {
-    const probe = await buildFiles("probe", temporary, { inline: false });
+    const probe = await buildProbe(temporary, { inline: false });
     if (all) await generate(probe);
     else if (command === "plan") await planSources(device, names, probe);
     else {

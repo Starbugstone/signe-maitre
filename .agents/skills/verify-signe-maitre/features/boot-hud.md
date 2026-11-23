@@ -13,13 +13,13 @@ The game opens to the streets of Port-Fer at night. The HUD shows money, health 
 
 ## How to get to it (user POV)
 
-- Open `index.html` or the published page.
+- Open the local HTTP URL from [Launch](../SKILL.md#launch) or the published page.
 - Click or tap **Controls** (`#help`), **FR/EN** (`#language`) or **Sound** (`#sound`) in the toolbar.
 - Choose **Back to the street** to close Controls. Use the toolbar language button on the street.
 
 ## Driving it with pf
 
-Preconditions: `pf doctor` is all ok.
+Preconditions: doctor passes against the chosen build or URL. Start each language check in a fresh browser context.
 
 - **Boot and read the HUD.** Run `pf run boot`. Step `street-ready` checks all three localized starting stats, the next file’s title, short brief, destination and the page language.
 - **Controls dialog.** The same run opens `#help`, checks the heading is `t("help")` and its top is `>= 0`, then closes the dialog with `d.choose("back")`.

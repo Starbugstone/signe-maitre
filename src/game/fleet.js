@@ -194,8 +194,3 @@ export function pickModel(roadClass = "street", random = Math.random, parked = f
   }
   return "sedan";
 }
-
-// The road class of a traffic route: the narrowest street it uses decides who fits.
-export function routeClass(route) {
-  return route?.class || route?.roadClass || "street";
-}

@@ -31,8 +31,9 @@ export async function follow(d, hint) {
     if (d.now() - sinceProgress > 1500) {
       // Walk around a parked car or a street prop, then pick the arrow back up.
       const avoid = direction.some((key) => key === "left" || key === "right") ? ["up", "down"] : ["left", "right"];
-      await d.hold([avoid[detours++ % 2]], 300);
-      await d.hold(direction, 400);
+      const sweep = Math.min(700, 310 + Math.floor(detours / 2) * 130);
+      await d.hold(["run", avoid[detours++ % 2]], sweep);
+      await d.hold(["run", ...direction], 620);
       sinceProgress = d.now();
     } else await d.hold(metres > 12 ? ["run", ...direction] : direction, metres > 18 ? 330 : 100);
   }

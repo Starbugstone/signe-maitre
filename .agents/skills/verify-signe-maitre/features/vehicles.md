@@ -23,13 +23,13 @@ Preconditions: use `--build probe`. The player is on foot within 22 units of `st
 - Run `pf run street-life --build probe`, then repeat with `--device phone --lang fr`. Boarding checks the sedan's nameplate (`state().ride.label`; `model` is now the fleet id, `sedan`) and the speed display. The touch run also checks the localized Horn and Brake controls.
 - **Drive.** The journey steers, accelerates, checks that the sedan has moved more than two world units from its parking spot, then holds Down and waits for a stop.
 - **Exit.** `d.press("car")`. `state().ride` is `null`.
-- GT delivery, a handbrake turn, wrecking a car and ordering roadside repair still require manual drives.
+- **Crash and exit.** `pf run fleet --build probe` checks crash damage for the seized fleet and wrecks the motorbike.
+- **Manual repair.** Wreck a vehicle, press **E** at the roadside-assistance prompt, choose **Order a repair** and verify the condition returns to 100%. GT delivery and a handbrake turn also need manual drives.
 
 ## Gotchas
 
 - The other models (Volta E, SUV, bus, dump truck, motorbike) have their own journey and recipe in [Fleet](fleet.md).
 
-- On game revision `ef81f95`, the starter sedan overlaps a market street prop. Boarding works, but the vehicle stays at (694, 283.5) under throttle. The departure check catches this before the braking and exit steps.
 - `d.press("action")` on a phone taps **Slap / Brake**. Its label follows whether the player is in a car.
 - Steering is relative to the car's heading, not screen directions. `walkTo` does not work in a car and throws an error.
 - Taking an ambulance in service raises heat and interrupts the rescue.

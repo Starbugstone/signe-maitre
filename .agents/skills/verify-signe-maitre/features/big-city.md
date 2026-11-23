@@ -17,7 +17,9 @@ Open the map with **M** from the étude on Place de la Contrainte to see the who
 
 ## Driving it with pf
 
-Run `pf run big-city --build probe` on `desktop/en` and `pf run big-city --build probe --device phone --lang fr` for touch controls and French labels.
+Preconditions: a fresh game on foot beside the working Étude 2000.
+
+Run `pf run big-city --build probe` on desktop and `pf run big-city --build probe --device phone --lang fr` for touch controls and French labels. For the full landmark tour also run `pf run city-scenery city-scenery-east --build probe` and review the screenshots described in [Street scenery](street-scenery.md).
 
 - **`big-city-map-open` / `big-city-map-close`**: presses `map`, captures the full 16×12 Paris map, checks the localized Paris-like district HUD and closes the map.
 - **`board-sedan`**: walks to the Étude 2000 and boards it with `car`.
@@ -30,5 +32,5 @@ Run `pf run big-city --build probe` on `desktop/en` and `pf run big-city --build
 
 ## Gotchas
 
-- `driveRouteTo` plans paths on `town.roads` via `findRoute` and steers using real keyboard/touch pulses while regulating speed for turns and yielding to traffic ahead. On a heavily loaded host, rerun once if timing jitter slows a leg.
-- Final district and monument paintings are integrated later by Fable; until then, procedural night overlays render the roundabouts, river, island, alleys, monuments and ring viaduct.
+- `driveRouteTo` plans paths on `town.roads` via `findRoute` and steers using real keyboard/touch pulses. It checks the width of a turning vehicle, stops for traffic and reverses with the wheel straight if both drivers are waiting. On a heavily loaded host, rerun once if timing jitter slows a leg.
+- The map canvas is visual evidence for the full network. The driving journey checks one roundabout, one road bridge crossing, one narrow alley and one station approach. It does not visit the other joins. The scenery fixtures cover the static collision and foreground at additional sites.

@@ -6,9 +6,8 @@ import island from "../../.agents/skills/verify-signe-maitre/journeys/island-voy
 import { follow } from "../../.agents/skills/verify-signe-maitre/journeys/first-minute.mjs";
 import fleet from "../../.agents/skills/verify-signe-maitre/journeys/fleet.mjs";
 
+import marais from "../../.agents/skills/verify-signe-maitre/journeys/marais-ruelles.mjs";
 import train from "../../.agents/skills/verify-signe-maitre/journeys/ring-train.mjs";
-import { findRoute } from "../../src/world/routes.js";
-import { town, X, Y } from "../../src/world/town.js";
 
 async function saloon(d) {
   await d.step("board-saloon", async () => {
@@ -19,17 +18,6 @@ async function saloon(d) {
     await d.press("car");
     await d.waitFor("at the Saloon's wheel", ({ state }) => state.ride?.model === "sedan");
     await d.hold(["up"], 950);
-  });
-}
-
-async function marais(d) {
-  await d.step("walk-through-marais", async () => {
-    const { p } = await d.state();
-    const alley = { x: X(10), y: Y(4) + 40 };
-    const path = findRoute(town, p, alley, { onFoot: true });
-    for (const point of path.slice(1, -1)) await d.walkTo(point, { tol: 7, run: true });
-    await d.walkTo(alley, { tol: 5 });
-    await d.walkTo({ x: X(10), y: Y(4) - 66 }, { tol: 5 });
   });
 }
 

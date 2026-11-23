@@ -15,6 +15,8 @@ Choose **Moored boat** on the map for directions to an occupied mooring. The ét
 
 ## Driving it with pf
 
+Preconditions: a fresh game with the launch moored at Quai de la Contrainte. Use the probe for hull position and mooring checks. For the player-facing route from the map, run `pf run first-minute --build shipped` or the HTTP recipe in [Launch](../SKILL.md#launch).
+
 ```sh
 pf run boats --build probe --video
 pf run boats --build probe --device phone --lang fr --video
@@ -28,7 +30,7 @@ npm run test:scenery
 
 `island-voyage` (about three minutes) boards the launch and sails west through the north arch of the stone bridge at column 4 and back, under the iron bridge at column 6, along the north channel behind Notre-Dame-du-Port, round the east point, back along the south channel past the moored speedboat and home to its berth. Every sample checks that the whole hull is on water, and it must return without a bump. Its screenshots show the launch behind the first bastion, through the iron spandrel, behind the cathedral towers and below the island's quay wall: read them for the layering.
 
-`boats` walks to the launch, boards it, uses the horn, sails under a bridge, bumps the bank and returns to the quay. It also takes a moored barge beside its bow, away from the anchor, and checks the resulting Heat. `quay-traffic` takes a passing cargo barge from Quai Ouest and checks the boarding prompt, Heat and handover from river traffic. The scenery fixtures compare every road deck and both Petite Ceinture bridges with and without the launch in the water below. The road fixtures put the player, a pedestrian and a car on the deck. The traffic journey observes 260 seconds of the running game and checks that hulls stay in water, avoid one another, and cross both railway and all ten road bridges in both directions. Eastbound traffic uses the south channel and westbound traffic uses the north.
+`boats` walks to the launch, boards it, uses the horn, sails under a bridge, bumps the bank and returns to the quay. Check the mooring ticker, the return to land and the launch attached to its berth. It also takes a moored barge beside its bow, away from the anchor, and checks the resulting Heat. `quay-traffic` takes a passing cargo barge from Quai Ouest and checks the boarding prompt, Heat and handover from river traffic. The scenery fixtures compare every road deck and both Petite Ceinture bridges with and without the launch in the water below. The road fixtures put the player, a pedestrian and a car on the deck. The traffic journey observes 260 seconds of the running game and checks that hulls stay in water, avoid one another, and cross both railway and all ten road bridges in both directions. Eastbound traffic uses the south channel and westbound traffic uses the north.
 
 ## Gotchas
 

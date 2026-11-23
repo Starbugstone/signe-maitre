@@ -29,7 +29,7 @@ Preconditions: `--build probe`. The probe snapshot lists moving traffic in `stat
 
 ## Gotchas
 
-- The stopped-in-lane check depends on the starter sedan clearing its parking spot. See the spawn regression in [Vehicles](vehicles.md).
+- The stopped-in-lane check starts by proving the starter sedan clears its parking spot. A failure at departure means the traffic-watch steps have yet to run.
 - A car is held up by the player standing in its lane. If the far lane is also blocked, it waits and honks until the player moves; that is intended.
 - Dodging depends on timing and on which cars are near; a knock-down through play is still possible at high speed.
 - `state().traffic` only includes cars on a route. Parked cars and the player's car are listed separately or not at all.

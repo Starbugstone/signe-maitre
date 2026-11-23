@@ -12,7 +12,7 @@ const mix = (mode) => [
 
 const city = [
   clip("findRides", "city-map", "map-and-legend:start", 0.3, 4.5,
-    "Port-Fer · 16 columns × 12 rows", "Wide avenues link roundabouts and river crossings. Local streets and alleys fill the spaces between.", [[2, "city-map"]]),
+    "Port-Fer · 16 columns × 12 rows", "Avenues link roundabouts and bridges. Local streets and narrow ruelles fill the blocks between them.", [[2, "city-map"]]),
   clip("bigCity", "obelisk", "drive-around-roundabout:end", -7, 4.5,
     "Place de la Contrainte", "Traffic circles the obelisk anticlockwise. Drivers yield to circulating traffic before entering."),
   clip("cityWest", "arc", "arc-des-saisies:end", -2.5, 3.2,
@@ -29,8 +29,10 @@ const city = [
     "La Ferre", "Road bridges connect the two banks."),
   clip("cityEast", "cathedral", "cathedral-forecourt-on-foot:end", -2.7, 3.4,
     "Île de la Ferre", "Bridges reach both ends of the island. Notre-Dame-du-Port stands between them.", [[2.6, "city-cathedral"]]),
-  clip("marais", "marais", "walk-through-marais:end", -4.5, 4.5,
-    "Le Vieux Marais", "Walk through the narrow cobbled alleys. Only narrow vehicles fit.", [[2.5, "city-marais"]]),
+  clip("marais", "marais-mouth", "ruelle-mouth-west:end", -1.4, 2.6,
+    "Le Vieux Marais", "A narrow cobbled ruelle opens onto the wider street."),
+  clip("marais", "marais", "crossing-of-four:end", -2.4, 3.4,
+    "Marais ruelles", "Paving carries across joins. Stone party walls close the blocks on either side.", [[2.45, "city-marais"]]),
 ];
 
 const board = (id, heading, description, stills) =>

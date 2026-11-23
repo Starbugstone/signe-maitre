@@ -252,9 +252,11 @@ export default async function (d, { models = fleet.map(([model]) => model), retu
           stuck = 0,
           worst = 0;
         const trace = [];
-        const started = d.now();
-        while (turned > -lap && d.now() - started < 60000) {
-          const { ride } = await d.state();
+        const { time: started } = await d.state();
+        const deadline = d.now() + 150000;
+        while (turned > -lap && d.now() < deadline) {
+          const { ride, time } = await d.state();
+          if (time - started > 60) break;
           const theta = Math.atan2(ride.y - rb.y, ride.x - rb.x);
           if (last !== null) turned += turnTo(theta, last);
           last = theta;
@@ -270,8 +272,8 @@ export default async function (d, { models = fleet.map(([model]) => model), retu
           }
           await steer(heading, 110, rate, Math.abs(ride.speed) < 24 ? ["up"] : []);
         }
-        const { ride } = await d.state();
-        const seconds = (d.now() - started) / 1000;
+        const { ride, time } = await d.state();
+        const seconds = time - started;
         d.note(`${model} lapped the roundabout`, { rb: rb.id, turned, seconds, worst, ride, trace });
         // Before long bodies could overhang the corner pavements, the bus managed half a lap in a minute.
         d.expect(turned <= -lap, `the ${model} goes round the roundabout to its entry arm within a minute (${seconds.toFixed(0)} s)`, { turned, worst });

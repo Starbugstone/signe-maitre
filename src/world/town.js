@@ -62,6 +62,24 @@ const blocks = [
 // the layout validates; every key here is registered in src/world/paintings.js.
 const IRON_BRIDGES = new Set([1, 6, 12]);
 const STATION_COLS = new Set([3, 8, 12]);
+// Ruelles are painted into their cells: a crossing of four, or one arm off a wide street.
+// A `B` painting is a second view of the same junction, so that neighbours differ; `alleyWest`
+// is `alleyEast` turned about its north-south street.
+const RUELLES = {
+  "10,4": "alleyCross",
+  "11,4": "alleyCrossB",
+  "9,4": "alleyEast",
+  "12,4": "alleyWest",
+  "10,3": "alleySouth",
+  "11,3": "alleySouthB",
+  "10,5": "alleyNorth",
+  "11,5": "alleyNorthB",
+  "9,8": "alleySouthB",
+  "9,9": "alleyNorth",
+};
+// Each pair shares one omitted road: closed to the south above, closed to the north below.
+// The second pair shows the same two paintings turned about their north-south street.
+const TEES = { "1,4": "teeSouth", "1,5": "teeNorth", "12,9": "teeSouthTurned", "12,10": "teeNorthTurned" };
 const cellKinds = blocks.map((row, r) =>
   row.map((key, c) => {
     if (r === RIVER_ROW) {
@@ -83,16 +101,16 @@ const cellKinds = blocks.map((row, r) =>
     if ((c === 3 || c === 4) && r === 9) return "park";
     if (c === 14 && (r === 3 || r === 4)) return "park";
     if (c === 7 && r === 9) return "park";
-    // Le Vieux Marais: the two all-alley crossings.
-    if ((c === 10 || c === 11) && r === 4) return "alleyCross";
+    // Le Vieux Marais and the Quartier Latin: each cell shows the ruelles it has.
+    if (RUELLES[`${c},${r}`]) return RUELLES[`${c},${r}`];
     // Petite Ceinture, north and south legs: painted spans between the corner cells.
     if ((r === 1 || r === 11) && c >= 2 && c <= 13) {
       if (STATION_COLS.has(c)) return (c + r) % 2 ? "ringStationB" : "ringStation";
       if (key === "market") return "market";
       return (c + r) % 2 ? "ringNorthB" : "ringNorth";
     }
-    // Streets that end at a closed north side.
-    if (["5,2", "12,10", "1,5", "12,5", "4,10", "7,10"].includes(`${c},${r}`)) return "teeNorth";
+    // T-junctions: the street stops against a closed frontage, north or south.
+    if (TEES[`${c},${r}`]) return TEES[`${c},${r}`];
     // Case addresses keep the frontage their doors were set against.
     if (c === 7 && r === 5) return "garage"; // the étude
     if (c === 5 && r === 4) return "garage"; // Crédit Sec
@@ -108,7 +126,7 @@ const cellKinds = blocks.map((row, r) =>
   }),
 );
 
-// Build the full Paris-like road graph: avenues, streets, alleys, opened seam passages, tees, dead ends & roundabouts.
+// Build the Paris-like road graph: avenues, streets, ruelles, T-junctions and roundabouts.
 function buildParisRoads() {
   const nodes = [];
   const nodeIds = new Set();
@@ -137,31 +155,12 @@ function buildParisRoads() {
     }
   }
 
-  // Omitted edges create genuine dead-end impasses, park sanctuaries, and varied T-junctions.
+  // Omitted edges make the T-junctions. Each cell's painting shows exactly the roads it has
+  // (test/town.test.js checks it), so an edge is only left out where a painting closes that side.
   const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
   const omitted = new Set([
-    // Impasse de l'Ouest at (1, 4): connects only east to (2, 4).
-    edgeKey("c0r4", "c1r4"),
-    edgeKey("c1r3", "c1r4"),
+    // Rue de l'Ouest stops at (1, 4); Rue des Écoles stops at (12, 9).
     edgeKey("c1r4", "c1r5"),
-    // Impasse du Parchemin at (12, 4) inside Marais: alley dead end off (11, 4).
-    edgeKey("c12r3", "c12r4"),
-    edgeKey("c12r4", "c12r5"),
-    edgeKey("c12r4", "c13r4"),
-    // Allée du Champ-de-Fer at (4, 9) inside SW park: dead end off (4, 8).
-    edgeKey("c3r9", "c4r9"),
-    edgeKey("c4r9", "c5r9"),
-    edgeKey("c4r9", "c4r10"),
-    // Impasse des Buttes at (14, 3) inside Parc des Buttes-Fiscales: dead end off (13, 3).
-    edgeKey("c14r2", "c14r3"),
-    edgeKey("c14r3", "c14r4"),
-    edgeKey("c14r3", "c15r3"),
-    // Cour du Sénat at (7, 9) inside Jardin du Sénat: dead end off (7, 8).
-    edgeKey("c6r9", "c7r9"),
-    edgeKey("c7r9", "c8r9"),
-    edgeKey("c7r9", "c7r10"),
-    // Additional T-junctions for natural Parisian street rhythm.
-    edgeKey("c5r1", "c5r2"),
     edgeKey("c12r9", "c12r10"),
     // Island centre square (9, 7) has no N/S bridges (bridges are at col 8 and col 10).
     edgeKey("c9r6", "c9r7"),
@@ -170,7 +169,7 @@ function buildParisRoads() {
 
   // Narrow alley edges (halfWidth = 7, admitting walkers and vehicles with halfWidth <= 3.6).
   const alleyEdges = new Set([
-    // Le Vieux Marais (centre-east dense old quarter).
+    // Le Vieux Marais: two crossings of ruelles and the lanes that reach them from the streets around.
     edgeKey("c10r3", "c10r4"),
     edgeKey("c10r4", "c10r5"),
     edgeKey("c11r3", "c11r4"),
@@ -178,14 +177,8 @@ function buildParisRoads() {
     edgeKey("c9r4", "c10r4"),
     edgeKey("c10r4", "c11r4"),
     edgeKey("c11r4", "c12r4"),
-    edgeKey("c10r3", "c11r3"),
-    edgeKey("c10r5", "c11r5"),
-    // Quartier Latin (Rive Gauche old quarter).
+    // Quartier Latin: Ruelle des Écoles, from Quai Sud down to the street behind it.
     edgeKey("c9r8", "c9r9"),
-    edgeKey("c9r9", "c10r9"),
-    // Montmartre / Butte du Créancier narrow lanes flanking Sacré-Créancier.
-    edgeKey("c7r0", "c8r0"),
-    edgeKey("c8r0", "c9r0"),
   ]);
 
   function edgeClass(c1, r1, c2, r2) {
@@ -253,43 +246,6 @@ function buildParisRoads() {
       if (!nodeIds.has(a) || !nodeIds.has(b)) continue;
       pushEdge(a, b, edgeClass(c, r, c, r + 1));
     }
-  }
-
-  // Opened seam service lanes promoted into explicit usable alley passages!
-  // Each seam alley splits its north & south horizontal edges at the mid-cell seam node (col + 0.5).
-  const seamAlleys = [
-    { col: 9.5, rowA: 4, rowB: 5 }, // Passage des Greffes (right next to Le Boum / Marais)
-    { col: 10.5, rowA: 3, rowB: 4 }, // Passage du Sceau (Marais heart)
-    { col: 6.5, rowA: 0, rowB: 1 }, // Passage de la Butte (Montmartre steps shortcut, clear of market west pier)
-    { col: 9.5, rowA: 8, rowB: 9 }, // Passage des Écoles (Quartier Latin)
-  ];
-
-  function splitHorizontalEdge(cLeft, row, midCol) {
-    const a = `c${cLeft}r${row}`,
-      b = `c${cLeft + 1}r${row}`;
-    const midId = `c${midCol}r${row}`;
-    if (!nodeIds.has(midId)) {
-      nodes.push({ id: midId, col: midCol, row, x: X(midCol), y: Y(row), kind: "tee" });
-      nodeIds.add(midId);
-    }
-    const idx = edges.findIndex((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
-    if (idx >= 0) {
-      const orig = edges[idx];
-      edges.splice(
-        idx,
-        1,
-        { a, b: midId, class: orig.class, halfWidth: orig.halfWidth },
-        { a: midId, b, class: orig.class, halfWidth: orig.halfWidth },
-      );
-    }
-    return midId;
-  }
-
-  for (const s of seamAlleys) {
-    const cLeft = Math.floor(s.col);
-    const topId = splitHorizontalEdge(cLeft, s.rowA, s.col);
-    const botId = splitHorizontalEdge(cLeft, s.rowB, s.col);
-    edges.push({ a: topId, b: botId, class: "alley", halfWidth: ROAD_HALF_WIDTH.alley, seam: true });
   }
 
   return { nodes, edges };
@@ -510,7 +466,7 @@ for (const [r, row] of cellKinds.entries())
       for (const poly of painting.solids) solids.push(at(c, r, poly));
   }
 
-// Three Parisian night parks rendered as landscaped garden squares.
+// Three Parisian night parks: garden squares that the streets cross.
 const parks = [
   { id: "champ-de-fer", name: { fr: "Jardin du Champ-de-Fer", en: "Iron Field Gardens" }, cols: [3, 4], rows: [9, 9] },
   { id: "buttes-fiscales", name: { fr: "Parc des Buttes-Fiscales", en: "Tax-Hill Park" }, cols: [14, 14], rows: [3, 4] },
