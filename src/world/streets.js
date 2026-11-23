@@ -187,16 +187,22 @@ function cellArms(col, row) {
 
 // Soften the meeting of two paintings across a road and its pavements, or across the setts
 // of a ruelle. Buildings meet at the cell edge as they are painted, wall against wall.
-const laneJoin = 8.5;
+const laneJoin = 8.5,
+  passageJoin = 6;
 function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
   for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
     if (row === town.riverRow) continue;
     for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
       const x = X(col) - CELL_W / 2,
         y = Y(row);
-      if (!visible(x - 14, y - 30, 28, 58)) continue;
+      if (!visible(x - 14, y - 30, 28, CELL_H / 2 + 30)) continue;
       const l = cellPlateKey(col - 1, row),
         r = cellPlateKey(col, row);
+      // The paving of the passage behind the two blocks runs on from one painting to the next.
+      if (town.backLane(row)) {
+        const passage = getJoin("passage:" + l + r, plates[l], plates[r], true, CELL_H - passageJoin, passageJoin, 12);
+        ctx.drawImage(passage, x - 12, y + CELL_H / 2 - passageJoin, 24, passageJoin);
+      }
       if (cellArms(col - 1, row).e === "alley" && cellArms(col, row).w === "alley") {
         const lane = getJoin("lane:" + l + r, plates[l], plates[r], true, CELL_H / 2 - laneJoin, 2 * laneJoin, 9);
         ctx.drawImage(lane, x - 9, y - laneJoin, 18, 2 * laneJoin);

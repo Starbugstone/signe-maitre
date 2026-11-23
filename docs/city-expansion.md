@@ -9,7 +9,7 @@ Read `AGENTS.md` first. The Port-Fer visual standard and the GTA 1/2 gameplay di
 Port-Fer grows from a 6×6 demo grid into a large city that reads as Paris, in the Port-Fer night-time painted style:
 
 - A much larger map (at least 14 columns × 10 rows of cells; 16 × 12 is the target if frame time allows).
-- Varied roads: avenues and boulevards, ordinary streets, narrow alleys (ruelles and passages) that only motorbikes, small cars and pedestrians can use, roundabouts (including a star roundabout around a triumphal arch), dead ends and T-junctions.
+- Varied roads: avenues and boulevards, ordinary streets, narrow alleys (ruelles) that only motorbikes, small cars and pedestrians can use, roundabouts (including a star roundabout around a triumphal arch) and T-junctions.
 - Monuments with Paris silhouettes and Port-Fer names (no real names on signs): an iron lattice tower (Tour de Fer) that roads pass beneath, a triumphal arch in a star roundabout (Arc des Saisies), an obelisk on a large square (Place de la Contrainte), a gothic cathedral and the law courts on a river island (Notre-Dame-du-Port, Palais de Justice), an opera-style auction house (Hôtel des Ventes), and a white-domed basilica on a hill with steps (Sacré-Créancier).
 - A river (la Ferre) crossing the city west to east, with quays, bridges and at least one island. Players can board and steer several kinds of boat.
 - A ring railway (la Petite Ceinture) that loops around the entire city on a viaduct, with stations. Players can board at a station, ride and get off at another.
@@ -40,7 +40,7 @@ Keep the cell grid. A cell is centred on an intersection, `CELL_W = 290`, `CELL_
 
 ```js
 town.roads = {
-  nodes: [{ id, col, row, x, y, kind: "cross" | "tee" | "end" | "roundabout", radius? }],
+  nodes: [{ id, col, row, x, y, kind: "cross" | "tee" | "roundabout", radius? }],
   // class sets the paved half-width: avenue 25, street 25, alley 7.
   edges: [{ a, b, class: "avenue" | "street" | "alley", halfWidth, oneWay?: "a>b" | "b>a" }],
 };
@@ -74,7 +74,8 @@ Port-Fer is a **16 × 12** cell city (`cols 0..15`, `rows 0..11`, world size `45
 - **River la Ferre** runs west→east between `row 6` (Quai Nord) and `row 8` (Quai Sud), with open water `y ∈ [1482, 1854]` (`row 7` centre at `y = 1668`). **10 road bridges** cross at columns `1, 3, 4, 6, 8, 10, 11, 12, 13, 14` (all `clearance: true`), leaving open water spans at `0, 2, 5, 7, 9, 15`. **Île de la Ferre** sits on `row 7` across columns `8..10` (`x ∈ [2287, 3083]`, `y ∈ [1590, 1746]`), leaving 108-unit north and south navigable channels, holding **Notre-Dame-du-Port** on the north apron of `(9, 7)`, with the island street and the south-quay mooring in front of it. **Palais de Justice** faces the island from Quai Nord at `(8, 6)`. Six moorings sit on water along the north quay, south quay and island quay.
 - **Grand Boulevards** form an avenue ring (`row 2`, `row 10`, `col 2`, `col 13`) linked to the riverside quays (`row 6`, `row 8`) and north–south axes (`col 3`, `col 6`, `col 8`, `col 10`). Four anticlockwise **roundabouts** anchor the network: **Étoile des Saisies** `(3, 3)` (`r = 22`, around Arc des Saisies), **Place de la Contrainte** `(6, 5)` (`r = 18`, around the obelisk), **Rond-Point du Timbre** `(13, 2)` (`r = 15`), and **Place de la Rive-Sud** `(10, 10)` (`r = 15`).
 - **Monuments (7)**: Arc des Saisies `(3, 3)`, Tour de Fer `(3, 8)` (roads pass beneath its four corner iron piers), Place de la Contrainte obelisk `(6, 5)`, Hôtel des Ventes opera/auction house `(7, 3)` and Sacré-Créancier hilltop basilica `(8, 0)` (both on the north-west block of their cell, as painted), Palais de Justice `(8, 6)`, and Notre-Dame-du-Port `(9, 7)`.
-- **Alleys, parks, tees & dead ends**: Dense *ruelles* (`halfWidth = 7`, admitting walkers and vehicles with `halfWidth ≤ 3.6`) fill **Le Vieux Marais** (`cols 9..12, rows 3..5`), **Quartier Latin** (`cols 9..10, row 9`), and **Butte du Créancier** (`cols 7..9, row 0`), plus four opened mid-cell seam passages (`9.5, 4..5`, `10.5, 3..4`, `6.5, 0..1`, `9.5, 8..9`). Three parks (**Champ-de-Fer** `(3..4, 9)`, **Parc des Buttes-Fiscales** `(14, 3..4)`, **Jardin du Sénat** `(7, 9)`) and five impasses (`(1,4)`, `(12,4)`, `(4,9)`, `(14,3)`, `(7,9)`) provide dead ends and T-junctions.
+- **Ruelles, parks and T-junctions**: *Ruelles* (`halfWidth = 7`, admitting walkers and vehicles with `halfWidth ≤ 3.6`) run through **Le Vieux Marais**: two crossings of four at `(10, 4)` and `(11, 4)`, the lane between them, and one lane out to each street around, north to `(10, 3)` and `(11, 3)`, south to `(10, 5)` and `(11, 5)`, west to `(9, 4)` and east to `(12, 4)`. In the **Quartier Latin**, Ruelle des Écoles runs from Quai Sud `(9, 8)` to `(9, 9)`. Three parks (**Champ-de-Fer** `(3..4, 9)`, **Parc des Buttes-Fiscales** `(14, 3..4)`, **Jardin du Sénat** `(7, 9)`) are garden squares that the streets cross. Two inland T-junction pairs leave out one road each, `(1, 4)–(1, 5)` and `(12, 9)–(12, 10)`; the quays make twelve more. There are no dead ends and no roads along the joins of two paintings: every road runs from one intersection to the next, and every cell's painting shows exactly the roads the cell has (`test/town.test.js`).
+- **Blocks and the passage behind them**: Two paintings meet wall against wall, as the houses of one terrace do. Behind every block runs a paved passage, the lowest 7 units of the painting to its north, in front of that painting's south-facing houses. It is open on foot from one cross street to the next (`town.backLane(row)`, `inBackLane` in `src/world/collision.js`) and closed to anything on wheels. There is none along the water.
 - **Petite Ceinture ring railway** loops clockwise on a continuous elevated viaduct (`deckLift = 40`) along `row 1` (`y ≈ 271.65`), seam `col 14/15` (`x = 4280`, East Rail Bridge over la Ferre), `row 11` (`y ≈ 2551.65`), and seam `col 0/1` (`x = 220`, West Rail Bridge over la Ferre), with **8 stations** (`porte-etoile`, `butte-creancier`, `buttes-fiscales`, `viaduc-est`, `porte-docks`, `gare-sud`, `champ-fer`, `viaduc-ouest`). Straight-line trains are removed. The corners have a 150-unit radius (`cornerR`, 24 steps per quarter) so the 18 m coaches stay over the deck; each curve stands on a painted column and an iron portal (`cornerSupports` in `src/world/viaduct.js`). The trains are drawn by `drawRingTrains(ox, oy, actors)` in `src/art/train.js`, which `src/ui/renderer.js` calls once after the overhead layers and before `drawOverTrain` (rail-bridge bracing and canopies).
 - **Paintings in place**: `town.cellKinds[row][col]` names the painting of every cell; `src/world/paintings.js` records what each shows (arms, pier lines, solids, silhouettes). `tools/art/bake-scenery.mjs` bakes `art-src/scenery/*.png` into `assets/scenery/*.webp` on the plate grid (5 px per world unit). Where a painting could not sit on the published geometry, its registration was adapted and the geometry kept:
   - *La Ferre.* The six river paintings (`<key>Tall.png`, 1500 × 2130 px) show a column at its true depth, 290 × 412.2 units from `Y(6) + 27` to the Quai Sud kerb, and are placed without stretching a row. A plate starts 10 units farther north, at the Quai Nord kerb; that band is quay setts and a bridge runs through it. The painted island sits on `town.river.islands[0]`: walls at y ≈ 1590 and 1746, points at x ≈ 2287 and 3083, 24-unit bevels. `src/world/paintings.js` (`riverMarks`) holds what was marked by hand on each painting: kerbs, decks, lanterns, pier bases, the island wall, gardens, buildings, trees and the silhouettes that stand in front of boats. The bake writes a `<key>Over.webp` mask of those silhouettes for every plate, and the game redraws the street layer through it over the river traffic.
@@ -84,25 +85,26 @@ Port-Fer is a **16 × 12** cell city (`cols 0..15`, `rows 0..11`, world size `45
   - *Stations.* The painted station stands west of its cross street; the ring stops are 88 units east of it. The baked `ringStation` plates set the station building on the east block so that the platform and the hall door meet `stations[].stop` and `.street`.
   - `riverFootbridge` is not placed: the road graph has no foot-only crossing.
   - *Lanterns.* The standing lanterns of the later paintings are marked by hand as `[x, finial, foot]` (`paintings[key].lamps`, `riverMarks[key].lamps`). Each covers whoever is behind its foot, and its post stops walkers and bumpers. `node tools/art/review-lamps.mjs DIR [--find]` draws the marks on the source paintings; `node tools/art/bake-scenery.mjs --review DIR` does the same for the river's masks and obstacles. Bollards are not marked.
-  - *Seams and closed arms.* Seam strips are baked with their long edges faded out, and the frontage that closes an arm is pasted with faded cut edges. The Petite Ceinture's side supports stand only where a cross street runs beneath the deck.
+  - *Ruelles and closed sides.* A cell with a ruelle or a closed side has its own painting: `alleyCross` and `alleyCrossB` (four ruelles), `alleyEast`, `alleySouth`, `alleySouthB`, `alleyNorth`, `alleyNorthB` (one ruelle off a wide street, through a mouth with a dropped kerb and two bollards) and `teeNorth`, `teeSouth` (one side closed by a continuous frontage). `alleyWest`, `teeNorthTurned` and `teeSouthTurned` are `alleyEast`, `teeNorth` and `teeSouth` turned about their north-south street when the game loads (`turned` in `src/world/paintings.js`); they cost no download. The later paintings follow an edge contract so that nothing is cut by a join: plain wall at the left and right edges, plain roof at the top, a band of plain setts at the bottom (`art-src/scenery/scenery-3/BRIEF.md`). A painting with a ruelle is registered on the feet of the lane's walls as well as on its kerbs (`registration` in `src/world/paintings.js`), so the lane is 14 units wide in every cell it crosses.
+  - *Joins.* The renderer draws each cell's painting and then only softens what runs on from one painting to the next: carriageways with their pavements, the setts of a ruelle, and the paving of the passage behind a block (`drawRoadJoins` in `src/world/streets.js`). Nothing is pasted over a painting.
 - **Case addresses**: `office` (Étude + interior) at `(7, 5)`, `auction` (Hôtel des Ventes, at the foot of its steps) at `(7, 3)`, `repo` (Crédit Sec) at `(5, 4)` with Moutarde GT on North Boulevard `(5, 2)`, `noise` (Le Boum) at `(9, 5)`, `flat` (Résidence Mireille) at `(6, 6)`.
 
 ```text
 Col:  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
-r00:  +---+---+---+---+---+---+---+.:[B]:.+-+---+---+---+---+---+---+  [B] Sacré-Créancier (8,0)
+r00:  +---+---+---+---+---+---+---+---+[B]+---+---+---+---+---+---+---+  [B] Sacré-Créancier (8,0)
 r01:  +===+===+===[S1]+===+===+===+===+==[S2]+===+===+==[S3]+===+===+  === Petite Ceinture North
 r02:  +|  +===+===+===+==[GT]=+===+===+===+===+===+===+==(O)+---+---+  === Grands Boulevards
-r03:  +|  +===+==(A)==+===+===+===[V]=+---+:::+-::+---+===+ [P] +  |+  (A) Arc des Saisies (3,3)
-r04:  +| [x]  +===+---+--[R]--+---+---+---+:.:+:.:+[x]+===+ [P] +[S4]  [V] Hôtel des Ventes (7,3)
-r05: [S8] +===+===+===+===+==(O)==[É]=+---[C]:+:::+-+---+===+---+  |+  (O) Obelisk (6,5) / [É] Étude
+r03:  +|  +===+==(A)==+===+===+===[V]=+---+---+-:-+-:-+===+ [P] +  |+  (A) Arc des Saisies (3,3)
+r04:  +|  T   +===+---+--[R]--+---+---+---+:::+:.:+:.:+:::+ [P] +[S4]  [V] Hôtel des Ventes (7,3)
+r05: [S8] T===+===+===+===+==(O)==[É]=+---[C]-+-:-+-:-+---+===+---+  |+  (O) Obelisk (6,5) / [É] Étude
 r06:  +===+===+===+===+===+==[S]=M+===+===+===+===+===+M+===+===+===+  Quai Nord (M = moorings)
 r07: ~|~B~|~  ~|~B~B~ ~|~ ~|~B~ ~|~ ~B[J]==[M]==[N]B~B~B~B~B~ ~|~B~|~  la Ferre + Île (J=Palais, N=Cathedral)
-r08:  +===+===+M==[T]=+===+===+===+===+===+===+===+===+===+M+===+===+  Quai Sud / [T] Tour de Fer (3,8)
-r09:  +|  +===+===+ [P]   +---+---+[x]+:::+:::+---+===+---+---+---+ |  [P] Parks / [x] Impasses
-r10:  +|  +===+===+===+===+===+===+===+===+==(O)==+===+===+===+---+ |  (O) Pl. Rive-Sud (10,10)
+r08:  +===+===+M==[T]=+===+===+===+===+===+-:-+===+===+===+M+===+===+  Quai Sud / [T] Tour de Fer (3,8)
+r09:  +|  +===+===+ [P] [P] +---+--[P]--+-:-+---+---+ T +---+---+---+ |  [P] Parks
+r10:  +|  +===+===+===+===+===+===+===+===+==(O)==+===+ T +===+---+ |  (O) Pl. Rive-Sud (10,10)
 r11:  +===+===+===[S7]+===+===+===+===+==[S6]+===+===+==[S5]+===+===+  === Petite Ceinture South
 
-Legend: === Avenue / Blvd   --- Street   ::: Alley (halfWidth 7)   (A)/(O) Roundabout
+Legend: === Avenue / Blvd   --- Street   : Ruelle (halfWidth 7)   (A)/(O) Roundabout   T T-junction pair
         [S1..S8] Ring stations   | Ring vertical viaduct   B Road bridge   ~ River la Ferre
         M River mooring   [É/R/C/S/V] Case pins (Étude, Crédit Sec, Le Boum, Mireille, Ventes)
 ```
@@ -112,7 +114,8 @@ Legend: === Avenue / Blvd   --- Street   ::: Alley (halfWidth 7)   (A)/(O) Round
 Copy the framing of the existing street paintings in `assets/market.webp`, `assets/garage.webp`, `assets/docks.webp` and `assets/square.webp`. Pass one of them to the image model as the style and framing reference for every new painting.
 
 - 1500 × 1000 px, elevated 3/4 top-down camera, night, wet cobbles, sodium lamps, neon accents, inked contours, painted texture. Same world scale: a sedan is about 70 px long and a person is about 36 px tall.
-- One intersection centred at (750, 500). Roads leave the frame on all four sides at their real widths so neighbouring paintings join. Avenue and street kerbs: north-south road between x ≈ 668 and 838, east-west road between y ≈ 430 and 573. Alley arms are about 50 px wide.
+- One intersection centred at (750, 500). The roads the cell has leave the frame at their real widths so neighbouring paintings join. Avenue and street kerbs: north-south road between x ≈ 668 and 838, east-west road between y ≈ 430 and 573. A ruelle is 72 px between its walls running north-south and 62 px running east-west (14 units). A side without a road is one continuous frontage and pavement.
+- Nothing is cut by the frame: plain wall within 16 px of the left and right edges, plain roof in the top 24 px, a band of plain setts in the lowest 34 px (the passage behind the block). `art-src/scenery/scenery-3/BRIEF.md` has the full edge contract and the world-scale table (doors, windows, storeys).
 - No vehicles, people, text, logos or UI in the painting. Monuments and buildings may carry fictional French signs only if they are illegible at gameplay scale.
 - Paint lane markings lightly; the game paints its own dashes.
 - Save the chosen image as `art-src/scenery/<key>.png` and add an entry to `art-src/scenery/manifest.json`:
