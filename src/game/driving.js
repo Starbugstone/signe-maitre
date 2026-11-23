@@ -107,11 +107,17 @@ function drive(v, dt, throttle, steering, brake) {
     const back = (spec.pivot || 0) * spec.halfLength,
       x = v.x + back * (Math.cos(v.a) - Math.cos(oldAngle)),
       y = v.y + back * (Math.sin(v.a) - Math.sin(oldAngle));
-    if (vehicleBlocked(v, x, y)) v.a = oldAngle;
-    else {
-      v.x = x;
-      v.y = y;
-    }
+    // A long body whose turn would clip a kerb or an island edges sideways off it, as a
+    // driver shuffles a bus round a tight corner, before the wheel is refused.
+    const side = !vehicleBlocked(v, x, y)
+      ? [x, y]
+      : spec.footprint
+        ? [0.7, -0.7, 1.4, -1.4]
+            .map((d) => [x - Math.sin(v.a) * d, y + Math.cos(v.a) * d])
+            .find(([nx, ny]) => !vehicleBlocked(v, nx, ny))
+        : null;
+    if (!side) v.a = oldAngle;
+    else [v.x, v.y] = side;
   }
   const vx = Math.cos(v.a) * v.speed,
     vy = Math.sin(v.a) * v.speed;

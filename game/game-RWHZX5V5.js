@@ -2225,14 +2225,14 @@
     }
     return true;
   }
-  function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam) {
+  function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam, apron = 0) {
     for (const r of cell.openRects) {
       if (r.alley && !allowAlley) continue;
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
     }
     for (const rb of cell.roundabouts) {
       const dx = x - rb.x, dy = y - rb.y;
-      if (dx * dx + dy * dy <= rb.outerRadius * rb.outerRadius) return true;
+      if (dx * dx + dy * dy <= (rb.outerRadius + apron) ** 2) return true;
     }
     if (allowServiceSeam) {
       if (!layout.river || !layout.river.onWater(x, y, 0)) {
@@ -2319,6 +2319,7 @@
     if (!leaving && (x < rx || y < ry || x > layout.width - rx || y > layout.height - ry)) return true;
     const canUseAlley = halfWidth <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
     const pose = { x, y, a, halfLength, halfWidth };
+    const wheels = { x, y, a, halfLength: halfLength * (vehicle.footprint ?? 1), halfWidth };
     const first = layout.cellAt(x - rx, y - ry), last = layout.cellAt(x + rx, y + ry);
     for (let row = first.row; row <= last.row; row++) {
       for (let col = first.col; col <= last.col; col++) {
@@ -2358,20 +2359,22 @@
           const r = post.item.radius;
           if (!r) continue;
           const box2 = { x: post.x, y: post.y - r / 2, a: 0, halfLength: r, halfWidth: r / 2 };
-          if (Math.abs(box2.x - x) < rx + box2.halfLength && Math.abs(box2.y - y) < ry + box2.halfWidth && carContact(pose, box2))
+          if (Math.abs(box2.x - x) < rx + box2.halfLength && Math.abs(box2.y - y) < ry + box2.halfWidth && carContact(wheels, box2))
             return true;
         }
       }
     }
     const centerCell = layout.cellMeta(layout.cellAt(x, y).col, layout.cellAt(x, y).row);
     const corners2 = obbCorners(pose);
+    const reach2 = halfLength;
+    const apron = vehicle.footprint ? 9 : 0;
     for (const rect2 of centerCell.openRects) {
       if (rect2.alley && !canUseAlley) continue;
       if (corners2[0][0] >= rect2.left && corners2[0][0] <= rect2.right && corners2[0][1] >= rect2.top && corners2[0][1] <= rect2.bottom && corners2[1][0] >= rect2.left && corners2[1][0] <= rect2.right && corners2[1][1] >= rect2.top && corners2[1][1] <= rect2.bottom && corners2[2][0] >= rect2.left && corners2[2][0] <= rect2.right && corners2[2][1] >= rect2.top && corners2[2][1] <= rect2.bottom && corners2[3][0] >= rect2.left && corners2[3][0] <= rect2.right && corners2[3][1] >= rect2.top && corners2[3][1] <= rect2.bottom)
         return false;
     }
     for (const rb of centerCell.roundabouts) {
-      const r2 = rb.outerRadius * rb.outerRadius;
+      const r2 = (rb.outerRadius + apron) ** 2;
       if (corners2.every(([px, py]) => (px - rb.x) ** 2 + (py - rb.y) ** 2 <= r2)) return false;
     }
     const c = Math.cos(a), s = Math.sin(a);
@@ -2379,11 +2382,11 @@
       [x, y],
       ...corners2,
       // Front & rear centres.
-      [x + c * halfLength, y + s * halfLength],
-      [x - c * halfLength, y - s * halfLength]
+      [x + c * reach2, y + s * reach2],
+      [x - c * reach2, y - s * reach2]
     ];
     for (const f of [-0.6, -0.2, 0.2, 0.6]) {
-      const lx = c * halfLength * f, ly = s * halfLength * f;
+      const lx = c * reach2 * f, ly = s * reach2 * f;
       samples.push([x + lx - s * halfWidth, y + ly + c * halfWidth]);
       samples.push([x + lx + s * halfWidth, y + ly - c * halfWidth]);
     }
@@ -2391,7 +2394,7 @@
       if (leaving && (px < 0 || py < 0 || px > layout.width || py > layout.height)) continue;
       const sc = layout.cellAt(px, py);
       const cell = layout.cellMeta(sc.col, sc.row);
-      if (!pointInOpenSpace(layout, cell, px, py, canUseAlley, false)) return true;
+      if (!pointInOpenSpace(layout, cell, px, py, canUseAlley, false, apron)) return true;
     }
     return false;
   }
@@ -2970,6 +2973,7 @@
       name: { fr: "Berline", en: "Saloon" },
       halfLength: sedanHalfLength,
       mass: 1,
+      insurance: 1,
       topSpeed: 181,
       reverseSpeed: 57,
       accel: 122,
@@ -2986,6 +2990,7 @@
       halfLength: 13.3,
       halfWidth: 5.45,
       mass: 1,
+      insurance: 1.2,
       topSpeed: 181,
       reverseSpeed: 57,
       accel: 122,
@@ -3002,6 +3007,7 @@
       name: { fr: "Volta E", en: "Volta E" },
       halfLength: 11.9,
       mass: 1.25,
+      insurance: 1.1,
       topSpeed: 214,
       reverseSpeed: 60,
       accel: 196,
@@ -3021,7 +3027,8 @@
       name: { fr: "Mastodonte 4\xD74", en: "Mastodon 4\xD74" },
       halfLength: 12.4,
       mass: 1.7,
-      topSpeed: 168,
+      insurance: 1.6,
+      topSpeed: 156,
       reverseSpeed: 52,
       accel: 104,
       brake: 240,
@@ -3038,7 +3045,9 @@
       name: { fr: "Autobus de ligne", en: "City bus" },
       halfLength: 28.5,
       mass: 6,
-      topSpeed: 112,
+      insurance: 2.6,
+      footprint: 0.68,
+      topSpeed: 90,
       reverseSpeed: 32,
       accel: 46,
       reverseAccel: 34,
@@ -3057,7 +3066,9 @@
       name: { fr: "Camion-benne", en: "Dump truck" },
       halfLength: 19,
       mass: 8,
-      topSpeed: 104,
+      insurance: 3,
+      footprint: 0.74,
+      topSpeed: 84,
       reverseSpeed: 30,
       accel: 40,
       reverseAccel: 30,
@@ -3078,6 +3089,7 @@
       halfLength: 7,
       halfWidth: 2.3,
       mass: 0.22,
+      insurance: 0.7,
       topSpeed: 236,
       reverseSpeed: 14,
       accel: 215,
@@ -3174,6 +3186,7 @@
       label: fleet[model] ? spec.label : model,
       halfLength: spec.halfLength,
       halfWidth: spec.halfWidth,
+      ...spec.footprint && { footprint: spec.footprint },
       route,
       condition: 100,
       speed: 0,
@@ -5461,7 +5474,7 @@
     if (force < 17) return;
     const loss = Math.max(1, Math.round(100 * Math.pow((force - 12) / 200, 1.7)));
     const mass = fleetOf(v).mass, against = other ? fleetOf(other).mass : 0;
-    const share = (c) => other ? 2 * (c === v ? against : mass) / (mass + against) : 1 / Math.sqrt(mass);
+    const share = (c) => (other ? 2 * (c === v ? against : mass) / (mass + against) : 1 / Math.sqrt(mass)) / (fleetOf(c).insurance ?? 1);
     const taken = Math.max(1, Math.round(loss * share(v)));
     for (const c of other ? [v, other] : [v]) {
       c.condition = clamp((c.condition ?? 100) - Math.max(1, Math.round(loss * share(c))), 0, 100);
@@ -5583,11 +5596,9 @@
     v.a = angleDifference(v.a, 0);
     if (v.a !== oldAngle) {
       const back = (spec.pivot || 0) * spec.halfLength, x = v.x + back * (Math.cos(v.a) - Math.cos(oldAngle)), y = v.y + back * (Math.sin(v.a) - Math.sin(oldAngle));
-      if (vehicleBlocked(v, x, y)) v.a = oldAngle;
-      else {
-        v.x = x;
-        v.y = y;
-      }
+      const side = !vehicleBlocked(v, x, y) ? [x, y] : spec.footprint ? [0.7, -0.7, 1.4, -1.4].map((d) => [x - Math.sin(v.a) * d, y + Math.cos(v.a) * d]).find(([nx, ny]) => !vehicleBlocked(v, nx, ny)) : null;
+      if (!side) v.a = oldAngle;
+      else [v.x, v.y] = side;
     }
     const vx = Math.cos(v.a) * v.speed, vy = Math.sin(v.a) * v.speed;
     v.slipRecovery = brake ? 0.25 : Math.max(0, (v.slipRecovery || 0) - dt);

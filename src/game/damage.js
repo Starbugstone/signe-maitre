@@ -25,7 +25,8 @@ function recordImpact(v, force, other) {
   // Against a wall a heavy chassis shrugs off what folds a motorbike.
   const mass = fleetOf(v).mass,
     against = other ? fleetOf(other).mass : 0;
-  const share = (c) => (other ? (2 * (c === v ? against : mass)) / (mass + against) : 1 / Math.sqrt(mass));
+  const share = (c) =>
+    (other ? (2 * (c === v ? against : mass)) / (mass + against) : 1 / Math.sqrt(mass)) / (fleetOf(c).insurance ?? 1);
   const taken = Math.max(1, Math.round(loss * share(v)));
   for (const c of other ? [v, other] : [v]) {
     c.condition = clamp((c.condition ?? 100) - Math.max(1, Math.round(loss * share(c))), 0, 100);

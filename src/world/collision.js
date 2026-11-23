@@ -103,7 +103,7 @@ function obbHitsPoly(pose, poly) {
   return true;
 }
 
-function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam) {
+function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam, apron = 0) {
   for (const r of cell.openRects) {
     if (r.alley && !allowAlley) continue;
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true;
@@ -111,7 +111,7 @@ function pointInOpenSpace(layout, cell, x, y, allowAlley, allowServiceSeam) {
   for (const rb of cell.roundabouts) {
     const dx = x - rb.x,
       dy = y - rb.y;
-    if (dx * dx + dy * dy <= rb.outerRadius * rb.outerRadius) return true;
+    if (dx * dx + dy * dy <= (rb.outerRadius + apron) ** 2) return true;
   }
   if (allowServiceSeam) {
     // Unopened service alleys between painted blocks remain walkable on foot away from river water.
@@ -230,6 +230,9 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
 
   const canUseAlley = halfWidth <= ALLEY_MAX_VEHICLE_HALF_WIDTH;
   const pose = { x, y, a, halfLength, halfWidth };
+  // A long body overhangs its wheels: front and rear pass over short bollards, so only the
+  // wheelbase (`footprint` of the length) meets them. Islands, monuments and piers stop the whole body.
+  const wheels = { x, y, a, halfLength: halfLength * (vehicle.footprint ?? 1), halfWidth };
   const first = layout.cellAt(x - rx, y - ry),
     last = layout.cellAt(x + rx, y + ry);
 
@@ -288,7 +291,7 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
         if (
           Math.abs(box.x - x) < rx + box.halfLength &&
           Math.abs(box.y - y) < ry + box.halfWidth &&
-          carContact(pose, box)
+          carContact(wheels, box)
         )
           return true;
       }
@@ -298,6 +301,9 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
   // 2. Check that the vehicle body lies completely within allowed road space (respecting alleys, river & walls).
   const centerCell = layout.cellMeta(layout.cellAt(x, y).col, layout.cellAt(x, y).row);
   const corners = obbCorners(pose);
+  const reach = halfLength;
+  // Around a roundabout a long body may sweep the corner pavements with its overhangs.
+  const apron = vehicle.footprint ? 9 : 0;
 
   // Fast path: all 4 corners inside a single allowed open rectangle (convex -> entire OBB is inside).
   for (const rect of centerCell.openRects) {
@@ -325,7 +331,7 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
 
   // Fast path: all 4 corners inside a single roundabout plaza.
   for (const rb of centerCell.roundabouts) {
-    const r2 = rb.outerRadius * rb.outerRadius;
+    const r2 = (rb.outerRadius + apron) ** 2;
     if (corners.every(([px, py]) => (px - rb.x) ** 2 + (py - rb.y) ** 2 <= r2)) return false;
   }
 
@@ -336,12 +342,12 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
     [x, y],
     ...corners,
     // Front & rear centres.
-    [x + c * halfLength, y + s * halfLength],
-    [x - c * halfLength, y - s * halfLength],
+    [x + c * reach, y + s * reach],
+    [x - c * reach, y - s * reach],
   ];
   for (const f of [-0.6, -0.2, 0.2, 0.6]) {
-    const lx = c * halfLength * f,
-      ly = s * halfLength * f;
+    const lx = c * reach * f,
+      ly = s * reach * f;
     samples.push([x + lx - s * halfWidth, y + ly + c * halfWidth]);
     samples.push([x + lx + s * halfWidth, y + ly - c * halfWidth]);
   }
@@ -349,7 +355,7 @@ export function vehicleBlockedIn(layout, vehicle, x = vehicle.x, y = vehicle.y, 
     if (leaving && (px < 0 || py < 0 || px > layout.width || py > layout.height)) continue;
     const sc = layout.cellAt(px, py);
     const cell = layout.cellMeta(sc.col, sc.row);
-    if (!pointInOpenSpace(layout, cell, px, py, canUseAlley, false)) return true;
+    if (!pointInOpenSpace(layout, cell, px, py, canUseAlley, false, apron)) return true;
   }
   return false;
 }

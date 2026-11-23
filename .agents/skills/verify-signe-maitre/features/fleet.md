@@ -22,7 +22,7 @@ Five more road vehicles share the streets with the sedan and the ambulance. Each
 
 Preconditions: `--build probe`. `state().parked` lists parked vehicles with `model`, `label`, `condition` and `showpiece` for the seized vehicles. Traffic entries include the current segment's `roadClass`, `routeId` and `halted` (a bus at a stop).
 
-- `pf run fleet --build probe --video` walks to each seized vehicle, boards it, pulls out, reaches a model-specific speed, crashes it into the buildings on the south side of the street and gets out. The motorbike is crashed to 0% (wreck picture, roadside-assistance hint) and the Volta E below 65% (dented picture). It then watches traffic until at least four models, including a bus or dump truck, have driven by and the same bus has halted on an avenue and moved off again.
+- `pf run fleet --build probe --video` walks to each seized vehicle, boards it, pulls out, reaches a model-specific speed, crashes it into the buildings on the south side of the street and gets out. The bus and the dump truck first drive west to the roundabout at the end of the étude's street (6,5) and must lap it within a minute (before the fix the bus managed half a lap): long bodies may sweep the corner pavements with their overhangs there. The motorbike is crashed to 0% (wreck picture, roadside-assistance hint) and the Volta E below 65% (dented picture). It then watches traffic until at least four models, including a bus or dump truck, have driven by and the same bus has halted on an avenue and moved off again.
 - Repeat with `--device phone --lang fr`.
 - Art review: `node tools/art/fleet-sheet.mjs` writes contact sheets to `.verify/evidence/fleet-art/`: every model at all 64 headings beside the sedan and the ambulance at gameplay scale, in each state, the two motorbike riders, and a line-up of all models on a street painting. Look at them and at the journey's screenshots; a passing journey does not prove the visual standard.
 - `test/fleet.test.js` checks the registry against the bake recipe and the paintings' measurements. `test/traffic.test.js` runs mixed traffic around the city's junctions and bridges. It also runs each heavy vehicle around every roundabout and over la Ferre for 150 seconds, then checks a motorbike alley circuit and sedan exclusion.
@@ -30,6 +30,6 @@ Preconditions: `--build probe`. `state().parked` lists parked vehicles with `mod
 ## Gotchas
 
 - The journey steers by heading and rams the nearest wall, so the exact crash site varies with traffic. Between vehicles it plans its walk around every parked or crashed vehicle from `state().parked`; moving traffic can still hold it up, so rerun once before suspecting the game.
-- The bus and dump truck lose about 1% per wall impact at kerb-side speeds. The journey only asks them for any damage.
+- The bus and dump truck are insured against knocks (`insurance` in src/game/fleet.js) and lose about 1% per wall impact at kerb-side speeds. The journey only asks them for any damage.
 - A wreck cannot be boarded; the hint offers roadside assistance instead.
 - Engine sounds need a manual listen with sound on.

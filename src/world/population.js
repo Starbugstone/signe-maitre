@@ -18,6 +18,7 @@ function car(x, y, a, tint, model, route) {
     label: fleet[model] ? spec.label : model,
     halfLength: spec.halfLength,
     halfWidth: spec.halfWidth,
+    ...(spec.footprint && { footprint: spec.footprint }),
     route,
     condition: 100,
     speed: 0,

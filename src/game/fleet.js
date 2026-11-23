@@ -10,7 +10,11 @@ import { sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
 // steer in rad/s at speed, turn the tightest corner radius, pivot how far behind the centre
 // (as a share of halfLength) a long body swings about, grip 1 for tyres that track
 // the steering exactly and less for a body that carries on sideways through a turn.
-// mass is relative to the sedan and shares out impact damage and shoving.
+// mass is relative to the sedan and shares out impact damage and shoving. insurance divides
+// what a crash costs the body on top of that: a bus or a dump truck shrugs off a knock that
+// dents a saloon, and the motorbike folds sooner. footprint is the share of a long body's
+// length that lies between its wheels: the overhangs pass over bollards and, at a roundabout,
+// the corner pavements (src/world/collision.js).
 //
 // sprite: frame is the atlas cell in pixels at `scale` pixels per world unit, with the
 // body's ground centre at (cx, cy) in the cell. Damaged states are stored smaller. The
@@ -25,6 +29,7 @@ export const fleet = {
     name: { fr: "Berline", en: "Saloon" },
     halfLength: sedanHalfLength,
     mass: 1,
+    insurance: 1,
     topSpeed: 181,
     reverseSpeed: 57,
     accel: 122,
@@ -41,6 +46,7 @@ export const fleet = {
     halfLength: 13.3,
     halfWidth: 5.45,
     mass: 1,
+    insurance: 1.2,
     topSpeed: 181,
     reverseSpeed: 57,
     accel: 122,
@@ -57,6 +63,7 @@ export const fleet = {
     name: { fr: "Volta E", en: "Volta E" },
     halfLength: 11.9,
     mass: 1.25,
+    insurance: 1.1,
     topSpeed: 214,
     reverseSpeed: 60,
     accel: 196,
@@ -76,7 +83,8 @@ export const fleet = {
     name: { fr: "Mastodonte 4×4", en: "Mastodon 4×4" },
     halfLength: 12.4,
     mass: 1.7,
-    topSpeed: 168,
+    insurance: 1.6,
+    topSpeed: 156,
     reverseSpeed: 52,
     accel: 104,
     brake: 240,
@@ -93,7 +101,9 @@ export const fleet = {
     name: { fr: "Autobus de ligne", en: "City bus" },
     halfLength: 28.5,
     mass: 6,
-    topSpeed: 112,
+    insurance: 2.6,
+    footprint: 0.68,
+    topSpeed: 90,
     reverseSpeed: 32,
     accel: 46,
     reverseAccel: 34,
@@ -112,7 +122,9 @@ export const fleet = {
     name: { fr: "Camion-benne", en: "Dump truck" },
     halfLength: 19,
     mass: 8,
-    topSpeed: 104,
+    insurance: 3,
+    footprint: 0.74,
+    topSpeed: 84,
     reverseSpeed: 30,
     accel: 40,
     reverseAccel: 30,
@@ -133,6 +145,7 @@ export const fleet = {
     halfLength: 7,
     halfWidth: 2.3,
     mass: 0.22,
+    insurance: 0.7,
     topSpeed: 236,
     reverseSpeed: 14,
     accel: 215,

@@ -217,6 +217,63 @@ export default async function (d) {
       d.expect(Math.hypot(ride.x - start.x, ride.y - start.y) > 20, `the ${model} drives off down the street`, { start, ride });
       if (model !== "moto") d.expect(top > pace, `the ${model} gets up to speed (${top.toFixed(0)} units/s)`, { top, pace });
     });
+    // The two long bodies drive on west to the roundabout at the end of the étude's street
+    // and lap it the way traffic goes, without getting stuck on the island or the kerbs.
+    if (model === "bus" || model === "dumper")
+      await d.step(`roundabout-${model}`, async () => {
+        const here = (await d.state()).ride;
+        const rb = town.roads.nodes.find((n) => n.radius && n.row === office.row && n.x < here.x);
+        d.expect(!!rb, "a roundabout lies west along the étude's street", rb);
+        const lane = Y(office.row) - 3.5,
+          ring = (rb.radius + rb.outerRadius) / 2 + 2,
+          lap = (330 / 180) * Math.PI; // round to the arm it came in by
+        // Westbound in the lane up to the roundabout, letting traffic by when nose to nose.
+        let blocked = 0;
+        for (let i = 0; i < 400; i++) {
+          const { ride } = await d.state();
+          if (ride.x - rb.x < rb.outerRadius + 30) break;
+          blocked = Math.abs(ride.speed) < 2 ? blocked + 1 : 0;
+          if (blocked > 6) {
+            await d.hold(["down"], 900);
+            await new Promise((r) => setTimeout(r, 1500));
+            blocked = 0;
+            continue;
+          }
+          const aim = Math.PI - Math.max(-0.28, Math.min(0.28, (lane - ride.y) * 0.07));
+          await steer(aim, 110, rate, Math.abs(ride.speed) < 30 ? ["up"] : []);
+        }
+        const arrived = (await d.state()).ride;
+        d.expect(arrived.x - rb.x < rb.outerRadius + 30, `the ${model} reaches the roundabout`, arrived);
+        // Round the island anticlockwise on the map, aiming a little ahead on the ring.
+        let turned = 0,
+          last = null,
+          stuck = 0,
+          worst = 0;
+        const trace = [];
+        const started = Date.now();
+        while (turned > -lap && Date.now() - started < 60000) {
+          const { ride } = await d.state();
+          const theta = Math.atan2(ride.y - rb.y, ride.x - rb.x);
+          if (last !== null) turned += turnTo(theta, last);
+          last = theta;
+          trace.push([Math.round(ride.x - rb.x), Math.round(ride.y - rb.y), +ride.a.toFixed(2), Math.round(ride.speed)]);
+          const ahead = theta - 0.6,
+            heading = Math.atan2(rb.y + Math.sin(ahead) * ring - ride.y, rb.x + Math.cos(ahead) * ring - ride.x);
+          stuck = Math.abs(ride.speed) < 2 ? stuck + 1 : 0;
+          worst = Math.max(worst, stuck);
+          if (stuck > 6) {
+            await d.hold(["down"], 600);
+            stuck = 0;
+            continue;
+          }
+          await steer(heading, 110, rate, Math.abs(ride.speed) < 24 ? ["up"] : []);
+        }
+        const { ride } = await d.state();
+        const seconds = (Date.now() - started) / 1000;
+        d.note(`${model} lapped the roundabout`, { rb: rb.id, turned, seconds, worst, ride, trace });
+        // Before long bodies could overhang the corner pavements, the bus managed half a lap in a minute.
+        d.expect(turned <= -lap, `the ${model} goes round the roundabout to its entry arm within a minute (${seconds.toFixed(0)} s)`, { turned, worst });
+      });
     await d.step(`crash-${model}`, async () => {
       // Across the street into the buildings on the south side, where nothing is parked,
       // backing off and ramming again as needed.
