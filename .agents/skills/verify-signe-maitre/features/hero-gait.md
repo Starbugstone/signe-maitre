@@ -15,6 +15,8 @@ The player walks and runs on a layered rig built from the painted walk, run and 
 
 ## Driving it with pf
 
+Preconditions: a fresh probe game, with the player on foot beside the étude. Capture video for the gait tour and use the keyboard for the costume sequence.
+
 - `pf run tools/art/journeys/hero-gait.mjs --build probe --video --mute` walks and runs every direction, diagonal and stop for a video. `tools/art/gait-reel.mjs` cuts two recordings into before/after strips.
 - `pf run tools/art/journeys/hero-strides.mjs --build probe --mute` photographs mid-stride and halt poses; `tools/art/stride-sheet.mjs` tiles them into a contact sheet. Costume shots use the desktop keyboard. If traffic boxes the player in, the journey records which road views it skipped. Use the indoor gait tour for all four directions.
 - `test/gait.test.js` covers facing, stride phase and start/stop rules.
