@@ -50,8 +50,12 @@ import docksImage from "../../assets/docks.webp";
 import squareImage from "../../assets/square.webp";
 // Street paintings baked by tools/art/bake-scenery.mjs, keyed as in src/world/paintings.js.
 import alleyCrossPlate from "../../assets/scenery/alleyCross.webp";
-import alleyStripHPlate from "../../assets/scenery/alleyStripH.webp";
-import alleyStripVPlate from "../../assets/scenery/alleyStripV.webp";
+import alleyCrossBPlate from "../../assets/scenery/alleyCrossB.webp";
+import alleyEastPlate from "../../assets/scenery/alleyEast.webp";
+import alleyNorthPlate from "../../assets/scenery/alleyNorth.webp";
+import alleyNorthBPlate from "../../assets/scenery/alleyNorthB.webp";
+import alleySouthPlate from "../../assets/scenery/alleySouth.webp";
+import alleySouthBPlate from "../../assets/scenery/alleySouthB.webp";
 import basilicaPlate from "../../assets/scenery/basilica.webp";
 import boulevardPlate from "../../assets/scenery/boulevard.webp";
 import haussmannPlate from "../../assets/scenery/haussmann.webp";
@@ -80,6 +84,7 @@ import riverIronBridgePlate from "../../assets/scenery/riverIronBridge.webp";
 import rondPointPlate from "../../assets/scenery/rondPoint.webp";
 import starArchPlate from "../../assets/scenery/starArch.webp";
 import teeNorthPlate from "../../assets/scenery/teeNorth.webp";
+import teeSouthPlate from "../../assets/scenery/teeSouth.webp";
 import towerBasePlate from "../../assets/scenery/towerBase.webp";
 import towerIronPlate from "../../assets/scenery/towerIron.webp";
 // What stands in front of the river traffic on each river plate, as an alpha mask.
@@ -153,8 +158,12 @@ export const imageData = {
   docks: docksImage,
   square: squareImage,
   alleyCross: alleyCrossPlate,
-  alleyStripH: alleyStripHPlate,
-  alleyStripV: alleyStripVPlate,
+  alleyCrossB: alleyCrossBPlate,
+  alleyEast: alleyEastPlate,
+  alleyNorth: alleyNorthPlate,
+  alleyNorthB: alleyNorthBPlate,
+  alleySouth: alleySouthPlate,
+  alleySouthB: alleySouthBPlate,
   basilica: basilicaPlate,
   boulevard: boulevardPlate,
   haussmann: haussmannPlate,
@@ -183,6 +192,7 @@ export const imageData = {
   rondPoint: rondPointPlate,
   starArch: starArchPlate,
   teeNorth: teeNorthPlate,
+  teeSouth: teeSouthPlate,
   towerBase: towerBasePlate,
   towerIron: towerIronPlate,
   riverOver,

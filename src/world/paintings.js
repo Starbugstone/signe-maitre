@@ -24,10 +24,14 @@ function mapper(source, target) {
     return target[i] + ((target[i + 1] - target[i]) * (v - source[i])) / (source[i + 1] - source[i]);
   };
 }
+export const alleyHalf = 7;
 const xTargets = [-CELL_W / 2, -kerbX, 0, kerbX, CELL_W / 2],
   yTargets = [-CELL_H / 2, -kerbY, 0, kerbY, CELL_H / 2];
 
-// Measured kerbs: [west, centre, east], [north, centre, south].
+// Measured kerbs: [west, centre, east], [north, centre, south]. A painting with ruelles also
+// gives the feet of their walls, [near, centre, far] across each lane: `x` for a lane that
+// runs north or south, `y` for one that runs east or west. Where an axis has no wide street
+// (`null`), the lane alone registers it.
 const kerbs = {
   haussmann: [[660, 749, 838], [426, 498, 569]],
   haussmannCafe: [[660, 750, 840], [426, 497, 568]],
@@ -45,16 +49,52 @@ const kerbs = {
   ringCornerNE: [[667, 752, 838], [430, 500, 571]],
   ringCornerNW: [[668, 753, 838], [429, 501, 573]],
   ringStationNorth: [[668, 753, 838], [430, 500, 570]],
+  teeSouth: [[662, 750, 838], [428, 499, 570]],
+  alleyEast: [[662, 750, 838], [428, 499, 570]],
+  alleySouth: [[662, 750, 838], [427, 498, 569]],
+  alleySouthB: [[662, 750, 838], [428, 499, 570]],
+  alleyNorth: [[662, 750, 838], [428, 499, 570]],
+  alleyNorthB: [[662, 750, 838], [428, 499, 570]],
 };
 kerbs.rondPoint = kerbs.obeliskSquare;
+const lanes = {
+  alleyCross: { x: [724, 749, 774], y: [474, 499, 524] },
+  alleyCrossB: { x: [714, 750, 786], y: [468, 499, 530] },
+  alleyEast: { y: [467, 498, 529] },
+  alleySouth: { x: [714, 750, 786] },
+  alleySouthB: { x: [714, 750, 786] },
+  alleyNorth: { x: [714, 750, 786] },
+  alleyNorthB: { x: [714, 750, 786] },
+};
+
+// Source stops and their targets along one axis: the frame, the kerbs of the wide street and
+// the walls of a ruelle, whichever the painting has.
+function stops(size, half, kerb, lane, wide) {
+  const source = [0, size],
+    target = [-half, half];
+  const add = (px, units) => {
+    const at = source.findIndex((stop) => stop > px);
+    source.splice(at, 0, px);
+    target.splice(at, 0, units);
+  };
+  if (kerb) for (const [i, units] of [-wide, 0, wide].entries()) add(kerb[i], units);
+  if (lane) for (const [i, units] of [-alleyHalf, 0, alleyHalf].entries()) if (!kerb || i !== 1) add(lane[i], units);
+  return { source, target };
+}
+// How a painting is laid on its plate, in world units from the cell centre.
+export function registration(key) {
+  const [kx, ky] = kerbs[key] || [],
+    lane = lanes[key] || {};
+  return { x: stops(1500, CELL_W / 2, kx, lane.x, kerbX), y: stops(1000, CELL_H / 2, ky, lane.y, kerbY) };
+}
 
 // Source pixel -> world units from the cell centre, for a painting registered on its kerbs.
 export function fromSource(key, { ring = false } = {}) {
-  const [xs, ys] = kerbs[key];
-  const x = mapper([0, ...xs, 1500], xTargets);
+  const r = registration(key);
+  const x = mapper(r.x.source, r.x.target);
   const y = ring
-    ? mapper([0, 182, 378, ...ys, 1000], [-CELL_H / 2, ringDeck, ringFoot, ...yTargets.slice(1)])
-    : mapper([0, ...ys, 1000], yTargets);
+    ? mapper([0, 182, 378, ...kerbs[key][1], 1000], [-CELL_H / 2, ringDeck, ringFoot, ...yTargets.slice(1)])
+    : mapper(r.y.source, r.y.target);
   return { x, y, point: ([px, py]) => [x(px), y(py)] };
 }
 
@@ -227,7 +267,9 @@ const rectangle = (left, top, right, bottom) => [
 // Painted pier feet of the horizontal viaduct, in source pixels along the span.
 const marketPiers = [88, 406, 602, 898, 1259, 1469];
 
-// `arms`: road arms the painting shows. `viaduct`: source pixels of the pier centre lines.
+// `arms`: wide road arms the painting shows; `alleys`: its ruelles. Together they are the
+// roads of every cell that shows it (test/town.test.js). `viaduct`: source pixels of the pier
+// centre lines.
 // `solids`: what a walker or a car cannot enter, beyond the buildings. `tall`: silhouettes
 // that stand in front of anyone behind their foot line ({ outline, foot } in cell units).
 export const paintings = {
@@ -241,6 +283,12 @@ export const paintings = {
   marketHall: { arms: "nesw" },
   park: { arms: "nesw", garden: true },
   teeNorth: { arms: "esw" },
+  teeSouth: { arms: "new" },
+  alleyEast: { arms: "nsw", alleys: "e" },
+  alleySouth: { arms: "new", alleys: "s" },
+  alleySouthB: { arms: "new", alleys: "s" },
+  alleyNorth: { arms: "esw", alleys: "n" },
+  alleyNorthB: { arms: "esw", alleys: "n" },
   opera: { arms: "nesw" },
   basilica: { arms: "nesw" },
   palaisJustice: { arms: "nesw" },
@@ -249,6 +297,7 @@ export const paintings = {
   obeliskSquare: { arms: "nesw", roundabout: true },
   rondPoint: { arms: "nesw", roundabout: true },
   alleyCross: { arms: "", alleys: "nesw" },
+  alleyCrossB: { arms: "", alleys: "nesw" },
   ringNorth: { arms: "nesw", viaduct: { source: "ringNorth", piers: [89, 412, 609, 897, 1256, 1470] } },
   ringNorthB: {
     arms: "nesw",
@@ -400,8 +449,16 @@ paintings.rondPoint.lamps = paintings.obeliskSquare.lamps;
   Object.assign(paintings.ringStationB, { lamps: cornerWest, eastLamps: [cornerEast[2]] });
 }
 
-// Sacré-Créancier's stairs come down to a broad forecourt; its west arm narrows to a ruelle
-// only beyond it.
-paintings.basilica.forecourt = { w: 100 };
+// A painting turned about its north-south street stands for the mirrored junction. The game
+// turns the plate when it loads; `turned` names the painting it comes from.
+const swapped = (dirs = "") => [...dirs].map((d) => ({ e: "w", w: "e" })[d] || d).join("");
+for (const [key, source] of [
+  ["alleyWest", "alleyEast"],
+  ["teeNorthTurned", "teeNorth"],
+  ["teeSouthTurned", "teeSouth"],
+]) {
+  const { arms, alleys, lamps } = paintings[source];
+  paintings[key] = { arms: swapped(arms), ...(alleys ? { alleys: swapped(alleys) } : {}), lamps, turned: source };
+}
 
 export const paintingKeys = Object.keys(paintings);

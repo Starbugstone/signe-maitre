@@ -13,10 +13,10 @@
   // The ring deck is drawn 40 units above its pier feet (town.ring.deckLift); see src/world/viaduct.js.
   const RING_FOOT = CH / 2 - CH / 2 + (378 * (CH / 2 - KY)) / 429, // 85.64 from the cell top
     RING_DECK = RING_FOOT - 40;
-  const ALLEY = 7;
 
   const images = {};
-  let manifest = {};
+  let manifest = {},
+    registrations = {};
 
   async function load(name, url) {
     if (images[name]) return images[name];
@@ -139,9 +139,17 @@
     return { xs, ys: [0, 182, 378, ...ys.slice(1)] };
   }
 
+  // A street painting on its plate: kerbs, and the walls of any ruelle, on the shared lines
+  // (`registration` in src/world/paintings.js).
   async function districtPlate(key, { arms = "nesw", markings = true } = {}) {
-    const { xs, ys } = kerbStops(key);
-    const plate = register(await load(key), xs, ys, XT, YT);
+    const { x, y } = registrations[key];
+    const plate = register(
+      await load(key),
+      x.source,
+      y.source,
+      x.target.map((v) => v + CW / 2),
+      y.target.map((v) => v + CH / 2),
+    );
     if (markings) {
       clearMarkings(plate, true, CH / 2, 2.4, 41, [arms.includes("w") ? 0 : CW / 2, arms.includes("e") ? CW : CW / 2]);
       clearMarkings(plate, false, CW / 2, 2.45, 35, [arms.includes("n") ? 0 : CH / 2, arms.includes("s") ? CH : CH / 2]);
@@ -175,6 +183,7 @@
   }
 
   const recipes = {};
+  // The later paintings carry no lane dashes; the grade of the old quarter is its own.
   const districts = {
     haussmann: {},
     haussmannCafe: {},
@@ -188,65 +197,17 @@
     park: {},
     marketHall: {},
     teeNorth: { arms: "esw" },
+    teeSouth: { markings: false },
+    alleyEast: { markings: false },
+    alleySouth: { markings: false },
+    alleySouthB: { markings: false },
+    alleyNorth: { markings: false },
+    alleyNorthB: { markings: false },
+    alleyCross: { markings: false, grade: "alley" },
+    alleyCrossB: { markings: false, grade: "alley" },
   };
   for (const [key, options] of Object.entries(districts))
-    recipes[key] = async () => grade(await districtPlate(key, options), "district");
-
-  // Four alley arms. The lane between the gutters becomes the 14-unit ruelle of the road graph.
-  recipes.alleyCross = async () => {
-    const { xs, ys } = kerbStops("alleyCross");
-    const plate = register(
-      await load("alleyCross"),
-      xs,
-      ys,
-      [0, CW / 2 - ALLEY, CW / 2, CW / 2 + ALLEY, CW],
-      [0, CH / 2 - ALLEY, CH / 2, CH / 2 + ALLEY, CH],
-    );
-    return grade(plate, "alley");
-  };
-  // A seam strip lies over the join of two paintings. Its long edges fade out over 5 units,
-  // so that the lane's back walls melt into the facades they cover.
-  function softEdges(strip, vertical, soft = 5 * P) {
-    const ctx = strip.getContext("2d"),
-      size = vertical ? strip.width : strip.height;
-    const fade = ctx.createLinearGradient(0, 0, vertical ? size : 0, vertical ? 0 : size);
-    fade.addColorStop(0, "#0000");
-    fade.addColorStop(soft / size, "#000");
-    fade.addColorStop(1 - soft / size, "#000");
-    fade.addColorStop(1, "#0000");
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, 0, strip.width, strip.height);
-    ctx.globalCompositeOperation = "source-over";
-    return strip;
-  }
-  // Seam strips at their painted scale, lane centred.
-  recipes.alleyStripV = async () => {
-    const [left, centre, right] = entry("alleyStripV").kerbs.x;
-    const side = (left * CW) / 1500,
-      far = ((200 - right) * CW) / 1500;
-    const strip = register(
-      await load("alleyStripV"),
-      [0, left, centre, right, 200],
-      [0, 1000],
-      [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
-      [0, CH],
-    );
-    return softEdges(grade(strip, "alley"), true);
-  };
-  recipes.alleyStripH = async () => {
-    const [top, centre, bottom] = entry("alleyStripH").kerbs.y;
-    const side = (top * CH) / 1000,
-      far = ((200 - bottom) * CH) / 1000;
-    const strip = register(
-      await load("alleyStripH"),
-      [0, 1500],
-      [0, top, centre, bottom, 200],
-      [0, CW],
-      [0, side, side + ALLEY, side + 2 * ALLEY, side + 2 * ALLEY + far],
-    );
-    return softEdges(grade(strip, "alley"), false);
-  };
+    recipes[key] = async () => grade(await districtPlate(key, options), options.grade || "district");
 
   // Horizontal ring viaduct. Railheads and pier feet land on town.ring (deck 40 above the feet).
   recipes.ringNorth = async () => grade(await ringPlate("ringNorth"), "ring");
@@ -796,8 +757,9 @@
   window.bake = {
     recipes,
     helpers: { P, CW, CH, KX, KY, XT, YT, RING_YT, load, canvas, context, mapper, register, grade, grades, paste, plateMap, kerbStops, entry, clearMarkings },
-    init(list, river) {
+    init(list, river, registered) {
       manifest = Object.fromEntries(list.map((e) => [e.key, e]));
+      registrations = registered;
       marks = river.marks;
       lantern = river.lantern;
       return Object.keys(recipes);

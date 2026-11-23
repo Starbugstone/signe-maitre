@@ -155,8 +155,20 @@ function prepareTown() {
     clearMarkings(plate, false, CELL_W / 2, 2.45, 35);
     plates[key] = plate;
   }
-  for (const key of [...Object.keys(paintings), "alleyStripV", "alleyStripH", "towerIron"])
-    if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+  for (const key of [...Object.keys(paintings), "towerIron"]) if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+  // A turned painting is its source plate mirrored about the north-south street.
+  for (const [key, { turned }] of Object.entries(paintings)) {
+    if (!turned || !plates[turned]) continue;
+    const source = plates[turned],
+      plate = document.createElement("canvas");
+    plate.width = source.width;
+    plate.height = source.height;
+    const ctx = plate.getContext("2d");
+    ctx.translate(plate.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(source, 0, 0);
+    plates[key] = plate;
+  }
   roadPaint = paintPattern(artwork.market, 32, 498, 39, 4, 0.2, "#80627362");
 }
 
@@ -173,170 +185,9 @@ function cellArms(col, row) {
   return arms;
 }
 
-// Copy part of a plate, given in world units from its cell centre, to world coordinates.
-function blit(ctx, plate, left, top, w, h, dx, dy, dw = w, dh = h) {
-  ctx.drawImage(
-    plate,
-    (left + CELL_W / 2) * plateScale,
-    (top + CELL_H / 2) * plateScale,
-    w * plateScale,
-    h * plateScale,
-    dx,
-    dy,
-    dw,
-    dh,
-  );
-}
-
-// The same copy with its cut edges faded out over `soft` units, so that a pasted frontage
-// melts into the painting around it. `edges` names the faded sides: l, r, t, b.
-const scrap = document.createElement("canvas"),
-  scrapContext = scrap.getContext("2d");
-function blitSoft(ctx, plate, left, top, w, h, dx, dy, edges, soft = 5) {
-  const pw = Math.round(w * plateScale),
-    ph = Math.round(h * plateScale),
-    f = soft * plateScale;
-  scrap.width = pw;
-  scrap.height = ph;
-  scrapContext.drawImage(plate, (left + CELL_W / 2) * plateScale, (top + CELL_H / 2) * plateScale, pw, ph, 0, 0, pw, ph);
-  scrapContext.globalCompositeOperation = "destination-in";
-  for (const edge of edges) {
-    const across = edge === "l" || edge === "r",
-      far = edge === "r" || edge === "b";
-    const size = across ? pw : ph;
-    const fade = scrapContext.createLinearGradient(0, 0, across ? pw : 0, across ? 0 : ph);
-    fade.addColorStop(far ? 1 - f / size : 0, far ? "#000" : "#0000");
-    fade.addColorStop(far ? 1 : f / size, far ? "#0000" : "#000");
-    scrapContext.fillStyle = fade;
-    scrapContext.fillRect(0, 0, pw, ph);
-  }
-  scrapContext.globalCompositeOperation = "source-over";
-  ctx.drawImage(scrap, dx, dy, w, h);
-}
-
-// A painting shows four road arms. Where the road graph has none, the block closes over the
-// arm with a stretch of the painting's own frontage: the kerb and pavement run on unbroken.
-const capHalf = 25.6;
-function drawArmCaps(ctx, col, row) {
-  const key = cellPlateKey(col, row),
-    painting = paintings[key];
-  if (!painting?.arms) return;
-  const plate = plates[key],
-    cx = X(col),
-    cy = Y(row),
-    arms = cellArms(col, row);
-  const shows = (dir) => painting.arms.includes(dir);
-  // North and south: a slice from the middle of a neighbouring block, moved along the street.
-  const slice = (col + row) % 2 ? 74 : -74;
-  if (!arms.n && shows("n") && row !== town.riverSouthRow)
-    blitSoft(ctx, plate, 74 - capHalf - 3, -CELL_H / 2, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy - CELL_H / 2, "lr");
-  if (!arms.s && shows("s"))
-    blitSoft(ctx, plate, slice - capHalf - 3, 16.3, 2 * capHalf + 6, CELL_H / 2 - 16.3, cx - capHalf - 3, cy + 16.3, "lr");
-  // East and west: the block to the south, with its pavement on the cross street, moved up
-  // across the roadway. Its roof stands in front of the shopfronts behind, as roofs do.
-  const from = painting.capFrom ?? 46,
-    depth = CELL_H / 2 - from;
-  if (!arms.e && shows("e"))
-    blitSoft(ctx, plate, 17.1, from, CELL_W / 2 - 17.1, depth, cx + 17.1, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbl");
-  if (!arms.w && shows("w"))
-    blitSoft(ctx, plate, -CELL_W / 2, from, CELL_W / 2 - 17.1, depth, cx - CELL_W / 2, cy + 26 - depth, arms.n || arms.s ? "tb" : "tbr");
-}
-
-// Painted ruelle strips. Both repeat along their length, one cell per repeat.
-const stripV = { width: 43.2, lane: 21.72 },
-  stripH = { height: 47.2, lane: 23.42 };
-// A north-south strip with its lane on x, from y0 to y1. `fit` widens it to a road corridor.
-function alleyV(ctx, x, y0, y1, fit = 1) {
-  if (y1 <= y0) return;
-  const top = Y(town.cellAt(x, (y0 + y1) / 2).row) - CELL_H / 2;
-  ctx.drawImage(
-    plates.alleyStripV,
-    0,
-    (y0 - top) * plateScale,
-    stripV.width * plateScale,
-    (y1 - y0) * plateScale,
-    x - stripV.lane * fit,
-    y0,
-    stripV.width * fit,
-    y1 - y0 + 0.03,
-  );
-}
-function alleyH(ctx, y, x0, x1, fit = 1) {
-  if (x1 <= x0) return;
-  const left = X(town.cellAt((x0 + x1) / 2, y).col) - CELL_W / 2;
-  ctx.drawImage(
-    plates.alleyStripH,
-    (x0 - left) * plateScale,
-    0,
-    (x1 - x0) * plateScale,
-    stripH.height * plateScale,
-    x0,
-    y - stripH.lane * fit,
-    x1 - x0 + 0.03,
-    stripH.height * fit,
-  );
-}
-const corridorV = 1.16,
-  corridorH = 1.13;
-
-// A ruelle where the painting shows a full street: the strip fills the corridor between the
-// building lines, from the junction's corner pavements out to the cell edge.
-function drawAlleyArms(ctx, col, row) {
-  const painting = paintings[cellPlateKey(col, row)];
-  if (!painting?.arms) return;
-  const arms = cellArms(col, row),
-    cx = X(col),
-    cy = Y(row);
-  const lane = (dir) => arms[dir] === "alley" && !painting.alleys?.includes(dir);
-  const forecourt = painting.forecourt?.w ?? 25;
-  if (lane("n")) alleyV(ctx, cx, cy - CELL_H / 2, cy - 28, corridorV);
-  if (lane("s")) alleyV(ctx, cx, cy + 23, cy + CELL_H / 2, corridorV);
-  if (lane("w")) alleyH(ctx, cy, cx - CELL_W / 2, cx - forecourt, corridorH);
-  if (lane("e")) alleyH(ctx, cy, cx + 25, cx + CELL_W / 2, corridorH);
-}
-
-// Every cell seam is a back lane between two paintings: a painted strip covers the join,
-// stopping at the pavements of each street it meets.
-function drawSeams(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
-  const land = (row) => row >= 0 && row < town.rows && row !== town.riverRow;
-  for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
-    if (!land(row)) continue;
-    const cy = Y(row);
-    // The river plate covers the quay rows from the south kerb of Quai Nord to the Quai Sud kerb.
-    const top = row === town.riverSouthRow ? -16 : -CELL_H / 2,
-      bottom = row === canalRow ? 18 : CELL_H / 2;
-    for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
-      const x = X(col) - CELL_W / 2;
-      if (!visible(x - 24, cy - CELL_H / 2, 48, CELL_H)) continue;
-      const crossed = cellArms(col - 1, row).e || cellArms(col, row).w;
-      if (crossed) {
-        alleyV(ctx, x, cy + top, cy - 28);
-        alleyV(ctx, x, cy + 23, cy + bottom);
-      } else alleyV(ctx, x, cy + top, cy + bottom);
-    }
-  }
-  for (let row = Math.max(1, firstRow); row <= lastRow; row++) {
-    if (!land(row) || !land(row - 1)) continue;
-    const y = Y(row) - CELL_H / 2;
-    for (let col = Math.max(0, firstCol); col <= lastCol; col++) {
-      const cx = X(col);
-      if (!visible(cx - CELL_W / 2, y - 26, CELL_W, 52)) continue;
-      const crossed = cellArms(col, row - 1).s || cellArms(col, row).n;
-      if (crossed) {
-        alleyH(ctx, y, cx - CELL_W / 2, cx - 25);
-        alleyH(ctx, y, cx + 25, cx + CELL_W / 2);
-      } else alleyH(ctx, y, cx - CELL_W / 2, cx + CELL_W / 2);
-    }
-    // Where two lanes cross, the centre of the alley-crossing painting.
-    for (let col = Math.max(1, firstCol); col <= lastCol; col++) {
-      const x = X(col) - CELL_W / 2;
-      if (visible(x - 24, y - 26, 48, 52))
-        blit(ctx, plates.alleyCross, -stripV.lane, -stripH.lane, stripV.width, stripH.height, x - stripV.lane, y - stripH.lane);
-    }
-  }
-}
-
-// Soften the meeting of two paintings across a road and its pavements.
+// Soften the meeting of two paintings across a road and its pavements, or across the setts
+// of a ruelle. Buildings meet at the cell edge as they are painted, wall against wall.
+const laneJoin = 8.5;
 function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
   for (let row = Math.max(0, firstRow); row <= lastRow; row++) {
     if (row === town.riverRow) continue;
@@ -344,9 +195,14 @@ function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
       const x = X(col) - CELL_W / 2,
         y = Y(row);
       if (!visible(x - 14, y - 30, 28, 58)) continue;
-      if (cellArms(col - 1, row).e !== "wide" || cellArms(col, row).w !== "wide") continue;
       const l = cellPlateKey(col - 1, row),
         r = cellPlateKey(col, row);
+      if (cellArms(col - 1, row).e === "alley" && cellArms(col, row).w === "alley") {
+        const lane = getJoin("lane:" + l + r, plates[l], plates[r], true, CELL_H / 2 - laneJoin, 2 * laneJoin, 9);
+        ctx.drawImage(lane, x - 9, y - laneJoin, 18, 2 * laneJoin);
+        continue;
+      }
+      if (cellArms(col - 1, row).e !== "wide" || cellArms(col, row).w !== "wide") continue;
       // On the quays only the part outside the river plate is joined.
       const top = row === town.riverSouthRow ? 16 : 29,
         bottom = row === canalRow ? 17 : 27;
@@ -360,9 +216,14 @@ function drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible) {
       const x = X(col),
         y = Y(row) - CELL_H / 2;
       if (!visible(x - 27, y - 12, 54, 24)) continue;
-      if (cellArms(col, row - 1).s !== "wide" || cellArms(col, row).n !== "wide") continue;
       const n = cellPlateKey(col, row - 1),
         s = cellPlateKey(col, row);
+      if (cellArms(col, row - 1).s === "alley" && cellArms(col, row).n === "alley") {
+        const lane = getJoin("alley:" + n + s, plates[n], plates[s], false, CELL_W / 2 - laneJoin, 2 * laneJoin, 9);
+        ctx.drawImage(lane, x - laneJoin, y - 9, 2 * laneJoin, 18);
+        continue;
+      }
+      if (cellArms(col, row - 1).s !== "wide" || cellArms(col, row).n !== "wide") continue;
       const road = getJoin("cross:" + n + s, plates[n], plates[s], false, CELL_W / 2 - 26.5, 53, 12);
       ctx.drawImage(road, x - 26.5, y - 12, 53, 24);
     }
@@ -439,10 +300,7 @@ function drawTown(ox, oy, ctx, width, height) {
   }
   for (const [col, row] of cells)
     ctx.drawImage(plates[cellPlateKey(col, row)], X(col) - CELL_W / 2, Y(row) - CELL_H / 2, CELL_W + 0.03, CELL_H + 0.03);
-  for (const [col, row] of cells) drawArmCaps(ctx, col, row);
   drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible);
-  for (const [col, row] of cells) drawAlleyArms(ctx, col, row);
-  drawSeams(ctx, firstCol, lastCol, firstRow, lastRow, visible);
   if (lastRow >= canalRow && firstRow <= town.riverSouthRow) drawRiver(ctx, firstCol, lastCol, visible);
   drawLaneMarks(ctx, visible);
 }

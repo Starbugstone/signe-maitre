@@ -116,27 +116,72 @@ function gateVehicle() {
   game.ride = null;
 }
 
-// Every seam between two ring-row paintings is a lane under the deck. A walker enters it from
-// the street beside the painted pier, and the deck covers them once they are beneath it.
+// Two paintings meet wall against wall. Nobody steps off the pavement into the join, under
+// the ring's deck or anywhere else, and a walker at the join stands in front of both blocks.
 function checkJoins() {
   let joins = 0;
-  for (const row of [town.ring.northRow, town.ring.southRow])
-    for (let col = town.ring.minCol + 2; col <= town.ring.maxCol - 1; col++) {
-      const seam = (X(col - 1) + X(col)) / 2,
-        y = Y(row),
-        x = seam + 2.6;
-      const walker = { x, y: y - 40 };
-      for (let i = 0; i < 96; i++) move(walker, 0, 0.25, 2.6);
-      requireCheck(walker.y >= y - 17, "Blocked entering the street at " + col + "," + row);
+  for (let row = 0; row < town.rows; row++) {
+    // North of Quai Sud lies the quay itself, open ground down to the water.
+    if (row === town.riverRow || row === town.riverSouthRow) continue;
+    for (let col = 1; col < town.cols; col++) {
+      const join = (X(col - 1) + X(col)) / 2,
+        y = Y(row);
+      if (town.cellMeta(col, row).roundabouts.some((rb) => Math.abs(rb.x - join) < rb.outerRadius + 4)) continue;
+      // A lamp post or a pier of the ring may stand on the join itself: step round it.
+      const x = [0, -6, 6, -11, 11].map((dx) => join + dx).find((x) => !blocked(x, y - 24, 2.6));
+      if (x == null) continue;
+      const walker = { x, y: y - 24 };
       for (let i = 0; i < 96; i++) move(walker, 0, -0.25, 2.6);
-      requireCheck(walker.y <= y - 39, "Blocked entering the lane at " + col + "," + row);
+      requireCheck(walker.y > y - 31, "Walked into the join of two paintings at " + col + "," + row);
       joins++;
     }
-  requireCheck(joins > 20, "Too few ring seams were exercised");
-  const seam = (X(4) + X(5)) / 2;
-  // Head under the girder, feet still showing below it.
-  actorLayers(seam + 2.6, Y(town.ring.northRow) - 51, true);
-  actorLayers(seam + 2.6, Y(town.ring.northRow) - 30, false);
+  }
+  requireCheck(joins > 125, "Too few joins were exercised: " + joins);
+  // On the pavement at a join, in front of the houses on both sides: a ring row, a boulevard
+  // and the old quarter.
+  for (const [col, row] of [
+    [5, town.ring.northRow],
+    [4, 2],
+    [11, 4],
+  ])
+    actorLayers((X(col - 1) + X(col)) / 2, Y(row) - (row === 4 ? 0 : 25), false);
+}
+
+// Behind every block runs the paved passage its south-facing houses open on. A walker turns
+// into it from the pavement of one cross street and comes out on the next; no car follows.
+function checkBackPassage() {
+  let passages = 0;
+  for (const [col, row] of [
+    [2, 2],
+    [5, 3],
+    [8, 4],
+    [10, 3],
+    [12, 9],
+    [13, 5],
+    [6, 10],
+  ]) {
+    requireCheck(town.backLane(row), "No passage behind row " + row);
+    const y = Y(row) + 114 - 3.5,
+      from = X(col) + 20,
+      to = X(col + 1) - 20;
+    const walker = { x: from, y };
+    requireCheck(!blocked(from, y, 2.6), "Passage mouth blocked at " + col + "," + row);
+    for (let i = 0; i < 1400 && walker.x < to; i++) move(walker, 0.25, 0, 2.6);
+    requireCheck(walker.x >= to, `Passage behind ${col},${row} stops a walker at ${walker.x.toFixed(1)}`);
+    requireCheck(Math.abs(walker.y - y) < 2.5, "Walker left the passage behind " + col + "," + row);
+    // Neither the roofs south of it nor the houses north of it are ground.
+    const mid = (from + to) / 2;
+    requireCheck(blocked(mid, y + 8, 2.6) && blocked(mid, y - 9, 2.6), "Passage wider than painted behind " + col + "," + row);
+    requireCheck(
+      vehicleBlocked({ x: mid, y, a: 0, halfLength: 7.5, halfWidth: 3 }),
+      "Motorbike admitted into the passage behind " + col + "," + row,
+    );
+    passages++;
+  }
+  requireCheck(passages === 7, "Too few passages were exercised");
+  // In the passage a walker stands in front of the houses behind them.
+  actorLayers((X(5) + X(6)) / 2 + 30, Y(3) + 114 - 3.5, false);
+  actorLayers((X(10) + X(11)) / 2 - 30, Y(3) + 114 - 3.5, false);
 }
 
 function checkRoundaboutIsland() {
@@ -155,21 +200,49 @@ function checkRoundaboutIsland() {
   }
 }
 
+// Every ruelle, from the mouth on its wide street to the next junction: a walker and a
+// motorbike pass, a saloon does not, and the houses stand close on both sides of the lane.
 function checkMaraisAlley() {
-  const alleyX = X(9.5),
-    alleyY = (Y(4) + Y(5)) / 2;
-  // Walker and motorbike fit inside the opened seam alley; sedan is rejected.
-  requireCheck(!blocked(alleyX, alleyY, 2.6), "Walker blocked in opened seam alley");
-  requireCheck(
-    !vehicleBlocked({ x: alleyX, y: alleyY, a: Math.PI / 2, halfLength: 7.5, halfWidth: 3.0 }),
-    "Motorbike blocked in opened seam alley",
-  );
-  requireCheck(
-    vehicleBlocked({ x: alleyX, y: alleyY, a: Math.PI / 2, halfLength: 10.95, halfWidth: 4.8 }),
-    "Sedan admitted into opened seam alley",
-  );
-  // Actor stands cleanly visible on the cobblestone alley paving.
-  actorLayers(alleyX, alleyY, false);
+  const alleys = town.roads.edges.filter((e) => e.class === "alley");
+  requireCheck(alleys.length >= 8, "Expected the ruelles of the Marais and the Quartier Latin");
+  for (const edge of alleys) {
+    const a = town.roadNodeById.get(edge.a),
+      b = town.roadNodeById.get(edge.b);
+    const along = Math.atan2(b.y - a.y, b.x - a.x),
+      length = Math.hypot(b.x - a.x, b.y - a.y);
+    const ux = Math.cos(along),
+      uy = Math.sin(along);
+    const name = edge.a + "-" + edge.b;
+    for (let d = 0; d <= length; d += 3) {
+      const x = a.x + ux * d,
+        y = a.y + uy * d;
+      requireCheck(!blocked(x, y, 2.6), `Walker blocked in the ruelle ${name} at ${d}`);
+      requireCheck(
+        !vehicleBlocked({ x, y, a: along, halfLength: 7.5, halfWidth: 3.0 }),
+        `Motorbike blocked in the ruelle ${name} at ${d}`,
+      );
+    }
+    // Between the two junctions the walls stand 7 units either side of the centre line.
+    for (const d of [70, length / 2, length - 70])
+      for (const side of [-11, 11]) {
+        const x = a.x + ux * d - uy * side,
+          y = a.y + uy * d + ux * side;
+        requireCheck(blocked(x, y, 2.6), `The ruelle ${name} is wider than a lane at ${d}`);
+      }
+    requireCheck(
+      vehicleBlocked({ x: a.x + (ux * length) / 2, y: a.y + (uy * length) / 2, a: along, halfLength: 10.95, halfWidth: 4.8 }),
+      "Saloon admitted into the ruelle " + name,
+    );
+  }
+  // In a lane, at a mouth on the wide street and at the crossing of four, the walker stands
+  // clear on the setts.
+  actorLayers((X(10) + X(11)) / 2, Y(4), false);
+  actorLayers(X(10), Y(3) + 40, false);
+  actorLayers(X(9) + 40, Y(4), false);
+  actorLayers(X(12) - 40, Y(4), false);
+  actorLayers(X(10), Y(5) - 44, false);
+  actorLayers(X(11), Y(4), false);
+  actorLayers(X(9), Y(9) - 60, false);
 }
 
 function checkRiverBridgeAndIsland() {
@@ -312,23 +385,37 @@ function checkMonumentIslands() {
   requireCheck(blocked(plain.x + 16, plain.y, 1), "Walker entered the planted island");
 }
 
-// A street the road graph does not have is built over: nobody walks or drives into the frontage.
+// A T-junction's closed side is one frontage: nobody walks or drives on through it, and the
+// pavement runs past it unbroken. A ruelle's mouth is the only gap in the side it leaves by.
 function checkClosedArms() {
-  for (const [col, row, dx, dy] of [
-    [14, 3, 60, 0],
-    [14, 3, 0, -60],
-    [1, 4, -60, 0],
-    [5, 2, 0, -60],
-    [7, 9, 0, 60],
+  for (const [col, row, dy] of [
+    [1, 4, 60],
+    [1, 5, -60],
+    [12, 9, 60],
+    [12, 10, -60],
   ]) {
-    const x = X(col) + dx,
+    const x = X(col),
       y = Y(row) + dy;
-    requireCheck(blocked(x, y, 2.6), "Walker entered the closed arm at " + col + "," + row);
-    requireCheck(vehicleBlocked({ x, y, a: dx ? 0 : Math.PI / 2 }), "Vehicle entered the closed arm at " + col + "," + row);
+    requireCheck(blocked(x, y, 2.6), "Walker entered the closed side at " + col + "," + row);
+    requireCheck(vehicleBlocked({ x, y, a: Math.PI / 2 }), "Vehicle entered the closed side at " + col + "," + row);
+    // The through street and its pavement on the closed side stay open across the junction.
+    const pavement = Y(row) + (dy > 0 ? 20 : -25);
+    for (let dx = -60; dx <= 60; dx += 6)
+      requireCheck(!blocked(X(col) + dx, pavement, 2.6), `Pavement broken at ${col},${row} ${dx}`);
+    requireCheck(!vehicleBlocked({ x, y: Y(row), a: 0 }), "Through street closed at " + col + "," + row);
+    actorLayers(x, pavement, false);
   }
-  // The dead end itself stays open up to the junction.
-  requireCheck(!blocked(X(14) - 40, Y(3), 2.6), "Dead-end street closed");
-  actorLayers(X(14), Y(3), false);
+  // Beside a ruelle's mouth the frontage is solid.
+  for (const [col, row, dx, dy] of [
+    [9, 4, 40, -16],
+    [9, 4, 40, 16],
+    [12, 4, -40, 16],
+    [10, 3, 16, 46],
+    [11, 3, -16, 46],
+    [10, 5, 16, -50],
+    [11, 5, -16, -50],
+  ])
+    requireCheck(blocked(X(col) + dx, Y(row) + dy, 2.6), `Walker entered the frontage beside the ruelle at ${col},${row}`);
 }
 
 // Île de la Ferre and the quays as painted.
@@ -640,7 +727,8 @@ const checks = {
   "market-lamp-behind": () => actorLayers(X(2) + 39, Y(1) - 24.8, true),
   "market-lamp-in-front": () => actorLayers(X(2) + 39, Y(1) - 16, false),
   "garage-vehicles": gateVehicle,
-  "ring-seam-lanes": checkJoins,
+  "painting-joins": checkJoins,
+  "back-passage": checkBackPassage,
   "bridge-deck-over-boats": bridgeOverBoats,
   "rail-bridges-over-boats": checkRailBridgesOverBoats,
   "river-moorings": checkRiverMoorings,

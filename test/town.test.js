@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { town, definition, office } from "../src/world/town.js";
-import { buildTown, X, Y, sampleRingAt, ALLEY_MAX_VEHICLE_HALF_WIDTH } from "../src/world/layout.js";
+import { buildTown, X, Y, CELL_H, sampleRingAt, ALLEY_MAX_VEHICLE_HALF_WIDTH } from "../src/world/layout.js";
+import { paintings } from "../src/world/paintings.js";
 import { blockedIn, vehicleBlocked } from "../src/world/collision.js";
 import { buildTrafficLoop, findRoute } from "../src/world/routes.js";
 import { nextPatient, seatCount } from "../src/game/triage.js";
@@ -32,13 +33,16 @@ test("city dimensions and World contract match docs/city-expansion.md", () => {
   assert.ok(Array.isArray(town.roads.nodes) && town.roads.nodes.length > 150);
   assert.ok(Array.isArray(town.roads.edges) && town.roads.edges.length > 250);
   const kinds = new Set(town.roads.nodes.map((n) => n.kind));
-  for (const k of ["cross", "tee", "end", "roundabout"]) assert.ok(kinds.has(k), `missing node kind ${k}`);
+  for (const k of ["cross", "tee", "roundabout"]) assert.ok(kinds.has(k), `missing node kind ${k}`);
+  // No painting shows a street that just stops: every road leads somewhere.
+  assert.ok(!kinds.has("end"), "the road graph has a dead end no painting shows");
   const classes = new Set(town.roads.edges.map((e) => e.class));
   for (const c of ["avenue", "street", "alley"]) assert.ok(classes.has(c), `missing edge class ${c}`);
   for (const e of town.roads.edges) {
     assert.equal(e.halfWidth, e.class === "alley" ? 7 : 25);
   }
-  assert.ok(town.roads.edges.some((e) => e.class === "alley" && e.seam), "opened seam service alleys exist");
+  // Every road runs from one intersection to the next: none along the join of two paintings.
+  for (const n of town.roads.nodes) assert.ok(Number.isInteger(n.col) && Number.isInteger(n.row), `node ${n.id} off the grid`);
 
   // town.river contract
   assert.ok(town.river.top < town.river.bottom);
@@ -192,7 +196,7 @@ test("river centreline, moorings and island channels are navigable for boats and
 
 test("alleys admit walkers and motorbikes (halfWidth <= 3.6) and reject wide vehicles", () => {
   const alleys = town.roads.edges.filter((e) => e.class === "alley");
-  assert.ok(alleys.length >= 10);
+  assert.ok(alleys.length >= 8);
   for (const alley of alleys) {
     const na = town.roadNodeById.get(alley.a),
       nb = town.roadNodeById.get(alley.b);
@@ -221,6 +225,64 @@ test("alleys admit walkers and motorbikes (halfWidth <= 3.6) and reject wide veh
         loop.segments.some((s) => s.isAlley),
         false,
         `car traffic loop at ${c},${r} entered an alley`,
+      );
+    }
+  }
+});
+
+test("every cell's painting shows exactly the roads the cell has", () => {
+  for (let row = 0; row < town.rows; row++) {
+    if (row === town.riverRow) continue;
+    for (let col = 0; col < town.cols; col++) {
+      const key = town.cellKinds[row][col],
+        painting = paintings[key],
+        meta = town.cellMeta(col, row);
+      for (const dir of "nesw") {
+        // The river plate lies over the quay side of both bank rows.
+        if ((row === town.canalRow && dir === "s") || (row === town.riverSouthRow && dir === "n")) continue;
+        const road = meta.allArms[dir] === "alley" ? "alley" : meta.wideArms[dir] ? "wide" : "none";
+        const shown = (painting.alleys || "").includes(dir) ? "alley" : painting.arms.includes(dir) ? "wide" : "none";
+        assert.equal(shown, road, `${key} at ${col},${row} shows ${shown} to the ${dir}, the road graph has ${road}`);
+      }
+    }
+  }
+  // A junction with a ruelle or a closed side never stands beside its own copy.
+  for (let row = 0; row < town.rows; row++)
+    for (let col = 0; col < town.cols; col++) {
+      const key = town.cellKinds[row][col],
+        source = (k) => paintings[k]?.turned || k;
+      if (paintings[key].river || (!paintings[key].alleys && paintings[key].arms.length === 4)) continue;
+      for (const [c, r] of [[col + 1, row], [col, row + 1]])
+        assert.notEqual(source(key), source(town.cellKinds[r]?.[c]), `${key} repeats at ${col},${row} and ${c},${r}`);
+    }
+});
+
+test("blocks meet wall against wall; the paved passage behind them is open on foot only", () => {
+  const walker = 2.6;
+  for (let row = 0; row < town.rows - 1; row++) {
+    for (let col = 1; col < town.cols; col++) {
+      const join = (X(col - 1) + X(col)) / 2,
+        edge = Y(row) + CELL_H / 2;
+      // Between two streets no gap opens where two paintings meet side by side.
+      if (row !== town.riverRow) {
+        for (const dy of [-60, 60]) assert.equal(blockedIn(town, join, Y(row) + dy, walker), true, `gap at ${col},${row} ${dy}`);
+      }
+      if (!town.backLane(row)) {
+        if (row !== town.riverRow && row !== town.canalRow)
+          assert.equal(blockedIn(town, join, edge - 3.5, walker), true, `passage along the water at ${col},${row}`);
+        continue;
+      }
+      // The passage runs the whole way from one cross street to the next.
+      for (let x = X(col - 1) + 26; x <= X(col) - 26; x += 4) {
+        const solid = town.cellMeta(town.cellAt(x, edge - 3.5).col, row).solidPolys.length || town.cellMeta(col, row).ringPiers.length;
+        if (!solid) assert.equal(blockedIn(town, x, edge - 3.5, walker), false, `passage blocked at ${x},${row}`);
+        assert.equal(blockedIn(town, x, edge + 4, walker), true, `walking on the roofs at ${x},${row}`);
+        assert.equal(blockedIn(town, x, edge - 12, walker), true, `walking through the houses at ${x},${row}`);
+      }
+      assert.equal(
+        vehicleBlocked({ x: join, y: edge - 3.5, a: 0, halfLength: 7.5, halfWidth: ALLEY_MAX_VEHICLE_HALF_WIDTH }),
+        true,
+        `motorbike in the passage at ${col},${row}`,
       );
     }
   }
@@ -416,7 +478,7 @@ test("a walker cannot pass through a parked vehicle from the side or end", async
   }
 });
 
-test("ring viaduct piers block walkers at pier bases while leaving street underpasses and market joins open", () => {
+test("ring viaduct piers block walkers at pier bases while leaving street underpasses open", () => {
   assert.ok(town.ring.piers.length > 40);
   // Check both horizontal and vertical ring piers block walkers at their centres.
   const horizPier = town.ring.piers.find((p) => p.orientation === "horizontal");
@@ -425,18 +487,8 @@ test("ring viaduct piers block walkers at pier bases while leaving street underp
   assert.equal(blockedIn(town, horizPier.x, horizPier.y - 1, 2.6), true);
   assert.equal(blockedIn(town, vertPier.x, vertPier.y, 2.6), true);
 
-  // Every seam between two ring-row paintings is a lane a walker can follow under the deck,
-  // with the painted pier of the western span standing at its edge.
-  let lanes = 0;
-  for (const row of [town.ring.northRow, town.ring.southRow]) {
-    for (let col = town.ring.minCol + 1; col <= town.ring.maxCol; col++) {
-      const seam = (X(col - 1) + X(col)) / 2;
-      for (const r of [2.6, 3]) assert.equal(blockedIn(town, seam, Y(row) - 30, r), false, `seam ${col},${row}`);
-      const pier = town.ring.piers.find((q) => q.row === row && q.col === col - 1 && q.right > seam - 6);
-      if (!pier) continue;
-      assert.equal(blockedIn(town, pier.x - 1, pier.y - 1, 2.6), true, `pier beside seam ${col},${row}`);
-      lanes++;
-    }
-  }
-  assert.ok(lanes >= 20, "expected a painted pier beside most ring seams, saw " + lanes);
+  // Two ring-row paintings meet wall against wall: nobody slips between them behind the pavement.
+  for (const row of [town.ring.northRow, town.ring.southRow])
+    for (let col = town.ring.minCol + 1; col <= town.ring.maxCol; col++)
+      assert.equal(blockedIn(town, (X(col - 1) + X(col)) / 2, Y(row) - 34, 2.6), true, `join ${col},${row}`);
 });
