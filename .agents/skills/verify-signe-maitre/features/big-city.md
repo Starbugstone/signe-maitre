@@ -32,5 +32,5 @@ Run `pf run big-city --build probe` on desktop and `pf run big-city --build prob
 
 ## Gotchas
 
-- `driveRouteTo` plans paths on `town.roads` via `findRoute` and steers using real keyboard/touch pulses while regulating speed for turns and yielding to traffic ahead. On a heavily loaded host, rerun once if timing jitter slows a leg.
+- `driveRouteTo` plans paths on `town.roads` via `findRoute` and steers using real keyboard/touch pulses. It checks the width of a turning vehicle, stops for traffic and reverses with the wheel straight if both drivers are waiting. On a heavily loaded host, rerun once if timing jitter slows a leg.
 - The map canvas is visual evidence for the full network. The driving journey checks one roundabout, one road bridge crossing, one narrow alley and one station approach. It does not visit the other joins. The scenery fixtures cover the static collision and foreground at additional sites.
