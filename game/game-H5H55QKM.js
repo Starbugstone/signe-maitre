@@ -2967,6 +2967,15 @@
   // src/game/fleet.js
   var car = { domain: "road", halfWidth: sedanHalfWidth, reverseAccel: 85, turn: 18 / 2.65 };
   var midnightRed = { intact: "voltaRedTurns", dented: "voltaRedDented", wreck: "voltaRedWreck" };
+  var trafficPercent = {
+    sedan: { moving: 46, parked: 52 },
+    ambulance: { moving: 0, parked: 0 },
+    volta: { moving: 13, parked: 14 },
+    suv: { moving: 15, parked: 16 },
+    bus: { moving: 7, parked: 0 },
+    dumper: { moving: 7, parked: 0 },
+    moto: { moving: 12, parked: 18 }
+  };
   var fleet = {
     sedan: {
       ...car,
@@ -2982,7 +2991,7 @@
       grip: 1,
       sound: "petrol",
       atlas: null,
-      traffic: { weight: 46, parked: 52, lanes: ["avenue", "street"], pace: 1 }
+      traffic: { lanes: ["avenue", "street"], pace: 1 }
     },
     ambulance: {
       ...car,
@@ -3000,7 +3009,7 @@
       sound: "petrol",
       atlas: { intact: "ambulanceTurns", dented: "ambulanceDented", wreck: "ambulanceWreck" },
       sprite: { frame: 192, scale: 5.65, cx: 96, cy: 126 },
-      traffic: { weight: 0, parked: 0, lanes: ["avenue", "street"], pace: 1 }
+      traffic: { lanes: ["avenue", "street"], pace: 1 }
     },
     volta: {
       ...car,
@@ -3020,7 +3029,7 @@
       // Pearl white, or midnight red where the street's paint would be rose or olive.
       tints: { rose: midnightRed, olive: midnightRed },
       sprite: { frame: 160, scale: 5, cx: 80, cy: 102 },
-      traffic: { weight: 13, parked: 14, lanes: ["avenue", "street"], pace: 1.1 }
+      traffic: { lanes: ["avenue", "street"], pace: 1.1 }
     },
     suv: {
       ...car,
@@ -3038,7 +3047,7 @@
       sound: "petrol",
       atlas: { intact: "suvTurns", dented: "suvDented", wreck: "suvWreck" },
       sprite: { frame: 160, scale: 5, cx: 80, cy: 104 },
-      traffic: { weight: 15, parked: 16, lanes: ["avenue", "street"], pace: 0.95 }
+      traffic: { lanes: ["avenue", "street"], pace: 0.95 }
     },
     bus: {
       ...car,
@@ -3059,7 +3068,7 @@
       sound: "diesel",
       atlas: { intact: "busTurns", dented: "busDented", wreck: "busWreck" },
       sprite: { frame: 264, scale: 4.2, cx: 132, cy: 164 },
-      traffic: { weight: 7, parked: 0, lanes: ["avenue", "street"], pace: 0.8, stops: true }
+      traffic: { lanes: ["avenue", "street"], pace: 0.8, stops: true }
     },
     dumper: {
       ...car,
@@ -3080,11 +3089,11 @@
       sound: "diesel",
       atlas: { intact: "dumperTurns", dented: "dumperDented", wreck: "dumperWreck" },
       sprite: { frame: 200, scale: 4.2, cx: 100, cy: 130 },
-      traffic: { weight: 7, parked: 0, lanes: ["avenue", "street"], pace: 0.75 }
+      traffic: { lanes: ["avenue", "street"], pace: 0.75 }
     },
     moto: {
       ...car,
-      name: { fr: "P\xE9trolette", en: "Motorbike" },
+      name: { fr: "P\xE9trolette", en: "P\xE9trolette" },
       // Drawn a third larger than the cars' scale, like the people: the rider is in plain view.
       halfLength: 7,
       halfWidth: 2.3,
@@ -3103,7 +3112,7 @@
       // The ridden pictures are a painted sheet of 16 headings: the bailiff, and a courier in blue.
       atlas: { intact: "motoTurns", dented: "motoDented", wreck: "motoWreck", ridden: "motoRider", courier: "motoCourier", riddenHeadings: 16 },
       sprite: { frame: 128, scale: 6, cx: 64, cy: 92 },
-      traffic: { weight: 12, parked: 18, lanes: ["avenue", "street", "alley"], pace: 1.25 }
+      traffic: { lanes: ["avenue", "street", "alley"], pace: 1.25 }
     }
   };
   for (const [id, entry] of Object.entries(fleet)) Object.assign(entry, { id, label: "fleet:" + id });
@@ -3111,12 +3120,12 @@
     return fleet[vehicle?.model] || fleet.sedan;
   }
   function pickModel(roadClass = "street", random = Math.random, parked = false) {
-    const share = (entry) => entry.domain === "road" && entry.traffic.lanes.includes(roadClass) ? parked ? entry.traffic.parked : entry.traffic.weight : 0;
-    const entries = Object.values(fleet);
-    let roll = random() * entries.reduce((sum, entry) => sum + share(entry), 0);
-    for (const entry of entries) {
-      roll -= share(entry);
-      if (roll < 0) return entry.id;
+    const column2 = parked ? "parked" : "moving";
+    const options = Object.entries(trafficPercent).filter(([id]) => fleet[id].traffic.lanes.includes(roadClass));
+    let roll = random() * options.reduce((sum, [, share]) => sum + share[column2], 0);
+    for (const [id, share] of options) {
+      roll -= share[column2];
+      if (roll < 0) return id;
     }
     return "sedan";
   }
@@ -3351,7 +3360,7 @@
     const narrow = cachedLoop(col, row, true);
     const loop2 = narrow?.class === "alley" ? narrow : cachedLoop(col, row, false);
     if (!loop2) return;
-    const model = pickModel(routeClass(loop2), draw2(1));
+    const model = pickModel(routeClass(loop2), draw2(31));
     const spec = fleet[model];
     const segments = compileFleetLoop(town, loop2, model);
     if (!segments) return;
@@ -4137,11 +4146,11 @@
   }
 
   // src/world/ambulance-route.js
-  function walkableBetween(a, b) {
+  function walkableBetween(a, b, radius = 2) {
     const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 2));
     for (let i = 0; i <= steps; i++) {
       const f = i / steps;
-      if (blocked(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, 2)) return false;
+      if (blocked(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, radius)) return false;
     }
     return true;
   }
@@ -4208,7 +4217,7 @@
       "You have borrowed a public service. Dispatch would like a word.",
       "Vous avez emprunt\xE9 un service public. La r\xE9gulation souhaite vous parler."
     ],
-    medicKeys: ["{car} \xB7 Take the ambulance", "{car} \xB7 Prendre l\u2019ambulance"],
+    medicKeys: ["{car} / Board \xB7 Take the ambulance", "{car} / Monter \xB7 Prendre l\u2019ambulance"],
     medicHit: ["Occupational hazard. Apparently.", "Risque du m\xE9tier. Apparemment."],
     reportKey: ["{report} \xB7 Incident report", "{report} \xB7 Signalement"],
     incidentTitle: ["Street incident report", "Fiche d\u2019incident"],
@@ -4268,7 +4277,6 @@
     switchToTarget: ["{car} \xB7 Get out beside the yellow GT", "{car} \xB7 Descendre pr\xE8s de la GT jaune"],
     boardTarget: ["{car} \xB7 Seize the yellow GT", "{car} \xB7 Saisir la GT jaune"],
     northBoulevard: ["Find the yellow car on North Boulevard", "Trouver la voiture jaune, boulevard Nord"],
-    vehicle: ["Car", "Auto"],
     breakdown: [
       "The car has filed for sick leave. Call recovery with {job}.",
       "La voiture est en arr\xEAt maladie. {job} pour appeler le d\xE9pannage."
@@ -4382,7 +4390,7 @@
     take: ["Take the file", "Prendre le dossier"],
     leave: ["Walk away", "Laisser tomber"],
     moveCar: ["No room at the door. Move the car.", "La porti\xE8re est coinc\xE9e. D\xE9placez la voiture."],
-    closer: ["Get closer to a vehicle or a mooring.", "Approchez-vous d\u2019un v\xE9hicule ou d\u2019un amarrage."],
+    closer: ["Get closer to a vehicle, a mooring or a station entrance.", "Approchez-vous d\u2019un v\xE9hicule, d\u2019un amarrage ou d\u2019une entr\xE9e de gare."],
     launch: ["\xC9tude launch", "Vedette de l\u2019\xE9tude"],
     barge: ["Barge", "P\xE9niche"],
     riverboat: ["Riverboat", "Bateau-promenade"],
@@ -4418,8 +4426,8 @@
       "La chambre de discipline voudrait vous parler. Elle a amen\xE9 toute la commission."
     ],
     start: [
-      "Your sedan is outside. So is the man who disputes our parking expenses.",
-      "Votre berline est dehors. Le monsieur qui conteste vos frais de parking aussi."
+      "Try the motorbike and the other seized vehicles along this street. The map has boats and trains.",
+      "Essayez la moto et les autres v\xE9hicules saisis dans la rue. Le plan indique les bateaux et les trains."
     ],
     fuel: [
       "Your petrol receipt says \u201Chigh-speed legal research\u201D. Finance has questions.",
@@ -4451,7 +4459,11 @@
     audioOff: ["Sound off", "Son coup\xE9"],
     soundError: ["Audio unavailable in this browser.", "Audio indisponible dans ce navigateur."],
     run: ["Run", "Courir"],
-    touchCar: ["Car", "Auto"],
+    touchCar: ["Board", "Monter"],
+    touchBike: ["Bike", "Moto"],
+    touchTrain: ["Train", "Train"],
+    touchStreet: ["Street", "Rue"],
+    touchExit: ["Exit", "Sortir"],
     touchJob: ["Job", "Acte"],
     touchHit: ["Slap", "Gifle"],
     touchBrake: ["Brake", "Frein"],
@@ -4470,8 +4482,8 @@
       "\xC0 pied, utilisez les fl\xE8ches, ZQSD ou WASD. Maintenez Maj pour courir, ou Courir et une fl\xE8che sur l\u2019\xE9cran tactile. F pour monter en voiture ou embarquer \xE0 un point d\u2019amarrage. Ralentissez pr\xE8s d\u2019une ancre avant de d\xE9barquer. Au panneau d\u2019une gare de la Ceinture, F m\xE8ne au quai ; \xE0 bord, F vous fait descendre au prochain arr\xEAt. Haut pour acc\xE9l\xE9rer, bas pour freiner ou reculer, gauche et droite pour tourner. Maintenez H ou le bouton du klaxon pour signaler votre pr\xE9sence. Dans l\u2019ambulance, appuyez sur H ou Sir\xE8ne pour activer ou couper la sir\xE8ne. Espace pour gifler ou tirer le frein \xE0 main. E pour un dossier. Pr\xE8s d\u2019un passant \xE0 terre, R ou le bouton Signalement permet de remettre un double. L\u2019ambulance prend en charge les personnes encore sur place. M pour le plan. V ou le bouton de r\xE9plique pour sortir votre phrase f\xE9tiche."
     ],
     gamepadControls: [
-      "Left stick \xB7 Move / steer\u3000 RT / LT \xB7 Accelerate / brake\u3000 Y \xB7 Car\u3000 X \xB7 Slap / handbrake\u3000 A \xB7 Job\u3000 View \xB7 Map\u3000 Menu \xB7 Controls",
-      "Stick gauche \xB7 Marcher / tourner\u3000 RT / LT \xB7 Acc\xE9l\xE9rer / freiner\u3000 Y \xB7 Auto\u3000 X \xB7 Gifle / frein \xE0 main\u3000 A \xB7 Acte\u3000 View \xB7 Plan\u3000 Menu \xB7 Commandes"
+      "Left stick \xB7 Move / steer\u3000 RT / LT \xB7 Accelerate / brake\u3000 Y \xB7 Board / exit\u3000 X \xB7 Slap / handbrake\u3000 A \xB7 Job\u3000 View \xB7 Map\u3000 Menu \xB7 Controls",
+      "Stick gauche \xB7 Marcher / tourner\u3000 RT / LT \xB7 Acc\xE9l\xE9rer / freiner\u3000 Y \xB7 Monter / descendre\u3000 X \xB7 Gifle / frein \xE0 main\u3000 A \xB7 Acte\u3000 View \xB7 Plan\u3000 Menu \xB7 Commandes"
     ],
     controllerHelp: [
       "Press a button on your Xbox controller to get started. Move with the left stick or D-pad and hold LB to run. Y enters and exits cars and moored boats, climbs to a ring station platform or gets you off the train at the next stop. Steer with the left stick. RT accelerates, LT brakes or reverses. Hold RB to honk or press it to toggle the ambulance siren. X slaps or pulls the handbrake. A opens a job. Click the right stick (RS) to report an incident. B delivers your quip. View opens the map, and Menu opens these controls.",
@@ -4483,17 +4495,25 @@
     ],
     cityMap: ["PORT-FER  /  STREET MAP", "PORT-FER  /  PLAN DE VILLE"],
     legend1: ["\xC9 Office \xB7 R Repo \xB7 C Noise report", "\xC9 \xC9tude \xB7 R Saisie auto \xB7 C Constat"],
-    legend2: ["S Home visit \xB7 A Auction \xB7 \u25C6 You \xB7 \u25CB Ring station \xB7 \u25A0 Mooring", "S Saisie \xE0 domicile \xB7 A Ench\xE8res \xB7 \u25C6 Vous \xB7 \u25CB Gare de la Ceinture \xB7 \u25A0 Amarrage"],
+    legend2: ["S Home visit \xB7 A Auction \xB7 \u25C6 You", "S Saisie \xE0 domicile \xB7 A Ench\xE8res \xB7 \u25C6 Vous"],
+    travelLegend: ["Set a route to the nearest\u2026", "Tracer un itin\xE9raire vers\u2026"],
+    travelBike: ["Motorbike", "Moto"],
+    travelBoat: ["Moored boat", "Bateau \xE0 quai"],
+    travelTrain: ["Ring station", "Gare de la Ceinture"],
+    travelClear: ["Clear route", "Effacer l\u2019itin\xE9raire"],
+    travelFollow: ["Follow the arrow", "Suivre la fl\xE8che"],
+    travelPark: ["Park and continue on foot", "Garez-vous et continuez \xE0 pied"],
     mapHint: ["{map} / Map \xB7 Back to town", "{map} / Plan \xB7 Retour en ville"],
-    outHint: ["{car} / Car \xB7 Get out", "{car} / Auto \xB7 Descendre"],
-    enterHint: ["{car} / Car \xB7 Take the wheel", "{car} / Auto \xB7 Prendre le volant"],
-    stationHint: ["{car} / Car \xB7 Take the Petite Ceinture", "{car} / Auto \xB7 Prendre la Petite Ceinture"],
-    platformHint: ["On the platform \xB7 {car} / Car \xB7 Back to the street", "Sur le quai \xB7 {car} / Auto \xB7 Redescendre dans la rue"],
+    outHint: ["{car} / Exit \xB7 Get out", "{car} / Sortir \xB7 Descendre"],
+    enterHint: ["{car} / Board \xB7 Take the wheel", "{car} / Monter \xB7 Prendre le volant"],
+    motoEnter: ["{car} / Bike \xB7 Ride", "{car} / Moto \xB7 Enfourcher"],
+    stationHint: ["{car} / Train \xB7 Go up to the platform", "{car} / Train \xB7 Monter sur le quai"],
+    platformHint: ["Wait here to board \xB7 {car} / Street \xB7 Leave", "Attendez ici pour embarquer \xB7 {car} / Rue \xB7 Redescendre"],
     nextStopHint: ["Next stop:", "Prochain arr\xEAt :"],
-    alightKey: ["{car} / Car \xB7 Get off there", "{car} / Auto \xB7 Descendre \xE0 cet arr\xEAt"],
+    alightKey: ["{car} / Exit \xB7 Get off there", "{car} / Sortir \xB7 Descendre \xE0 cet arr\xEAt"],
     alightingHint: ["Getting off at", "Vous descendez \xE0"],
     doorsOpenHint: ["Doors open:", "Portes ouvertes :"],
-    alightNowKey: ["{car} / Car \xB7 Get off here", "{car} / Auto \xB7 Descendre ici"],
+    alightNowKey: ["{car} / Exit \xB7 Get off here", "{car} / Sortir \xB7 Descendre ici"],
     footHint: ["On foot \xB7 {action} to slap", "\xC0 pied \xB7 {action} pour gifler"],
     jobKey: ["{job} / Job", "{job} / Acte"],
     quip: ["Quip", "R\xE9plique"],
@@ -4681,19 +4701,34 @@
   function settle(boat) {
     boat.speed = boat.slideX = boat.slideY = boat.yaw = 0;
   }
-  function boardableBoat(boats, moorings, person2) {
-    return boats.find((boat) => boat.mooring && moorings.some((m) => m.id === boat.mooring && dist(m.quay, person2) <= 11));
+  function boardableBoat(boats, river3, person2) {
+    if (river3.onWater(person2.x, person2.y, 0)) return;
+    let nearest2, reach2 = 19;
+    for (const boat of boats) {
+      if (boat.incoming || !boat.mooring && Math.hypot(boat.slideX, boat.slideY) > 7.5) continue;
+      const berth = river3.moorings.find((m) => m.id === boat.mooring);
+      if (berth && dist(berth.quay, person2) <= 11) return boat;
+      const dx = person2.x - boat.x, dy = person2.y - boat.y;
+      const cos = Math.cos(boat.a), sin = Math.sin(boat.a);
+      const keel = boat.halfLength - boat.halfWidth;
+      const along2 = clamp(dx * cos + dy * sin, -keel, keel);
+      const gap = Math.hypot(dx - along2 * cos, dy - along2 * sin) - boat.halfWidth;
+      if (gap >= reach2) continue;
+      nearest2 = boat;
+      reach2 = gap;
+    }
+    return nearest2;
   }
   function dockingMooring(boats, moorings, boat, clear = () => true) {
     if (Math.hypot(boat.slideX, boat.slideY) > 7.5) return null;
-    let nearest = null, reach2 = Math.min(29, 16 + boat.halfWidth * 1.25);
+    let nearest2 = null, reach2 = Math.min(29, 16 + boat.halfWidth * 1.25);
     for (const m of moorings) {
       const gap = dist(boat, m);
       if (gap >= reach2 || boats.some((b) => b !== boat && b.mooring === m.id) || !clear(m.quay)) continue;
-      nearest = m;
+      nearest2 = m;
       reach2 = gap;
     }
-    return nearest;
+    return nearest2;
   }
   function dockBoat(boat, mooring) {
     settle(boat);
@@ -4704,6 +4739,7 @@
     const theft = !boat.claimed;
     boat.claimed = true;
     boat.mooring = null;
+    delete boat.traffic;
     return theft;
   }
   function hitBoat(boat, force) {
@@ -4794,7 +4830,7 @@
     }
     return boats;
   }
-  function makeLane(river3, moored, sign) {
+  function makeLane(river3, moored, sign, quayX) {
     const hull = makeBoat("barge", {});
     hull.halfWidth = Math.max(hull.halfWidth, boatTypes.riverboat.beam * metre / 2) + 2;
     const knots = river3.centreline;
@@ -4812,10 +4848,13 @@
       const mid = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
       const channel = sign > 0 ? mid : river3.top + river3.bottom - mid;
       const preferred = channel + sign * (hull.halfWidth + laneGap);
+      const blend = quayX === void 0 ? 0 : clamp((400 - Math.abs(x - quayX)) / 310, 0, 1);
+      const quayWeight = blend * blend * (3 - 2 * blend);
+      const aim = preferred + (river3.top - preferred) * quayWeight;
       const column2 = /* @__PURE__ */ new Map();
       for (let y = Math.ceil((river3.top + hull.halfWidth) / 2) * 2; y <= river3.bottom - hull.halfWidth; y += 2) {
         if (!river3.onWater(x, y, hull.halfWidth)) continue;
-        const weight = ((y - preferred) / 12) ** 2;
+        const weight = ((y - aim) / 12) ** 2 * (1 + 7 * quayWeight);
         let parent = null, cost = Infinity;
         for (let offset = i ? -12 : 0; offset <= (i ? 12 : 0); offset += 2) {
           const p2 = i ? previous.get(y + offset) : { x: x - 16, y, cost: 0 };
@@ -4862,7 +4901,10 @@
   }
   function createBoatFleet(river3, office2) {
     const boats = berthFleet(river3, office2);
-    const east = makeLane(river3, boats, 1), west = makeLane(river3, boats, -1);
+    const openQuays = river3.moorings.filter((m) => !boats.some((b) => b.mooring === m.id));
+    const westQuay = openQuays.find((m) => m.quay.y < river3.top);
+    const quayX = westQuay ? westQuay.x - 70 : void 0;
+    const east = makeLane(river3, boats, 1), west = makeLane(river3, boats, -1, quayX);
     const gates = narrowPassages(east, west);
     for (const [i, fraction] of [0.16, 0.4, 0.64, 0.87].entries()) {
       const sign = i % 2 ? -1 : 1, lane = sign > 0 ? east : west;
@@ -4870,7 +4912,7 @@
       const x = lane[0].x + fraction * (lane.at(-1).x - lane[0].x);
       const boat = makeBoat(i < 2 ? "barge" : "riverboat", {
         ...lanePose(lane, x, sign),
-        traffic: { lane, sign, hornDelay: 0 }
+        traffic: { lane, sign, quayX: sign < 0 ? quayX : void 0, hornDelay: 0 }
       });
       const gate = gates.find((g2) => x + boat.halfLength > g2.left && x - boat.halfLength < g2.right);
       if (contactAt(boat, boat.x, boat.y, boat.a, boats) || gate?.direction && gate.direction !== sign) {
@@ -4900,7 +4942,7 @@
     return true;
   }
   function trafficStep(river3, boat, fleet2, dt, horn) {
-    const { lane, sign } = boat.traffic;
+    const { lane, sign, quayX } = boat.traffic;
     const end = sign > 0 ? lane.at(-1).x : lane[0].x;
     if (boat.incoming) {
       boat.incoming = Math.max(1e-3, boat.incoming - dt);
@@ -4913,7 +4955,8 @@
       Object.assign(boat, next2, { incoming: 0 });
     }
     const cruise = boatTypes[boat.model].topSpeed * 0.78;
-    let target2 = cruise;
+    const pace = quayX !== void 0 && Math.abs(boat.x - quayX) < 65 ? 6 : cruise;
+    let target2 = pace;
     const gate = fleet2.gates.find((g2) => sign > 0 ? boat.x - boat.halfLength < g2.right : boat.x + boat.halfLength > g2.left);
     if (gate) {
       const distance = aheadOfGate(boat, gate);
@@ -4932,7 +4975,7 @@
       target2 = Math.min(target2, Math.max(0, sign * other.slideX + (gap - 8) * 0.55));
     }
     boat.traffic.hornDelay = Math.max(0, boat.traffic.hornDelay - dt);
-    if ((close || target2 < cruise * 0.6) && !boat.traffic.hornDelay) {
+    if ((close || target2 < pace * 0.6) && !boat.traffic.hornDelay) {
       boat.traffic.hornDelay = 4;
       horn(boat);
     }
@@ -4979,8 +5022,9 @@
     if (dt <= 0) return;
     for (const gate of fleet2.gates) {
       for (const boat of gate.inside) {
-        const cleared = boat.traffic.sign > 0 ? boat.x - boat.halfLength >= gate.right : boat.x + boat.halfLength <= gate.left;
-        if (cleared || boat.incoming) gate.inside.delete(boat);
+        const sign = boat.traffic?.sign;
+        const cleared = sign > 0 ? boat.x - boat.halfLength >= gate.right : boat.x + boat.halfLength <= gate.left;
+        if (cleared || !sign || boat.incoming) gate.inside.delete(boat);
       }
       if (!gate.inside.size) gate.direction = 0;
     }
@@ -5371,20 +5415,28 @@
     if (unattended) return unattended;
     if (game.active === "repo" && dist(p, target) < 22) return target;
     if (ambulance && dist(p, ambulance) < 21) return ambulance;
-    let nearest = null, d = 22;
+    let nearest2 = null, d = 22;
     for (const c of cars) {
       const distance = reach(c);
       if (distance >= 22) continue;
       const score = distance + (c.route ? 4 : 0);
-      if (nearest === null || score < d) {
+      if (nearest2 === null || score < d) {
         d = score;
-        nearest = c;
+        nearest2 = c;
       }
     }
-    return nearest;
+    return nearest2;
   }
   function nearestBoat() {
-    return boardableBoat(boatFleet.boats, river2.moorings, p);
+    return boardableBoat(boatFleet.boats, river2, p);
+  }
+  function boardingTarget() {
+    if (game.ride || game.transit) return null;
+    const boat = nearestBoat();
+    if (boat) return boat;
+    const car3 = nearestCar();
+    const station = nearStation();
+    return station && (!car3 || dist(p, station.street) <= dist(p, car3)) ? station : car3;
   }
   function berthInReach() {
     return dockingMooring(
@@ -5412,8 +5464,9 @@
       else exitCar();
       return;
     }
-    const boat = nearestBoat();
-    if (boat) {
+    const nearby = boardingTarget();
+    if (nearby?.domain === "water") {
+      const boat = nearby;
       const theft2 = takeBoat(boat);
       if (theft2) game.heat = Math.min(3, game.heat + 0.45);
       game.ride = boat;
@@ -5424,12 +5477,11 @@
       say(theft2 ? "boatTaken" : "boatBoarded", 4, boat.model);
       return;
     }
-    const c = nearestCar();
-    const station = nearStation();
-    if (station && (!c || dist(p, station.street) <= dist(p, c))) {
-      enterStation(station);
+    if (nearby?.street) {
+      enterStation(nearby);
       return;
     }
+    const c = nearby;
     if (!c) {
       say("closer");
       return;
@@ -6231,14 +6283,14 @@
     return { x: v.x, y: v.y };
   }
   function crewInReach() {
-    let nearest = null;
+    let nearest2 = null;
     for (const v of [ambulance, ...departing]) {
       if (!v) continue;
       const spot = driverPosition(v);
-      if (dist(p, spot) < 18 && (!nearest || dist(p, spot) < dist(p, nearest)))
-        nearest = { ...spot, crewOf: v };
+      if (dist(p, spot) < 18 && (!nearest2 || dist(p, spot) < dist(p, nearest2)))
+        nearest2 = { ...spot, crewOf: v };
     }
-    return nearest;
+    return nearest2;
   }
   function interruptRescue(v) {
     if (!inService(v)) return null;
@@ -7851,8 +7903,7 @@
   }
 
   // src/ui/waypoint.js
-  function drawRouteArrow(path) {
-    const lead = game.ride ? 26 : 17;
+  function routeBearing(path) {
     let ahead = game.ride ? 52 : 40;
     let aim = p;
     for (const node of path.slice(1)) {
@@ -7865,7 +7916,10 @@
       ahead -= length;
       aim = node;
     }
-    const angle = Math.atan2(aim.y - p.y, aim.x - p.x);
+    return Math.atan2(aim.y - p.y, aim.x - p.x);
+  }
+  function drawRouteArrow(path, angle = routeBearing(path)) {
+    const lead = game.ride ? 26 : 17;
     const position = { x: p.x + Math.cos(angle) * lead, y: p.y - 3 + Math.sin(angle) * lead };
     g.save();
     g.translate(position.x, position.y);
@@ -9003,8 +9057,7 @@
 
   // src/world/navigation.js
   var routeCache;
-  function directions(origin = p) {
-    const end = goal();
+  function directions(origin = p, end = goal()) {
     if (!end) return null;
     const onFoot = !game.ride;
     const vehicleHalfWidth = game.ride?.halfWidth ?? sedanHalfWidth;
@@ -9535,6 +9588,85 @@
     return rails;
   }
 
+  // src/ui/travel.js
+  var trip;
+  function nearestBike(origin) {
+    return nearest(cars.filter((car3) => car3.model === "moto" && !car3.route && car3.condition > 0 && car3 !== game.ride), origin);
+  }
+  function nearest(points, origin, position = (point) => point) {
+    return points.reduce((best, point) => !best || dist(origin, position(point)) < dist(origin, position(best)) ? point : best, null);
+  }
+  function tripOptions(origin) {
+    const bike = nearestBike(origin);
+    const mooring = nearest(river2.moorings.filter(hasBoat), origin, (m) => m.quay);
+    const station = nearest(ringLine().ring.stations, origin, (s) => s.street);
+    return { bike, mooring, station };
+  }
+  function hasBoat(mooring) {
+    return boatFleet.boats.some((boat) => boat.mooring === mooring.id);
+  }
+  function selectTrip(kind, origin) {
+    if (trip?.kind === kind) {
+      trip = null;
+      return;
+    }
+    const destination = tripOptions(origin)[kind];
+    if (!destination) return;
+    const point = destination.quay ?? destination.street ?? destination;
+    const startQuay = river2.moorings.find((m) => dist(origin, m.quay) < 32);
+    trip = {
+      kind,
+      destination,
+      point,
+      approach: kind === "mooring" ? quayApproach(point) : null,
+      departure: startQuay ? quayApproach(startQuay.quay) : null
+    };
+  }
+  function quayApproach(point) {
+    const streetY = Y(town.cellAt(point.x, point.y).row);
+    if (walkableBetween({ x: point.x, y: streetY }, point, 2.6)) return null;
+    for (let offset = 10; offset <= 140; offset += 10) {
+      for (const x of [point.x - offset, point.x + offset]) {
+        const bend = { x, y: point.y };
+        if (walkableBetween({ x, y: streetY }, bend, 2.6) && walkableBetween(bend, point, 2.6)) return { ...bend, streetY };
+      }
+    }
+    return null;
+  }
+  function tripPath(guide, origin = p) {
+    const { point, approach: approach2, departure } = guide;
+    const viaQuay = departure && !game.ride && dist(origin, departure) < 145 && walkableBetween(origin, departure, 2.6) && !walkableBetween(origin, { x: origin.x, y: departure.streetY }, 2.6);
+    const from = viaQuay ? departure : origin;
+    const to = approach2 && (dist(origin, point) >= 115 || !walkableBetween(origin, point, 2.6)) ? approach2 : point;
+    const path = directions(from, to).path;
+    return from === origin && to === point ? path : [...from === origin ? [] : [origin], ...path, ...to === point ? [] : [point]];
+  }
+  function currentTrip() {
+    if (!trip) return null;
+    const { kind, destination } = trip;
+    if (kind === "bike" && (game.ride === destination || destination.condition === 0) || kind === "mooring" && !hasBoat(destination) || kind === "station" && game.transit) trip = null;
+    return trip;
+  }
+  function tripName({ kind, destination }) {
+    if (kind === "station") return stationName(destination);
+    if (kind === "bike") return t(destination.label);
+    return t(boatFleet.boats.find((boat) => boat.mooring === destination.id).model);
+  }
+  var arrows = ["\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196", "\u2191", "\u2197"];
+  function travelHUD(guide, ready, stopToWalk, angle) {
+    $("#travelCard").hidden = !guide || game.viewMap;
+    if (!guide || game.viewMap) return;
+    const { point, kind } = guide;
+    hud("#travelType", t(kind === "bike" ? "travelBike" : kind === "mooring" ? "travelBoat" : "travelTrain"));
+    hud("#travelTitle", tripName(guide));
+    hud("#travelDistance", ready || stopToWalk ? "" : Math.round(dist(p, point) * 0.15) + " m");
+    let instruction = t(ready ? "onSite" : "travelPark");
+    if (!ready && !stopToWalk && angle !== void 0) {
+      instruction = arrows[(8 + Math.round(angle / (Math.PI / 4))) % 8] + " " + t("travelFollow");
+    }
+    hud("#travelStep", instruction);
+  }
+
   // src/ui/guidance.js
   function atObjective(end, room) {
     if (room) return dist(p, end) < (game.active ? 11 : 15);
@@ -9566,7 +9698,7 @@
     hud("#routeAction", t(step));
   }
   var sheetLanguage;
-  function showMapSheet(end) {
+  function showMapSheet(end, origin) {
     const sheet = $("#mapSheet");
     if (!sheet.hidden && sheetLanguage === lang) return;
     sheet.hidden = false;
@@ -9574,6 +9706,23 @@
     hud("#mapTitle", t("cityMap"));
     hud("#mapKey span:first-child", t("legend1"));
     hud("#mapKey span:last-child", t("legend2"));
+    hud("#tripPrompt", t("travelLegend"));
+    const options = tripOptions(origin);
+    const selected = currentTrip()?.kind;
+    for (const [kind, symbol, key] of [
+      ["bike", "\u25B2", "travelBike"],
+      ["mooring", "\u25A0", "travelBoat"],
+      ["station", "\u25CF", "travelTrain"]
+    ]) {
+      const button = $(`[data-trip="${kind}"]`);
+      const active = selected === kind;
+      const marker = document.createElement("b");
+      marker.setAttribute("aria-hidden", "true");
+      marker.textContent = symbol;
+      button.replaceChildren(marker, " " + t(active ? "travelClear" : key));
+      button.disabled = !options[kind] && !active;
+      button.setAttribute("aria-pressed", String(active));
+    }
     hud("#filesTitle", t("casebook"));
     const list = $("#fileList");
     list.replaceChildren();
@@ -10364,6 +10513,7 @@
 
   // src/ui/renderer.js
   var addressPinHeight = 23;
+  var vehicleName = (vehicle) => t(vehicle.domain === "water" ? vehicle.model : vehicle.label || fleetOf(vehicle).label);
   function speech(s, x, y, viewportLeft, markers) {
     g.save();
     g.font = "bold 4px system-ui";
@@ -10475,20 +10625,32 @@
       }
     }
     for (const m of river3.moorings) {
-      const r = full ? 1.15 : 0.47;
-      rect(g, x + m.quay.x * scale - r, y + m.quay.y * scale - r, 2 * r, 2 * r, "#a1e3de");
+      const r = full ? 1.65 : 0.55;
+      const cx = x + m.quay.x * scale, cy = y + m.quay.y * scale;
+      rect(g, cx - r - 0.35, cy - r - 0.35, 2 * r + 0.7, 2 * r + 0.7, "#191825");
+      rect(g, cx - r, cy - r, 2 * r, 2 * r, hasBoat(m) ? "#a1e3de" : "#61888a");
     }
-    const nav = game.ride?.domain === "water" ? null : directions(origin);
-    if (nav) {
+    const trip2 = currentTrip();
+    const bike = trip2?.kind === "bike" ? trip2.point : full && nearestBike(origin);
+    if (bike) {
+      const bx = x + bike.x * scale, by = y + bike.y * scale;
+      const lift2 = full ? 7 : 1.5;
+      rect(g, bx - 0.25, by - lift2, 0.5, lift2, "#f2bd70");
+      g.textAlign = "center";
+      label(g, "\u25B2", bx, by - lift2, "#f2bd70", full ? 5 : 2);
+      g.textAlign = "left";
+    }
+    const path = game.ride?.domain === "water" || game.transit ? null : trip2 ? tripPath(trip2, origin) : directions(origin)?.path;
+    if (path) {
       g.beginPath();
       g.moveTo(x + origin.x * scale, y + origin.y * scale);
-      for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
+      for (const k of path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
       g.strokeStyle = "#ffe080";
       g.lineWidth = full ? 1.15 : 0.45;
       g.stroke();
     }
     for (const j of jobs) if (!done.has(j.id)) pin(j, x + j.x * scale, y + j.y * scale, !full);
-    const q = goal();
+    const q = trip2?.point ?? goal();
     if (q) {
       g.strokeStyle = "#ffe18a";
       g.lineWidth = full ? 1 : 0.45;
@@ -10513,7 +10675,7 @@
     g.restore();
   }
   function drawFullMap(end, origin) {
-    showMapSheet(end);
+    showMapSheet(end, origin);
     rect(g, 0, 0, game.vw, game.vh, "#151521eb");
     const area = $("#mapWindow").getBoundingClientRect();
     const unit3 = game.vw / innerWidth;
@@ -10552,6 +10714,7 @@
       const anchor = game.active ? room.exit : nextFile() ? room.desk : null;
       drawInterior(anchor && !atObjective(anchor, room) ? anchor : null);
       routeHUD(anchor, room);
+      travelHUD(null);
       if (game.viewMap) drawFullMap(goal(), interior.returnTo);
       else $("#mapSheet").hidden = true;
       return;
@@ -10584,7 +10747,13 @@
     for (const m of river2.moorings) if (visible(m.quay)) drawMooring(m);
     const ridingBoat = game.ride?.domain === "water";
     const speed = ridingBoat ? Math.hypot(game.ride.slideX, game.ride.slideY) : Math.abs(game.ride?.speed ?? 0);
-    const end = ridingBoat ? null : goal();
+    const trip2 = !ridingBoat && !game.transit ? currentTrip() : null;
+    const nearby = !game.viewMap ? boardingTarget() : null;
+    const atTrip = trip2 && (nearby === trip2.destination || trip2.kind === "mooring" && nearby?.mooring === trip2.destination.id);
+    const stopToWalk = trip2 && game.ride && dist(p, trip2.point) < 32;
+    const end = ridingBoat || game.transit ? null : trip2?.point ?? goal();
+    const travelPath = trip2 && !atTrip && !stopToWalk && !game.viewMap ? tripPath(trip2) : null;
+    const travelBearing = travelPath ? routeBearing(travelPath) : void 0;
     if (end && visible(end)) {
       g.save();
       g.strokeStyle = "#ffe080";
@@ -10628,8 +10797,9 @@
     drawRingTrains(ox, oy, actors);
     drawOverTrain(ox, oy);
     if (end && !game.viewMap) {
-      if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
-      if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
+      if (visible(end)) markers.push(arrivalMarker(end, trip2 ? 10 : end === target ? 12 : addressPinHeight + 4));
+      if (travelPath) markers.push(drawRouteArrow(travelPath, travelBearing));
+      else if (!trip2 && !atObjective(end)) markers.push(drawRouteArrow(directions(p, end).path));
     }
     if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {
       const speaker = taunt.speaker;
@@ -10651,7 +10821,8 @@
     g.restore();
     const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
     const mw = compact ? 31 : 40, mh = mw * H / W;
-    routeHUD(end);
+    routeHUD(trip2 ? null : end);
+    travelHUD(trip2, atTrip, stopToWalk, travelBearing);
     if (game.viewMap) {
       drawFullMap(goal(), p);
     } else {
@@ -10660,32 +10831,42 @@
     }
     hud("#district", district() + "  /  Port-Fer");
     hud(
-      "#stats",
-      "\u20AC" + game.wallet + "  \xB7  " + t("health") + " " + p.hp + "/5  \xB7  " + t("heat") + " " + Math.ceil(game.heat) + "/3" + (game.ride ? (
-        // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
-        "\u3000" + Math.round(speed * (ridingBoat ? 0.405 : 0.53)) + "\xA0" + (ridingBoat ? t("knots") : "km/h") + "\xA0\xA0\xB7\xA0\xA0" + t(ridingBoat ? game.ride.model : "vehicle") + "\xA0" + game.ride.condition + "%"
-      ) : "")
+      "#playerStats",
+      "\u20AC" + game.wallet + "  \xB7  " + t("health") + "\xA0" + p.hp + "/5  \xB7  " + t("heat") + "\xA0" + Math.ceil(game.heat) + "/3"
+    );
+    hud(
+      "#rideStats",
+      game.ride ? " " + Math.round(speed * (ridingBoat ? 0.405 : 0.53)) + "\xA0" + (ridingBoat ? t("knots") : "km/h") + " \xB7 " + vehicleName(game.ride) + " " + game.ride.condition + "%" : ""
     );
     const j = jobs.find((j2) => dist(j2, p) < 36);
     const nearJob = j ? t("jobKey") + " \xB7 " + t(j.name) : "";
-    const nearbyBoat = !game.ride && !game.transit && !game.viewMap && nearestBoat();
-    const car3 = !game.ride && !game.transit && !game.viewMap && !nearbyBoat ? nearestCar() : null;
-    const station = !game.ride && !game.transit && !game.viewMap && !nearbyBoat && nearStation();
+    const nearbyBoat = nearby?.domain === "water";
+    const nearBike = nearby?.model === "moto" && nearby.condition > 0;
+    let touch = "touchCar";
     let hint = nearJob || t("footHint");
     if (game.viewMap) hint = t("mapHint");
-    else if (game.transit) hint = transitHint(t);
-    else if (ridingBoat) hint = t(berthInReach() ? "boatDisembark" : "boatFindDock");
-    else if (nearbyBoat) hint = t("boatEnter") + " \xB7 " + t(nearbyBoat.model);
-    else if (station && (!car3 || dist(p, station.street) <= dist(p, car3)))
-      hint = t("stationHint") + " \xB7 " + stationName(station);
-    else if (recoveryCar()) hint = t("callRecovery") + (game.ride ? "\u3000/\u3000" + t("outHint") : "");
-    else if (game.ride) hint = nearJob || t("outHint");
-    else if (car3?.medical && car3.condition > 0) hint = t("medicKeys");
-    else if (car3) hint = t("enterHint") + (nearJob ? "\u3000/\u3000" + nearJob : "");
+    else if (game.transit) {
+      touch = game.transit.phase === "platform" ? "touchStreet" : "touchExit";
+      hint = transitHint(t);
+    } else if (ridingBoat || nearbyBoat) {
+      touch = "touchBoat";
+      hint = ridingBoat ? t(berthInReach() ? "boatDisembark" : "boatFindDock") : t("boatEnter") + " \xB7 " + vehicleName(nearby);
+    } else if (nearby?.street) {
+      touch = "touchTrain";
+      hint = t("stationHint") + " \xB7 " + stationName(nearby);
+    } else if (game.ride) {
+      touch = "touchExit";
+      hint = [t("outHint"), recoveryCar() ? t("callRecovery") : nearJob].filter(Boolean).join("\u3000/\u3000");
+    } else if (nearby?.condition === 0) hint = t("callRecovery");
+    else if (nearby?.medical) hint = t("medicKeys");
+    else if (nearby) {
+      if (nearBike) touch = "touchBike";
+      hint = [t(nearBike ? "motoEnter" : "enterHint") + " \xB7 " + vehicleName(nearby), nearJob].filter(Boolean).join("\u3000/\u3000");
+    }
     $("#reportBtn").hidden = !!game.transit || !nearbyPatient();
     hud("#hint", hint);
     $("[data-key=action]").hidden = ridingBoat;
-    hud("[data-key=car]", t(ridingBoat || nearbyBoat ? "touchBoat" : "touchCar"));
+    hud("[data-key=car]", t(touch));
     hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
   }
 
@@ -10743,6 +10924,12 @@
   }
   $("#reportBtn").onclick = reportIncident;
   $("#mapBtn").onclick = toggleMap;
+  for (const button of document.querySelectorAll("[data-trip]")) {
+    button.onclick = () => {
+      selectTrip(button.dataset.trip, interior?.returnTo ?? p);
+      toggleMap();
+    };
+  }
   function showHelp() {
     box("help", "helpText", [["back"]]);
   }
@@ -10934,7 +11121,6 @@
     scene = after;
   }
   refreshLanguage();
-  say("start", 6, "clerk");
   Promise.all(
     Object.entries(imageData).map(async ([key, src]) => {
       const img = new Image();
@@ -10947,6 +11133,7 @@
     artwork.konamiHero = prepareHero(true);
     prepareTown();
     game.artReady = true;
+    say("start", 12, "clerk");
   });
   var prev = 0;
   function loop(ms) {

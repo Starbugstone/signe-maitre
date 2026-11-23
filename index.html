@@ -83,6 +83,7 @@ h1 {
   text-align: right;
   color: #ffda7c;
 }
+#rideStats:not(:empty) { margin-inline-start: .7em; }
 #tools {
   position: absolute;
   right: 16px;
@@ -300,7 +301,7 @@ canvas {
     padding: 4px 8px;
   }
 }
-#routeCard {
+:is(#routeCard, #travelCard) {
   position: absolute;
   top: 90px;
   left: 16px;
@@ -324,8 +325,8 @@ canvas {
   align-items: baseline;
 }
 .fileMeta small { font: inherit; }
-#routeDistance { color: #ffdc79; text-transform: none; letter-spacing: 0; }
-#routeTitle, #fileList strong {
+:is(#routeDistance, #travelDistance) { color: #ffdc79; text-transform: none; letter-spacing: 0; }
+#routeTitle, #travelTitle, #fileList strong {
   display: block;
   color: #fff0cf;
   font: bold 20px/1.2 Georgia, serif;
@@ -335,7 +336,7 @@ canvas {
   color: #e2d8c7;
 }
 #routeBrief { display: block; margin-top: 2px; }
-#routeStep {
+:is(#routeStep, #travelStep) {
   border-top: 1px solid #705a48;
   margin-top: 6px;
   padding-top: 5px;
@@ -353,7 +354,7 @@ canvas {
   align-items: center;
   gap: clamp(16px, 3vw, 40px);
 }
-#routeCard[hidden], #mapSheet[hidden] { display: none; }
+#routeCard[hidden], #travelCard[hidden], #mapSheet[hidden] { display: none; }
 body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { display: none; }
 #mapColumn {
   height: 100%;
@@ -369,6 +370,14 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 #mapWindow { min-height: 0; flex: 0 1 auto; aspect-ratio: 1.7; margin: 12px 10px; }
 #mapKey { font: 12px/1.45 monospace; color: #efdcbd; }
 #mapKey span { display: block; }
+#tripOptions { margin-top: 5px; font: 12px/1.4 monospace; }
+#tripPrompt { color: #efdcbd; margin-bottom: 3px; }
+#tripOptions button { padding: 5px 6px; pointer-events: auto; }
+#tripOptions button[aria-pressed="true"] { border-color: #ffdf62; color: #ffdf62; }
+#tripOptions button:disabled { opacity: .45; }
+#tripOptions [data-trip="bike"] b { color: #f2bd70; }
+#tripOptions [data-trip="mooring"] b { color: #a1e3de; }
+#tripOptions [data-trip="station"] b { color: #f3e3bf; }
 #casebook {
   max-height: 100%;
   min-height: 0;
@@ -405,15 +414,15 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
 #filesNote { font-size: 12px; margin: 12px 0 0; color: #d4bda1; }
 #filesNote:empty { display: none; }
 @media (max-width: 650px) {
-  #routeCard {
+  :is(#routeCard, #travelCard) {
     top: 82px;
     left: 8px;
     width: min(258px, 84vw);
     padding: 5px 8px;
   }
-  #routeTitle { font-size: 17px; }
-  #routeBrief, #routeStep { font-size: 12px; }
-  #routeStep { margin-top: 4px; padding-top: 3px; }
+  #routeTitle, #travelTitle { font-size: 17px; }
+  #routeBrief, #routeStep, #travelStep { font-size: 12px; }
+  #routeStep, #travelStep { margin-top: 4px; padding-top: 3px; }
 }
 @media (max-width: 650px) and (orientation: portrait) {
   #mapSheet {
@@ -428,7 +437,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
   #mapSheet { inset: 83px 14px 12px; gap: 14px; }
   #casebook { padding: 8px 10px; }
   #fileList li { margin-top: 5px; padding-top: 5px; }
-  #routeCard { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
+  :is(#routeCard, #travelCard) { top: 64px; left: 8px; width: min(250px, 35vw); padding: 4px 7px; }
 }
 
 @media (max-width: 650px) and (orientation: portrait) {
@@ -443,7 +452,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
     pointer-events: none;
   }
   #streetHeader > * { position: static; }
-  #brand { flex-shrink: 0; }
+  #rideStats:not(:empty) { display: block; margin-inline-start: 0; }
   #tools { justify-content: flex-end; flex-wrap: wrap; }
   #tools button { pointer-events: auto; }
   #streetMessages {
@@ -501,7 +510,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
           <h1>Signé, Maître !</h1>
           <div id="district"></div>
         </div>
-        <div id="stats"></div>
+        <div id="stats"><span id="playerStats"></span><span id="rideStats"></span></div>
       </div>
       <div id="tools">
         <button id="reportBtn" hidden>R · Incident report</button><button id="mapBtn">Map</button
@@ -514,12 +523,23 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         <span id="routeBrief"></span>
         <div id="routeStep"><b id="routePlace"></b><span id="routeAction"></span></div>
       </aside>
+      <aside id="travelCard" hidden>
+        <div class="fileMeta"><small id="travelType"></small><b id="travelDistance"></b></div>
+        <strong id="travelTitle"></strong>
+        <div id="travelStep"></div>
+      </aside>
     </div>
     <section id="mapSheet" hidden aria-labelledby="mapTitle">
       <div id="mapColumn">
         <h2 id="mapTitle"></h2>
         <div id="mapWindow"></div>
         <div id="mapKey"><span></span><span></span></div>
+        <div id="tripOptions" aria-labelledby="tripPrompt" role="group">
+          <div id="tripPrompt"></div>
+          <button data-trip="bike"></button>
+          <button data-trip="mooring"></button>
+          <button data-trip="station"></button>
+        </div>
       </div>
       <section id="casebook" tabindex="0" aria-labelledby="filesTitle">
         <h2 id="filesTitle"></h2>
@@ -543,7 +563,7 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
         ><button data-key="right" data-konami="ArrowRight" aria-label="Right">▶</button>
       </div>
       <div class="acts">
-        <button data-key="car">Car</button><button data-key="job">Job</button><button data-key="run">Run</button
+        <button data-key="car">Board</button><button data-key="job">Job</button><button data-key="run">Run</button
         ><button id="touchSignal" data-key="horn" hidden>Horn</button
         ><button data-key="action">Slap / Brake</button><button data-konami="b">B</button><button data-konami="a">A</button>
       </div>
@@ -555,6 +575,6 @@ body:has(#mapSheet:not([hidden])) :is(#hint, #ticker, #touch, #reportBtn) { disp
       <div id="choices"></div>
       <p id="dialogControls" hidden></p>
     </dialog>
-    <script src="game/game-RWHZX5V5.js"></script>
+    <script src="game/game-H5H55QKM.js"></script>
   </body>
 </html>

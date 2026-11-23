@@ -2,11 +2,11 @@ import { town, W, H, X, Y } from "./town.js";
 import { blocked, vehicleBlocked } from "./collision.js";
 import { outsideView } from "./viewport.js";
 
-export function walkableBetween(a, b) {
+export function walkableBetween(a, b, radius = 2) {
   const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 2));
   for (let i = 0; i <= steps; i++) {
     const f = i / steps;
-    if (blocked(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, 2)) return false;
+    if (blocked(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, radius)) return false;
   }
   return true;
 }

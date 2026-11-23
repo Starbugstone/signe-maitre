@@ -78,7 +78,16 @@ function nearestCar() {
   return nearest;
 }
 function nearestBoat() {
-  return boardableBoat(boatFleet.boats, river.moorings, p);
+  return boardableBoat(boatFleet.boats, river, p);
+}
+
+function boardingTarget() {
+  if (game.ride || game.transit) return null;
+  const boat = nearestBoat();
+  if (boat) return boat;
+  const car = nearestCar();
+  const station = nearStation();
+  return station && (!car || dist(p, station.street) <= dist(p, car)) ? station : car;
 }
 
 function berthInReach() {
@@ -105,8 +114,9 @@ function board() {
     else exitCar();
     return;
   }
-  const boat = nearestBoat();
-  if (boat) {
+  const nearby = boardingTarget();
+  if (nearby?.domain === "water") {
+    const boat = nearby;
     const theft = takeBoat(boat);
     if (theft) game.heat = Math.min(3, game.heat + 0.45);
     game.ride = boat;
@@ -117,13 +127,11 @@ function board() {
     say(theft ? "boatTaken" : "boatBoarded", 4, boat.model);
     return;
   }
-  const c = nearestCar();
-  // At a ring station's stair foot, the car key climbs to the platform unless a car is closer.
-  const station = nearStation();
-  if (station && (!c || dist(p, station.street) <= dist(p, c))) {
-    enterStation(station);
+  if (nearby?.street) {
+    enterStation(nearby);
     return;
   }
+  const c = nearby;
   if (!c) {
     say("closer");
     return;
@@ -151,4 +159,4 @@ function board() {
   else say(c === sedan ? "sedan" : "keysIn", 4, c === sedan ? "" : c.label || fleetOf(c).label);
 }
 
-export { berthInReach, board, exitCar, nearestBoat, nearestCar };
+export { berthInReach, board, boardingTarget, exitCar, nearestCar };

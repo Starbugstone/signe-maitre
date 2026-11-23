@@ -4,6 +4,7 @@ import { $, hud } from "../platform/canvas.js";
 import { lang, t } from "./dialogs.js";
 import { files, nextFile, objective, placeName } from "../game/cases.js";
 import { town } from "../world/town.js";
+import { currentTrip, tripOptions } from "./travel.js";
 
 function atObjective(end, room) {
   if (room) return dist(p, end) < (game.active ? 11 : 15);
@@ -47,7 +48,7 @@ function routeHUD(end, room) {
 }
 
 let sheetLanguage;
-function showMapSheet(end) {
+function showMapSheet(end, origin) {
   const sheet = $("#mapSheet");
   if (!sheet.hidden && sheetLanguage === lang) return;
   sheet.hidden = false;
@@ -55,6 +56,21 @@ function showMapSheet(end) {
   hud("#mapTitle", t("cityMap"));
   hud("#mapKey span:first-child", t("legend1"));
   hud("#mapKey span:last-child", t("legend2"));
+  hud("#tripPrompt", t("travelLegend"));
+  const options = tripOptions(origin);
+  const selected = currentTrip()?.kind;
+  for (const [kind, symbol, key] of [
+    ["bike", "▲", "travelBike"], ["mooring", "■", "travelBoat"], ["station", "●", "travelTrain"],
+  ]) {
+    const button = $(`[data-trip="${kind}"]`);
+    const active = selected === kind;
+    const marker = document.createElement("b");
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = symbol;
+    button.replaceChildren(marker, " " + t(active ? "travelClear" : key));
+    button.disabled = !options[kind] && !active;
+    button.setAttribute("aria-pressed", String(active));
+  }
   hud("#filesTitle", t("casebook"));
   const list = $("#fileList");
   list.replaceChildren();

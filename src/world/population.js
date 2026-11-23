@@ -220,7 +220,8 @@ function populate(col, row, key) {
   const loop = narrow?.class === "alley" ? narrow : cachedLoop(col, row, false);
   if (!loop) return;
 
-  const model = pickModel(routeClass(loop), draw(1));
+  // Keep the moving draw independent of parked cars, with all six models seeded near the étude.
+  const model = pickModel(routeClass(loop), draw(31));
   const spec = fleet[model];
   const segments = compileFleetLoop(town, loop, model);
   if (!segments) return;

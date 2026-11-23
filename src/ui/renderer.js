@@ -16,16 +16,19 @@ import { drawVehicle } from "../art/fleet-art.js";
 import { dude } from "../art/pedestrians.js";
 import { visibleRails } from "../world/rail.js";
 import { drawOverTrain } from "../world/ring-art.js";
-import { arrivalMarker, drawRouteArrow } from "./waypoint.js";
+import { arrivalMarker, drawRouteArrow, routeBearing } from "./waypoint.js";
 import { atObjective, routeHUD, showMapSheet } from "./guidance.js";
 import { drawBoats, drawMooring } from "../art/boats.js";
 import { river } from "../game/boats.js";
-import { berthInReach, nearestBoat, nearestCar } from "../game/boarding.js";
+import { berthInReach, boardingTarget } from "../game/boarding.js";
 import { recoveryCar } from "../game/damage.js";
 import { drawRingMap, drawRingTrains, ringActors } from "../art/train.js";
-import { nearStation, stationName, transitHint } from "../game/transit.js";
+import { stationName, transitHint } from "../game/transit.js";
+import { fleetOf } from "../game/fleet.js";
+import { currentTrip, hasBoat, nearestBike, travelHUD, tripPath } from "./travel.js";
 
 const addressPinHeight = 23;
+const vehicleName = (vehicle) => t(vehicle.domain === "water" ? vehicle.model : vehicle.label || fleetOf(vehicle).label);
 
 function speech(s, x, y, viewportLeft, markers) {
   g.save();
@@ -157,16 +160,28 @@ function map(left, top, w, h, full, origin = p) {
   }
 
   for (const m of river.moorings) {
-    const r = full ? 1.15 : 0.47;
-    rect(g, x + m.quay.x * scale - r, y + m.quay.y * scale - r, 2 * r, 2 * r, "#a1e3de");
+    const r = full ? 1.65 : 0.55;
+    const cx = x + m.quay.x * scale, cy = y + m.quay.y * scale;
+    rect(g, cx - r - 0.35, cy - r - 0.35, 2 * r + 0.7, 2 * r + 0.7, "#191825");
+    rect(g, cx - r, cy - r, 2 * r, 2 * r, hasBoat(m) ? "#a1e3de" : "#61888a");
+  }
+  const trip = currentTrip();
+  const bike = trip?.kind === "bike" ? trip.point : full && nearestBike(origin);
+  if (bike) {
+    const bx = x + bike.x * scale, by = y + bike.y * scale;
+    const lift = full ? 7 : 1.5;
+    rect(g, bx - 0.25, by - lift, 0.5, lift, "#f2bd70");
+    g.textAlign = "center";
+    label(g, "▲", bx, by - lift, "#f2bd70", full ? 5 : 2);
+    g.textAlign = "left";
   }
 
   // Active navigation route.
-  const nav = game.ride?.domain === "water" ? null : directions(origin);
-  if (nav) {
+  const path = game.ride?.domain === "water" || game.transit ? null : trip ? tripPath(trip, origin) : directions(origin)?.path;
+  if (path) {
     g.beginPath();
     g.moveTo(x + origin.x * scale, y + origin.y * scale);
-    for (const k of nav.path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
+    for (const k of path.slice(1)) g.lineTo(x + k.x * scale, y + k.y * scale);
     g.strokeStyle = "#ffe080";
     g.lineWidth = full ? 1.15 : 0.45;
     g.stroke();
@@ -176,7 +191,7 @@ function map(left, top, w, h, full, origin = p) {
   for (const j of jobs) if (!done.has(j.id)) pin(j, x + j.x * scale, y + j.y * scale, !full);
 
   // Pulsing goal ring.
-  const q = goal();
+  const q = trip?.point ?? goal();
   if (q) {
     g.strokeStyle = "#ffe18a";
     g.lineWidth = full ? 1 : 0.45;
@@ -205,7 +220,7 @@ function map(left, top, w, h, full, origin = p) {
 }
 
 function drawFullMap(end, origin) {
-  showMapSheet(end);
+  showMapSheet(end, origin);
   rect(g, 0, 0, game.vw, game.vh, "#151521eb");
   const area = $("#mapWindow").getBoundingClientRect();
   const unit = game.vw / innerWidth;
@@ -247,6 +262,7 @@ function draw() {
     const anchor = game.active ? room.exit : nextFile() ? room.desk : null;
     drawInterior(anchor && !atObjective(anchor, room) ? anchor : null);
     routeHUD(anchor, room);
+    travelHUD(null);
     if (game.viewMap) drawFullMap(goal(), interior.returnTo);
     else $("#mapSheet").hidden = true;
     return;
@@ -281,7 +297,13 @@ function draw() {
   for (const m of river.moorings) if (visible(m.quay)) drawMooring(m);
   const ridingBoat = game.ride?.domain === "water";
   const speed = ridingBoat ? Math.hypot(game.ride.slideX, game.ride.slideY) : Math.abs(game.ride?.speed ?? 0);
-  const end = ridingBoat ? null : goal();
+  const trip = !ridingBoat && !game.transit ? currentTrip() : null;
+  const nearby = !game.viewMap ? boardingTarget() : null;
+  const atTrip = trip && (nearby === trip.destination || (trip.kind === "mooring" && nearby?.mooring === trip.destination.id));
+  const stopToWalk = trip && game.ride && dist(p, trip.point) < 32;
+  const end = ridingBoat || game.transit ? null : trip?.point ?? goal();
+  const travelPath = trip && !atTrip && !stopToWalk && !game.viewMap ? tripPath(trip) : null;
+  const travelBearing = travelPath ? routeBearing(travelPath) : undefined;
   if (end && visible(end)) {
     g.save();
     g.strokeStyle = "#ffe080";
@@ -326,8 +348,9 @@ function draw() {
   drawRingTrains(ox, oy, actors);
   drawOverTrain(ox, oy);
   if (end && !game.viewMap) {
-    if (visible(end)) markers.push(arrivalMarker(end, end === target ? 12 : addressPinHeight + 4));
-    if (!atObjective(end)) markers.push(drawRouteArrow(directions().path));
+    if (visible(end)) markers.push(arrivalMarker(end, trip ? 10 : end === target ? 12 : addressPinHeight + 4));
+    if (travelPath) markers.push(drawRouteArrow(travelPath, travelBearing));
+    else if (!trip && !atObjective(end)) markers.push(drawRouteArrow(directions(p, end).path));
   }
   if (taunt && game.time < taunt.until && !taunt.speaker.down && visible(taunt.speaker)) {
     const speaker = taunt.speaker;
@@ -350,7 +373,8 @@ function draw() {
   const compact = innerWidth <= 650 || matchMedia("(pointer:coarse)").matches;
   const mw = compact ? 31 : 40,
     mh = (mw * H) / W;
-  routeHUD(end);
+  routeHUD(trip ? null : end);
+  travelHUD(trip, atTrip, stopToWalk, travelBearing);
   if (game.viewMap) {
     drawFullMap(goal(), p);
   } else {
@@ -360,50 +384,53 @@ function draw() {
   }
   hud("#district", district() + "  /  Port-Fer");
   hud(
-    "#stats",
+    "#playerStats",
     "€" +
       game.wallet +
       "  ·  " +
       t("health") +
-      " " +
+      "\u00a0" +
       p.hp +
       "/5  ·  " +
       t("heat") +
-      " " +
+      "\u00a0" +
       Math.ceil(game.heat) +
-      "/3" +
-      (game.ride
-        ? // The readout only wraps before the speed, never inside "7 km/h · Car 44%".
-          "　" +
-          Math.round(speed * (ridingBoat ? 0.405 : 0.53)) +
-          "\u00a0" + (ridingBoat ? t("knots") : "km/h") + "\u00a0\u00a0·\u00a0\u00a0" +
-          t(ridingBoat ? game.ride.model : "vehicle") +
-          "\u00a0" +
-          game.ride.condition +
-          "%"
-        : ""),
+      "/3",
+  );
+  hud("#rideStats", game.ride
+    ? " " + Math.round(speed * (ridingBoat ? 0.405 : 0.53)) + "\u00a0" + (ridingBoat ? t("knots") : "km/h") +
+      " · " + vehicleName(game.ride) + " " + game.ride.condition + "%"
+    : "",
   );
   const j = jobs.find((j) => dist(j, p) < 36);
   const nearJob = j ? t("jobKey") + " · " + t(j.name) : "";
-  const nearbyBoat = !game.ride && !game.transit && !game.viewMap && nearestBoat();
-  const car = !game.ride && !game.transit && !game.viewMap && !nearbyBoat ? nearestCar() : null;
-  // At a ring station's stair foot the car key climbs to the platform unless a car is closer.
-  const station = !game.ride && !game.transit && !game.viewMap && !nearbyBoat && nearStation();
+  const nearbyBoat = nearby?.domain === "water";
+  const nearBike = nearby?.model === "moto" && nearby.condition > 0;
+  let touch = "touchCar";
   let hint = nearJob || t("footHint");
   if (game.viewMap) hint = t("mapHint");
-  else if (game.transit) hint = transitHint(t);
-  else if (ridingBoat) hint = t(berthInReach() ? "boatDisembark" : "boatFindDock");
-  else if (nearbyBoat) hint = t("boatEnter") + " · " + t(nearbyBoat.model);
-  else if (station && (!car || dist(p, station.street) <= dist(p, car)))
-    hint = t("stationHint") + " · " + stationName(station);
-  else if (recoveryCar()) hint = t("callRecovery") + (game.ride ? "　/　" + t("outHint") : "");
-  else if (game.ride) hint = nearJob || t("outHint");
-  else if (car?.medical && car.condition > 0) hint = t("medicKeys");
-  else if (car) hint = t("enterHint") + (nearJob ? "　/　" + nearJob : "");
+  else if (game.transit) {
+    touch = game.transit.phase === "platform" ? "touchStreet" : "touchExit";
+    hint = transitHint(t);
+  } else if (ridingBoat || nearbyBoat) {
+    touch = "touchBoat";
+    hint = ridingBoat ? t(berthInReach() ? "boatDisembark" : "boatFindDock") : t("boatEnter") + " · " + vehicleName(nearby);
+  } else if (nearby?.street) {
+    touch = "touchTrain";
+    hint = t("stationHint") + " · " + stationName(nearby);
+  } else if (game.ride) {
+    touch = "touchExit";
+    hint = [t("outHint"), recoveryCar() ? t("callRecovery") : nearJob].filter(Boolean).join("　/　");
+  } else if (nearby?.condition === 0) hint = t("callRecovery");
+  else if (nearby?.medical) hint = t("medicKeys");
+  else if (nearby) {
+    if (nearBike) touch = "touchBike";
+    hint = [t(nearBike ? "motoEnter" : "enterHint") + " · " + vehicleName(nearby), nearJob].filter(Boolean).join("　/　");
+  }
   $("#reportBtn").hidden = !!game.transit || !nearbyPatient();
   hud("#hint", hint);
   $("[data-key=action]").hidden = ridingBoat;
-  hud("[data-key=car]", t(ridingBoat || nearbyBoat ? "touchBoat" : "touchCar"));
+  hud("[data-key=car]", t(touch));
   hud("[data-key=action]", t(game.ride ? "touchBrake" : "touchHit"));
 }
 
