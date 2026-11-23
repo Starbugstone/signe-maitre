@@ -48,8 +48,8 @@ function upcomingCurvature(dense, idx, lookDist = 65) {
 }
 
 async function brakeToStop(d, timeout = 3500) {
-  const end = Date.now() + timeout;
-  while (Date.now() < end) {
+  const end = d.now() + timeout;
+  while (d.now() < end) {
     const s = await d.state();
     if (!s.ride || Math.abs(s.ride.speed) < 3.5) return s;
     await d.hold([s.ride.speed > 0 ? "down" : "up"], Math.min(180, Math.max(55, Math.round(Math.abs(s.ride.speed) * 4))));
@@ -117,12 +117,12 @@ async function driveRouteTo(
   let dense = buildDense(s.ride);
   let cursor = 0;
 
-  const end = Date.now() + timeout;
+  const end = d.now() + timeout;
   let stuckTicks = 0;
   let trafficWaitTicks = 0;
   let prev = null;
 
-  while (Date.now() < end) {
+  while (d.now() < end) {
     s = await d.state();
     if (!s.ride) throw Error("Expected to be driving a car in driveRouteTo");
     if (s.ride.condition <= 0) throw Error(`Car wrecked at ${JSON.stringify(s.ride)} heading to ${JSON.stringify(dest)}`);
@@ -190,7 +190,7 @@ async function driveRouteTo(
       if (carAhead.speed > 1.5 && trafficWaitTicks < 8) {
         trafficWaitTicks++;
         if (s.ride.speed > 6) await d.hold(["down"], 90);
-        else await d.page.waitForTimeout(160);
+        else await d.wait(160);
         stuckTicks = 0;
         continue;
       }
@@ -198,7 +198,7 @@ async function driveRouteTo(
         trafficWaitTicks++;
         await d.hold(["down", "right"], 320);
         await brakeToStop(d, 800);
-        await d.page.waitForTimeout(260);
+        await d.wait(260);
         stuckTicks = 0;
         continue;
       }
@@ -247,7 +247,7 @@ async function driveRouteTo(
         const ms = Math.min(300, Math.max(100, Math.round(remDest * 2.4)));
         await d.hold(["up"], ms);
       } else {
-        await d.page.waitForTimeout(90);
+        await d.wait(90);
       }
     }
   }
@@ -368,8 +368,8 @@ export default async function (d) {
     const tracks = [];
     let bestCcw = 0;
     let sampleNear = [];
-    const deadline = Date.now() + 26000;
-    while (Date.now() < deadline) {
+    const deadline = d.now() + 26000;
+    while (d.now() < deadline) {
       const { traffic } = await d.state();
       const near = traffic.filter((c) => Math.hypot(c.x - rb.x, c.y - rb.y) < rb.outerRadius + 18);
       sampleNear = near;
@@ -391,7 +391,7 @@ export default async function (d) {
       }
       for (const t of tracks) t.matched = false;
       if (bestCcw >= 0.2 && near.some((c) => Math.hypot(c.x - rb.x, c.y - rb.y) <= rb.outerRadius + 8)) break;
-      await d.page.waitForTimeout(240);
+      await d.wait(240);
     }
     d.note("roundabout traffic observation", { bestCcw: +bestCcw.toFixed(3), nearCount: sampleNear.length, sample: sampleNear.slice(0, 4) });
     d.expect(bestCcw >= 0.2, "traffic circulates anticlockwise around Place de la Contrainte roundabout", {

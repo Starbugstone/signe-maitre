@@ -35,7 +35,7 @@ const fleet = [
   ["dumper", 99, 16, 1.4],
 ];
 
-export default async function (d) {
+export default async function (d, { models = fleet.map(([model]) => model), returnToOffice = true } = {}) {
   const home = (await d.state()).p,
     pavement = home.y;
   const seen = new Map();
@@ -138,14 +138,14 @@ export default async function (d) {
           while (powering) {
             const { ride } = await d.state();
             observeSpeed(ride.speed);
-            await d.page.waitForTimeout(30);
+            await d.wait(30);
           }
         })(),
       ]);
     }
   }
 
-  for (const [model, wreckTo, pace, rate] of fleet) {
+  for (const [model, wreckTo, pace, rate] of fleet.filter(([id]) => models.includes(id))) {
     let parkedAt;
     let top = 0;
     const observeSpeed = (speed) => { top = Math.max(top, Math.abs(speed)); };
@@ -207,7 +207,7 @@ export default async function (d) {
         held = Math.abs(ride.speed) < 2 ? held + 1 : 0;
         if (held > 5) {
           await d.hold(["down"], 900);
-          await new Promise((r) => setTimeout(r, 1500));
+          await d.wait(1500);
           held = 0;
           continue;
         }
@@ -237,7 +237,7 @@ export default async function (d) {
           blocked = Math.abs(ride.speed) < 2 ? blocked + 1 : 0;
           if (blocked > 6) {
             await d.hold(["down"], 900);
-            await new Promise((r) => setTimeout(r, 1500));
+            await d.wait(1500);
             blocked = 0;
             continue;
           }
@@ -252,8 +252,8 @@ export default async function (d) {
           stuck = 0,
           worst = 0;
         const trace = [];
-        const started = Date.now();
-        while (turned > -lap && Date.now() - started < 60000) {
+        const started = d.now();
+        while (turned > -lap && d.now() - started < 60000) {
           const { ride } = await d.state();
           const theta = Math.atan2(ride.y - rb.y, ride.x - rb.x);
           if (last !== null) turned += turnTo(theta, last);
@@ -271,7 +271,7 @@ export default async function (d) {
           await steer(heading, 110, rate, Math.abs(ride.speed) < 24 ? ["up"] : []);
         }
         const { ride } = await d.state();
-        const seconds = (Date.now() - started) / 1000;
+        const seconds = (d.now() - started) / 1000;
         d.note(`${model} lapped the roundabout`, { rb: rb.id, turned, seconds, worst, ride, trace });
         // Before long bodies could overhang the corner pavements, the bus managed half a lap in a minute.
         d.expect(turned <= -lap, `the ${model} goes round the roundabout to its entry arm within a minute (${seconds.toFixed(0)} s)`, { turned, worst });
@@ -286,8 +286,8 @@ export default async function (d) {
       let still = 0,
         hits = 0,
         last = (await d.state()).ride.condition;
-      const end = Date.now() + 120000;
-      while (Date.now() < end) {
+      const end = d.now() + 120000;
+      while (d.now() < end) {
         const { ride } = await d.state();
         if (!ride) break;
         if (ride.condition < last) hits++;
@@ -312,7 +312,7 @@ export default async function (d) {
         const { ride } = await d.state();
         if (Math.abs(ride.speed) > 2) await d.hold(["action"], 700);
         await d.press("car");
-        await new Promise((r) => setTimeout(r, 250));
+        await d.wait(250);
         // No room at the door: back the vehicle off the wall and try again.
         if ((await d.state()).ride && ride.condition > 0) await d.hold(["down"], 700);
       }
@@ -322,6 +322,7 @@ export default async function (d) {
     });
   }
 
+  if (!returnToOffice) return;
   await d.step("walk-back-to-etude", async () => {
     await walkAround((spot) => Math.abs(spot.x - home.x) < 8 && Math.abs(spot.y - pavement) < 4, "the étude");
   });
@@ -329,12 +330,12 @@ export default async function (d) {
     // Back at the étude, watch what drives by.
     const models = new Set();
     let halted = null;
-    const end = Date.now() + 150000;
-    while (Date.now() < end && !(halted && models.size >= 4)) {
+    const end = d.now() + 150000;
+    while (d.now() < end && !(halted && models.size >= 4)) {
       const { traffic } = await d.state();
       for (const c of traffic) models.add(c.model);
       halted ||= traffic.find((c) => c.model === "bus" && c.halted && c.roadClass === "avenue" && Math.abs(c.speed) < 0.5);
-      await new Promise((r) => setTimeout(r, 500));
+      await d.wait(500);
     }
     d.note("traffic models", [...models]);
     d.expect(models.size >= 4, "traffic is a mix of at least four models", [...models]);

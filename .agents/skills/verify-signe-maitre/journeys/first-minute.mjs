@@ -14,26 +14,26 @@ async function select(d, kind, label) {
   return hud.travel.title;
 }
 
-async function follow(d, hint) {
-  let sinceProgress = Date.now();
+export async function follow(d, hint) {
+  let sinceProgress = d.now();
   let lastDistance;
   let detours = 0;
-  const end = Date.now() + 75000;
-  while (Date.now() < end) {
+  const end = d.now() + 75000;
+  while (d.now() < end) {
     const hud = await d.hud();
     if (hud.travel?.step === d.t("onSite") && hud.hint.includes(d.t(hint))) return;
     const { step, distance } = hud.travel;
     const direction = directions[step[0]];
     if (!direction) throw Error("Expected a direction: " + JSON.stringify(hud.travel));
     const metres = parseInt(distance, 10);
-    if (metres !== lastDistance) sinceProgress = Date.now();
+    if (metres !== lastDistance) sinceProgress = d.now();
     lastDistance = metres;
-    if (Date.now() - sinceProgress > 1500) {
+    if (d.now() - sinceProgress > 1500) {
       // Walk around a parked car or a street prop, then pick the arrow back up.
       const avoid = direction.some((key) => key === "left" || key === "right") ? ["up", "down"] : ["left", "right"];
       await d.hold([avoid[detours++ % 2]], 300);
       await d.hold(direction, 400);
-      sinceProgress = Date.now();
+      sinceProgress = d.now();
     } else await d.hold(metres > 12 ? ["run", ...direction] : direction, metres > 18 ? 330 : 100);
   }
   throw Error("The travel card did not lead to " + hint + ": " + JSON.stringify(await d.hud()));

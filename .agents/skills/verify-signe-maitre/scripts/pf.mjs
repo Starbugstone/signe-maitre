@@ -168,13 +168,19 @@ window.__pf = Object.freeze({
 `;
 }
 
-async function buildFiles(mode, runDir) {
+export async function buildFiles(mode, runDir, { inline = true } = {}) {
   const { renderGame } = await import(pathToFileURL(join(root, "scripts/build.mjs")).href);
   if (mode === "probe") {
-    const html = await renderGame({ entry: await probeEntry() });
+    const output = await renderGame({ entry: await probeEntry(), inline });
     await mkdir(runDir, { recursive: true });
     const file = join(runDir, "probe.html");
-    await writeFile(file, html);
+    if (inline) await writeFile(file, output);
+    else {
+      const assets = join(runDir, "game");
+      await mkdir(assets, { recursive: true });
+      await Promise.all(output.files.map(({ path, contents }) => writeFile(join(assets, basename(path)), contents)));
+      await writeFile(file, output.html);
+    }
     return file;
   }
   return join(root, "index.html");
@@ -368,7 +374,10 @@ async function run(opts) {
   process.exitCode = failed ? 1 : skipped ? 3 : 0;
 }
 
-function driver({ page, out, mode, device, lang, words }) {
+export function driver({
+  page, out, mode, device, lang, words,
+  now = Date.now, wait = (ms) => page.waitForTimeout(ms), recordInput,
+}) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && errors.push("console: " + m.text()));
@@ -436,6 +445,7 @@ function driver({ page, out, mode, device, lang, words }) {
       if (held.size) await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       if (points.length) await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points });
     }
+    if (next.size !== held.size || [...next].some((k) => !held.has(k))) recordInput?.("setHeld", [...next]);
     held = next;
   }
   const d = {
@@ -449,6 +459,9 @@ function driver({ page, out, mode, device, lang, words }) {
     t,
     hud,
     state,
+    now,
+    wait,
+    setHeld,
     async ready() {
       await page.waitForFunction(() => document.querySelector("#stats")?.textContent.includes("€"), null, { timeout: 30000 });
     },
@@ -459,7 +472,7 @@ function driver({ page, out, mode, device, lang, words }) {
       const before = await hud();
       const at = new Date().toISOString();
       const value = await fn();
-      await page.waitForTimeout(120);
+      await wait(120);
       const after = await hud();
       const shot = await d.shot(name);
       const entry = { at, step: name, before, after, shot, ...(mode === "probe" ? { state: await state() } : {}) };
@@ -473,22 +486,28 @@ function driver({ page, out, mode, device, lang, words }) {
       return basename(file);
     },
     async press(control) {
-      if (device === "desktop") await page.keyboard.press(KEYS[control]);
-      else if (TOUCH[control].startsWith("[data-key")) {
+      if (device === "desktop") {
+        await page.keyboard.press(KEYS[control]);
+        recordInput?.("press", control);
+      } else if (TOUCH[control].startsWith("[data-key")) {
         await setHeld([...held, control]);
-        await page.waitForTimeout(60);
+        await wait(60);
         await setHeld([...held].filter((k) => k !== control));
-      } else await page.locator(TOUCH[control]).tap();
+      } else {
+        await page.locator(TOUCH[control]).tap();
+        recordInput?.("click", TOUCH[control]);
+      }
     },
     async hold(controls, ms) {
       await setHeld([...held, ...controls]);
-      await page.waitForTimeout(ms);
+      await wait(ms);
       await setHeld([...held].filter((k) => !controls.includes(k)));
     },
     release: () => setHeld([]),
     async click(selector) {
       if (device === "desktop") await page.locator(selector).click();
       else await page.locator(selector).tap();
+      recordInput?.("click", selector);
     },
     async choose(key) {
       const label = t(key);
@@ -496,14 +515,15 @@ function driver({ page, out, mode, device, lang, words }) {
       if ((await button.count()) !== 1) throw Error(`Dialog has no "${label}" choice: ${JSON.stringify((await hud()).dialog)}`);
       if (device === "desktop") await button.click();
       else await button.tap();
+      recordInput?.("choose", key);
     },
     async waitFor(what, pred, timeout = 8000) {
-      const end = Date.now() + timeout;
+      const end = now() + timeout;
       let last;
-      while (Date.now() < end) {
+      while (now() < end) {
         last = { hud: await hud(), ...(mode === "probe" ? { state: await state() } : {}) };
         if (await pred(last)) return last;
-        await page.waitForTimeout(80);
+        await wait(80);
       }
       throw Error("Timed out waiting for " + what + ": " + JSON.stringify(last).slice(0, 1500));
     },
@@ -514,14 +534,14 @@ function driver({ page, out, mode, device, lang, words }) {
     // Steer on foot (or indoors) with real direction controls until within `tol` of a point.
     // `until(hud)` ends the walk early once the player-visible HUD shows the goal is met.
     async walkTo(point, { tol = 3, run = true, timeout = 30000, until } = {}) {
-      const end = Date.now() + timeout;
+      const end = now() + timeout;
       let best = Infinity,
-        bestAt = Date.now(),
+        bestAt = now(),
         ticksSinceBest = 0,
         sidesteps = 0,
         blockedDistance = Infinity;
       try {
-        while (Date.now() < end) {
+        while (now() < end) {
           const s = await state();
           if (s.ride) throw Error("walkTo is for walking; leave the car first");
           const dx = point.x - s.p.x,
@@ -532,9 +552,9 @@ function driver({ page, out, mode, device, lang, words }) {
           if (dist < blockedDistance - 24) sidesteps = 0;
           if (dist < best - 0.5) {
             best = dist;
-            bestAt = Date.now();
+            bestAt = now();
             ticksSinceBest = 0;
-          } else if (++ticksSinceBest >= 6 && Date.now() - bestAt > 1500) {
+          } else if (++ticksSinceBest >= 6 && now() - bestAt > 1500) {
             // Caught on a lamp post, bollard or parked car: step sideways and try again.
             if (++sidesteps > 3) throw Error(`Stuck ${dist.toFixed(1)} from ${JSON.stringify(point)} at ${JSON.stringify(s.p)}`);
             blockedDistance = dist;
@@ -543,9 +563,9 @@ function driver({ page, out, mode, device, lang, words }) {
             await setHeld([side]);
             // Clear a vehicle's full width. On another attempt, cross the original
             // line of travel to try the opposite side of the blockage.
-            await page.waitForTimeout(sidesteps === 1 ? 850 : 1750);
+            await wait(sidesteps === 1 ? 850 : 1750);
             await setHeld([]);
-            bestAt = Date.now();
+            bestAt = now();
             ticksSinceBest = 0;
             best = Infinity;
             continue;
@@ -562,9 +582,9 @@ function driver({ page, out, mode, device, lang, words }) {
           // Near the target, pulse the controls: release before looking again, so a slow
           // machine cannot carry the player past the goal between two observations.
           if (!far) {
-            await page.waitForTimeout(Math.min(140, 25 + dist * 5));
+            await wait(Math.min(140, 25 + dist * 5));
             await setHeld([]);
-          } else await page.waitForTimeout(35);
+          } else await wait(35);
         }
         throw Error("walkTo timed out before reaching " + JSON.stringify(point));
       } finally {
@@ -577,12 +597,12 @@ function driver({ page, out, mode, device, lang, words }) {
       if (!start.goal) throw Error("No objective to follow");
       const path = start.route.slice(1);
       d.note("following route", { goal: start.goal, path });
-      const end = Date.now() + timeout;
+      const end = now() + timeout;
       const onSite = (h) => h.route?.distance === t("onSite");
       for (const [i, node] of path.entries())
         await d.walkTo(node, {
           tol: 4,
-          timeout: Math.max(1000, end - Date.now()),
+          timeout: Math.max(1000, end - now()),
           ...(i === path.length - 1 ? { until: onSite } : {}),
         });
       return d.waitFor("route card to read on site", ({ hud }) => hud.route?.distance === t("onSite"), 3000);
@@ -591,14 +611,16 @@ function driver({ page, out, mode, device, lang, words }) {
   return d;
 }
 
-const opts = args(process.argv.slice(2));
-const command = opts._.shift();
-const commands = { doctor, run, cleanup, build: async (o) => console.log(await buildFiles(o.probe ? "probe" : o.build || "probe")) };
-if (!commands[command]) {
-  console.log(`pf.mjs doctor [--url URL]
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const opts = args(process.argv.slice(2));
+  const command = opts._.shift();
+  const commands = { doctor, run, cleanup, build: async (o) => console.log(await buildFiles(o.probe ? "probe" : o.build || "probe")) };
+  if (!commands[command]) {
+    console.log(`pf.mjs doctor [--url URL]
 pf.mjs run <journey...> [--build shipped|probe] [--url URL] [--device desktop|phone|phone-portrait] [--lang en|fr] [--video] [--mute] [--headed] [--keep-going] [--run-id ID]
 pf.mjs build --probe
 pf.mjs cleanup [--run-id ID]
 Journeys: ${readdirSync(join(skill, "journeys")).map((f) => f.replace(".mjs", "")).join(", ")}`);
-  process.exitCode = command && command !== "help" ? 2 : 0;
-} else await commands[command](opts);
+    process.exitCode = command && command !== "help" ? 2 : 0;
+  } else await commands[command](opts);
+}

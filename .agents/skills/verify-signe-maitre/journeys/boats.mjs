@@ -47,7 +47,32 @@ async function backToBerth(d, home) {
   d.expect(state.boatDock === home.id, "The boat is slow enough and the quay is clear", state.ride);
 }
 
-export default async (d) => {
+async function takeBarge(d, initial, home) {
+  await d.step("take the moored barge from beside its hull", async () => {
+    const barge = initial.boats.find((b) => b.model === "barge" && b.mooring);
+    const berth = initial.river.moorings.find((m) => m.id === barge.mooring);
+    // Break up the north promenade at bridge crossings. Scale the time allowance to
+    // each stretch so slower touch frames still have time to reach the next crossing.
+    const walkPromenade = async (x) => {
+      const { p } = await d.state();
+      await d.walkTo({ x, y: berth.quay.y }, { tol: 5, timeout: 15000 + 80 * Math.abs(x - p.x) });
+    };
+    for (const b of initial.river.bridges.filter((b) => b.x > home.x && b.x < berth.x))
+      await walkPromenade(b.x + 44);
+    await walkPromenade(berth.quay.x - barge.halfLength * 0.7);
+    d.expect(gap((await d.state()).p, berth.quay) > 35, "The player is beside the long hull, away from the anchor");
+    await d.waitFor("the hull offers boarding", ({ hud }) =>
+      hud.hint.includes(d.t("boatEnter")) && hud.hint.includes(d.t("barge")));
+    if (d.device !== "desktop")
+      d.expect(await d.page.locator('[data-key="car"]').innerText() === d.t("touchBoat"), "The touch action reads Boat");
+    await d.press("car");
+    const result = await d.waitFor("barge theft", ({ state }) => state.ride?.model === "barge" && state.heat > 0);
+    d.expect(result.state.heat < 1, "Taking the barge raises heat by less than a level", result.state.heat);
+    d.expect(result.hud.ticker.includes(d.t("boatTaken")), "The harbour warning is shown");
+  });
+}
+
+export default async (d, { bargeOnly = false } = {}) => {
   const initial = await d.state();
   const launch = initial.boats.find((b) => b.model === "launch");
   const home = initial.river.moorings.find((m) => m.id === launch.mooring);
@@ -62,6 +87,7 @@ export default async (d) => {
     await d.walkTo(home.quay, { tol: 4 });
     d.expect((await d.hud()).hint.includes(d.t("boatEnter")), "The quay offers boarding in the current language");
   });
+  if (bargeOnly) return takeBarge(d, initial, home);
   await d.step("board the launch and sound the horn", async () => {
     await d.press("car");
     await d.waitFor("launch at the helm with the cast-off ticker", ({ state, hud }) =>
@@ -120,26 +146,5 @@ export default async (d) => {
     d.expect(gap(result.state.sedan, initial.sedan) < 0.1, "The office sedan stayed parked");
     d.expect((await d.hud()).ticker === d.t("boatMoored"), "The ticker confirms that the launch is moored");
   });
-  await d.step("take the moored barge from beside its hull", async () => {
-    const barge = initial.boats.find((b) => b.model === "barge" && b.mooring);
-    const berth = initial.river.moorings.find((m) => m.id === barge.mooring);
-    // Break up the north promenade at bridge crossings. Scale the time allowance to
-    // each stretch so slower touch frames still have time to reach the next crossing.
-    const walkPromenade = async (x) => {
-      const { p } = await d.state();
-      await d.walkTo({ x, y: berth.quay.y }, { tol: 5, timeout: 15000 + 80 * Math.abs(x - p.x) });
-    };
-    for (const b of initial.river.bridges.filter((b) => b.x > home.x && b.x < berth.x))
-      await walkPromenade(b.x + 44);
-    await walkPromenade(berth.quay.x - barge.halfLength * 0.7);
-    d.expect(gap((await d.state()).p, berth.quay) > 35, "The player is beside the long hull, away from the anchor");
-    await d.waitFor("the hull offers boarding", ({ hud }) =>
-      hud.hint.includes(d.t("boatEnter")) && hud.hint.includes(d.t("barge")));
-    if (d.device !== "desktop")
-      d.expect(await d.page.locator('[data-key="car"]').innerText() === d.t("touchBoat"), "The touch action reads Boat");
-    await d.press("car");
-    const result = await d.waitFor("barge theft", ({ state }) => state.ride?.model === "barge" && state.heat > 0);
-    d.expect(result.state.heat < 1, "Taking the barge raises heat by less than a level", result.state.heat);
-    d.expect(result.hud.ticker.includes(d.t("boatTaken")), "The harbour warning is shown");
-  });
+  await takeBarge(d, initial, home);
 };
