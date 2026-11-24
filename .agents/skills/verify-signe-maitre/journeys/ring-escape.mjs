@@ -7,6 +7,8 @@ import { walkToStation } from "./ring-train.mjs";
 export const meta = { feature: "ring-train", needs: "probe" };
 
 const fighters = new Set(["tough", "inspector"]);
+// The HUD joins each label to its value with a no-break space.
+const shows = (stats, text) => stats.replace(/\s+/g, " ").includes(text);
 
 export default async function (d) {
   const start = await d.state();
@@ -42,7 +44,7 @@ export default async function (d) {
       }
       await d.hold(["action"], 350);
     }
-    const { state, hud } = await d.waitFor("heat", ({ state, hud }) => state.heat >= 1.3 && !hud.stats.includes(d.t("heat") + " 0/3"), 3000);
+    const { state, hud } = await d.waitFor("heat", ({ state, hud }) => state.heat >= 1.3 && !shows(hud.stats, d.t("heat") + " 0/3"), 3000);
     d.expect(state.heat >= 1.3, "slapping a passer-by raises Heat", { heat: state.heat, stats: hud.stats });
   });
 
@@ -70,7 +72,7 @@ export default async function (d) {
       60000,
     );
     d.expect(Math.hypot(state.p.x - next.street.x, state.p.y - next.street.y) < 12, "the player steps off at " + next.id, state.p);
-    d.expect(state.heat === 0 && hud.stats.includes(d.t("heat") + " 0/3"), "Heat is back to zero", { heat: state.heat, stats: hud.stats });
+    d.expect(state.heat === 0 && shows(hud.stats, d.t("heat") + " 0/3"), "Heat is back to zero", { heat: state.heat, stats: hud.stats });
     d.expect(state.p.hp === hp, "nobody struck the player on the platform or the train", { before: hp, after: state.p.hp });
   });
 }
