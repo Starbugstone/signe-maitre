@@ -169,9 +169,10 @@ let nextTrafficId = 1;
 // The cars that can come within `room` (plus their extra length) of any of these poses, in
 // list order. Until a driver has waited three seconds yieldsTo latches nothing, so a car that
 // fails the distance test anyway can be left out unasked. Past that, yieldsTo may latch
-// priority over any car in a waiting circle however far away, so every car is still asked.
-function carsAround(c, poses, room) {
-  if (c.route.wait >= 3) return cars;
+// priority over any car in a waiting circle however far away, so every car is still asked,
+// unless the caller asks no yieldsTo question at all (`pure`).
+function carsAround(c, poses, room, pure = false) {
+  if (!pure && c.route.wait >= 3) return cars;
   let left = Infinity,
     right = -Infinity,
     top = Infinity,
@@ -556,10 +557,19 @@ function advanceTraffic(c, dt) {
   const outside = junc ? !within(c, 40) : false;
 
   const exitBlocked = () => {
-    for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46 + 2 * long; d += 6) {
-      const pose = placed(pathAt(route, d), route.lane);
+    const poses = [];
+    for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46 + 2 * long; d += 6)
+      poses.push(placed(pathAt(route, d), route.lane));
+    // carContact rejects any body farther than both diagonals on an axis; no other check here
+    // has side effects, so the rest of the fleet can be left out.
+    const diagonal = Math.hypot(c.halfLength ?? sedanHalfLength, c.halfWidth ?? sedanHalfWidth);
+    const parked = carsAround(c, poses, diagonal + Math.hypot(sedanHalfLength, sedanHalfWidth) + 20, true).filter(
+      (o) => !o.route && o !== game.ride,
+    );
+    if (!parked.length) return null;
+    for (const pose of poses) {
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
-      const stuck = cars.find((o) => o !== c && !o.route && o !== game.ride && carContact(body, o) && isStalled(o));
+      const stuck = parked.find((o) => carContact(body, o) && isStalled(o));
       if (stuck) return stuck;
     }
     return null;
