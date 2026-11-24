@@ -15,6 +15,10 @@ import { draw } from "../../src/ui/renderer.js";
 import { cornerSupportAt, cornerSupports } from "../../src/world/viaduct.js";
 import { ringLine } from "../../src/game/transit.js";
 import { trainsetAt } from "../../src/game/ring-route.js";
+import { update } from "../../src/game/simulation.js";
+import { ambulance, incidents } from "../../src/game/rescue.js";
+import { enterInterior, interior, leaveInterior } from "../../src/game/interior.js";
+import { sedan } from "../../src/world/population.js";
 
 // Walking frames are timed by the clock. Hold it still, so that two renders of one pose match.
 const stillClock = performance.now();
@@ -759,6 +763,7 @@ const checks = {
   "painted-lanterns": checkPaintedLanterns,
   "stations": checkStationsAndGardens,
   "street-cache-scroll": checkStreetCacheScroll,
+  "renderer-reads-only": checkRendererReadsOnly,
   // A walker behind the station's painted canopy is partly hidden while a train stands at the
   // platform; one at the hall door on the street in front of it stays fully visible.
   "ring-train-depth": () => {
@@ -818,6 +823,62 @@ function checkStreetCacheScroll() {
     }
   }
   requireCheck(compared > 20, "Only " + compared + " street caches compared");
+}
+
+// Everything the simulation owns, written out so two moments can be compared. A painted
+// picture, an audio node or a page element counts only by identity.
+function simulationState() {
+  const ids = new Map();
+  const write = (value) => {
+    if (typeof value === "function" || value === undefined) return null;
+    if (value === null || typeof value !== "object") return Number.isNaN(value) ? "NaN" : value;
+    if (ids.has(value)) return { ref: ids.get(value) };
+    ids.set(value, ids.size);
+    if (value instanceof Map) return { map: [...value].map(([k, v]) => [write(k), write(v)]) };
+    if (value instanceof Set) return { set: [...value].map(write) };
+    if (Array.isArray(value)) return value.map(write);
+    const kind = Object.getPrototypeOf(value);
+    if (kind !== Object.prototype && kind !== null) return { opaque: ids.get(value) };
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, write(value[key])]));
+  };
+  return JSON.stringify(write({ p, cars, people, fx, trails, done, game, boats: boatFleet, ambulance, incidents, interior }));
+}
+
+// Drawing reads the simulation and never changes it: on foot in a busy street, with the map
+// open, at the wheel and indoors, a frame leaves every simulated value as it found it.
+function checkRendererReadsOnly() {
+  for (const job of town.jobs) done.delete(job.id);
+  Object.assign(p, { x: X(6) + 60, y: Y(5) - 24, a: 0.4, moving: true });
+  camera(p.x, p.y);
+  for (let frame = 0; frame < 240; frame++) update(1 / 60);
+  requireCheck(cars.length > 4 && people.length > 4, "The street did not fill up");
+  const cases = {
+    "on foot": () => {},
+    "with the map open": () => (game.viewMap = true),
+    "at the wheel": () => {
+      Object.assign(sedan, { x: p.x + 20, y: p.y });
+      if (!cars.includes(sedan)) cars.push(sedan);
+      game.ride = sedan;
+    },
+    indoors: () => enterInterior("office"),
+  };
+  try {
+    for (const [name, setUp] of Object.entries(cases)) {
+      setUp();
+      camera(game.ride?.x ?? p.x, game.ride?.y ?? p.y);
+      draw();
+      const before = simulationState();
+      for (let frame = 0; frame < 3; frame++) draw();
+      requireCheck(simulationState() === before, "Drawing changed the simulation " + name);
+      if (interior) leaveInterior();
+      game.viewMap = false;
+      game.ride = null;
+    }
+  } finally {
+    game.viewMap = false;
+    game.ride = null;
+    if (interior) leaveInterior();
+  }
 }
 
 window.scenery = {
