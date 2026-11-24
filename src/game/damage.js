@@ -1,6 +1,5 @@
+import { ask, cue, say } from "../core/events.js";
 import { clamp, fx, game } from "../core/state.js";
-import { crashSound } from "../audio/mixer.js";
-import { box, say } from "../ui/dialogs.js";
 import { nearestCar } from "./boarding.js";
 import { fleetOf } from "./fleet.js";
 
@@ -17,7 +16,7 @@ function recordImpact(v, force, other) {
     if (game.time < (v.nextWallImpact ?? -1)) return;
     v.nextWallImpact = game.time + 0.22;
   }
-  crashSound(force, other ? "body" : "wall");
+  cue("crash", force, other ? "body" : "wall");
   if (force < 17) return;
   // A full-speed crash costs about half the car; a scrape costs a few points.
   const loss = Math.max(1, Math.round(100 * Math.pow((force - 12) / 200, 1.7)));
@@ -47,7 +46,7 @@ function recoveryCar() {
   return c && c.condition === 0 ? c : null;
 }
 function repairCar(c) {
-  box("recovery", "recoveryText", [
+  ask("recovery", "recoveryText", [
     [
       "repair",
       () => {

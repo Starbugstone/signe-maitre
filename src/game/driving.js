@@ -1,5 +1,5 @@
+import { cue } from "../core/events.js";
 import { cars, clamp, dist, fx, game, p, people, trails } from "../core/state.js";
-import { beep } from "../audio/mixer.js";
 import { bodyExtra, distanceToBody, vehicleBlocked } from "../world/collision.js";
 import { outsideView, viewport } from "../world/viewport.js";
 import { recordImpact } from "./damage.js";
@@ -390,7 +390,7 @@ function backOff(c, route, dt) {
 function honk(c, at) {
   c.route.honked = game.time;
   fx.push({ x: c.x, y: c.y - 10, t: 0.9, s: "honk" });
-  if (dist(c, p) < 140) beep(392, 0.16, "sawtooth");
+  if (dist(c, p) < 140) cue("beep", 392, 0.16, "sawtooth");
   if (at && at !== p && !at.down) at.startled = { from: c, until: game.time + 1.6 };
 }
 

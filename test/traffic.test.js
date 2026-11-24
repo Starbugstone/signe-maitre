@@ -1,17 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-// The street simulation imports the canvas and audio modules; give them inert stand-ins.
-const elements = new Map();
-globalThis.document ??= {
-  querySelector(key) {
-    if (!elements.has(key)) elements.set(key, { open: false, getContext: () => ({ setTransform() {} }) });
-    return elements.get(key);
-  },
-};
-Object.assign(globalThis, { innerWidth: 1024, innerHeight: 700, devicePixelRatio: 1 });
-globalThis.addEventListener ??= () => {};
-
 const { game, p, cars, people, held } = await import("../src/core/state.js");
 const { update } = await import("../src/game/simulation.js");
 const { X, Y, CELL_W, CELL_H, town } = await import("../src/world/town.js");

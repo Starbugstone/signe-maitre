@@ -1,16 +1,18 @@
-import { interior, updateInterior } from "./scenes/interiors.js";
+import { interior, updateInterior } from "./game/interior.js";
 import { $, panel } from "./platform/canvas.js";
 import { control, released, trackKonami } from "./platform/keys.js";
 import { findGamepad, readGamepad } from "./platform/gamepad.js";
 import { artwork, clamp, game, held, p } from "./core/state.js";
 import { analog, clearAnalog } from "./core/controls.js";
-import { box, refreshLanguage, say, setGamepadMode, setLanguage, speak, t } from "./ui/dialogs.js";
+import { box, closeDialog, refreshLanguage, setGamepadMode, setLanguage, t } from "./ui/dialogs.js";
+import { say } from "./core/events.js";
+import { connectFeedback } from "./ui/feedback.js";
 import { reportIncident } from "./game/rescue.js";
 import { beep, enableAudio, gameMix, motorSound, vehicleSignalSound } from "./audio/mixer.js";
 import { board } from "./game/boarding.js";
 import { transitControl, transitFocus } from "./game/transit.js";
 import { interact } from "./game/cases.js";
-import { slap } from "./game/slap.js";
+import { slap, speak } from "./game/slap.js";
 import { prepareHero } from "./art/hero.js";
 import { prepareTown } from "./world/streets.js";
 import { update } from "./game/simulation.js";
@@ -207,7 +209,7 @@ function inputScene() {
 
 function controllerDialog(pressed, step) {
   if (pressed.has("back")) {
-    panel.close();
+    closeDialog();
     return;
   }
   if (!step && !pressed.has("job")) return;
@@ -277,6 +279,7 @@ function updateGamepad(dt) {
   scene = after;
 }
 
+connectFeedback();
 refreshLanguage();
 Promise.all(
   Object.entries(imageData).map(async ([key, src]) => {

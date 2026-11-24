@@ -81,9 +81,6 @@ test("the painted south pavement is walkable up to the bollard line, with no sli
 });
 
 test("the starting sedan can drive off and steer away from the kerb", async () => {
-  globalThis.document ??= { querySelector: () => ({ open: false, getContext: () => ({ setTransform() {} }) }) };
-  Object.assign(globalThis, { innerWidth: 1024, innerHeight: 700, devicePixelRatio: 1 });
-  globalThis.addEventListener ??= () => {};
   const { sedan } = await import("../src/world/population.js");
   const { drive } = await import("../src/game/driving.js");
   const { vehicleBlocked } = await import("../src/world/collision.js");

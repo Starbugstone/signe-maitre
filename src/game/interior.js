@@ -1,11 +1,9 @@
+// Inside a building: entering and leaving it, and walking its floor. src/ui/interior-view.js
+// draws the room.
 import { town } from "../world/town.js";
-import { artwork, game, held, p, clamp, dist } from "../core/state.js";
+import { game, held, p, clamp, dist } from "../core/state.js";
 import { walkVector } from "../core/controls.js";
-import { g, hud, $, rect } from "../platform/canvas.js";
-import { dude } from "../art/pedestrians.js";
-import { t } from "../ui/dialogs.js";
-import { arrivalMarker } from "../ui/waypoint.js";
-import { stepSound } from "../game/simulation.js";
+import { faceWhileWalking, stepSound } from "./simulation.js";
 
 export let interior = null;
 export function enterInterior(id) {
@@ -48,21 +46,5 @@ export function updateInterior(dt) {
   p.moving = travelled > 0.005;
   p.walkDistance = last + travelled;
   stepSound(travelled);
-}
-export function drawInterior(anchor) {
-  const { room } = interior,
-    scale = Math.min(game.vw / room.width, game.vh / room.height);
-  const left = (game.vw - room.width * scale) / 2,
-    top = (game.vh - room.height * scale) / 2;
-  rect(g, 0, 0, game.vw, game.vh, "#171420");
-  g.save();
-  g.translate(left, top);
-  g.scale(scale, scale);
-  g.drawImage(artwork[room.image], 0, 0, room.width, room.height);
-  dude(p, true);
-  if (anchor) arrivalMarker(anchor);
-  g.restore();
-  hud("#district", t(room.door) + " / Port-Fer");
-  hud("#hint", t(indoorAction() || "officeFloor"));
-  $("#reportBtn").hidden = true;
+  faceWhileWalking();
 }

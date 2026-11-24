@@ -1,10 +1,9 @@
-import { interior, indoorAction, enterInterior, leaveInterior } from "../scenes/interiors.js";
-import { box, lang, say } from "../ui/dialogs.js";
+import { ask, cue, say } from "../core/events.js";
+import { interior, indoorAction, enterInterior, leaveInterior } from "./interior.js";
+import { lang } from "../core/locale.js";
 import { dist, done, game, p } from "../core/state.js";
 import { auction, jobs, town } from "../world/town.js";
 import { target } from "../world/population.js";
-import { beep } from "../audio/mixer.js";
-import { panel } from "../platform/canvas.js";
 import { recoveryCar, repairCar } from "./damage.js";
 import { exitCar } from "./boarding.js";
 import { incidents } from "./rescue.js";
@@ -39,14 +38,14 @@ function accept(id) {
   game.active = id;
   game.stage = "visit";
   say(objective(), 4, "dispatch");
-  beep(550);
+  cue("beep", 550);
 }
 function complete(fee, line) {
   done.add(game.active);
   game.active = "";
   game.stage = "";
   game.wallet += fee;
-  beep(780, 0.22);
+  cue("beep", 780, 0.22);
   game.quipTime = 2.4;
   say(line, 6, "clerk", "  +€" + fee);
 }
@@ -57,7 +56,7 @@ function officeDesk() {
       "lastIncident",
       () => {
         const note = incidents[incidents.length - 1];
-        box(note.title, note.copy, [["back"]]);
+        ask(note.title, note.copy, [["back"]]);
       },
     ]);
   if (game.active)
@@ -69,7 +68,7 @@ function officeDesk() {
         say("dropped");
       },
     ]);
-  box(
+  ask(
     "office",
     game.active ? "officeBusy" : done.size === 3 ? "officeDone" : done.size ? "officeRemaining" : "officeNew",
     [...choices, ...(!interior && !game.ride ? [["goInside", () => enterInterior("office")]] : []), ["back"]],
@@ -82,7 +81,7 @@ function interact() {
     else if (action === "caseDesk") officeDesk();
     return;
   }
-  if (panel.open || game.viewMap) return;
+  if (game.dialogOpen || game.viewMap) return;
   const wreck = recoveryCar();
   if (wreck) {
     repairCar(wreck);
@@ -98,11 +97,11 @@ function interact() {
     return;
   }
   if (game.active === "noise" && near?.id === "noise" && !game.ride) {
-    box("pv", "pvDraft", [["sign", () => complete(125, "signed")], ["pocket"]]);
+    ask("pv", "pvDraft", [["sign", () => complete(125, "signed")], ["pocket"]]);
     return;
   }
   if (game.active === "flat" && game.stage === "visit" && near?.id === "flat" && !game.ride) {
-    box("resident", "residentText", [
+    ask("resident", "residentText", [
       [
         "tag",
         () => {
@@ -125,7 +124,7 @@ function interact() {
   say(game.active ? objective() : "pins", 4, "clerk");
 }
 function offer(id) {
-  box(id, id + "Brief", [["take", () => accept(id)], ["leave"]]);
+  ask(id, id + "Brief", [["take", () => accept(id)], ["leave"]]);
 }
 
 export { files, goal, interact, nextFile, objective, placeName };

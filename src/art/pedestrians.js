@@ -53,7 +53,6 @@ const stride = createGait();
 function drawPlayer(n) {
   const hero = game.konamiHero ? artwork.konamiHero : artwork.hero;
   const vertical = Math.abs(Math.sin(n.a)) > 0.78;
-  if (!vertical) game.lastDir = Math.cos(n.a) < 0 ? -1 : 1;
   const striking = game.flash > 0;
   advanceGait(stride, {
     distance: n.walkDistance || 0,
