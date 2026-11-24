@@ -166,6 +166,30 @@ const trafficAccel = 30,
   pavementLanes = [9, 12];
 let nextTrafficId = 1;
 
+// The cars that can come within `room` (plus their extra length) of any of these poses, in
+// list order. Until a driver has waited three seconds yieldsTo latches nothing, so a car that
+// fails the distance test anyway can be left out unasked. Past that, yieldsTo may latch
+// priority over any car in a waiting circle however far away, so every car is still asked.
+function carsAround(c, poses, room) {
+  if (c.route.wait >= 3) return cars;
+  let left = Infinity,
+    right = -Infinity,
+    top = Infinity,
+    bottom = -Infinity;
+  for (const { x, y } of poses) {
+    left = Math.min(left, x);
+    right = Math.max(right, x);
+    top = Math.min(top, y);
+    bottom = Math.max(bottom, y);
+  }
+  const near = [];
+  for (const o of cars) {
+    const reach = room + bodyExtra(o);
+    if (o !== c && o.x >= left - reach && o.x <= right + reach && o.y >= top - reach && o.y <= bottom + reach) near.push(o);
+  }
+  return near;
+}
+
 function ensureCompiled(c, route) {
   if (route.segments) return;
   if (route.points) {
@@ -290,8 +314,18 @@ function lookAhead(c, path, laneFrom, laneTo, reach, passing = laneFrom !== 0 ||
       what = o;
     }
   }
+  // consider() keeps o only within `forward` ahead and `side` across, so it lies within their sum
+  // on each axis. Below three seconds of waiting yieldsTo latches nothing and can be skipped too.
+  const pure = !c.route || c.route.wait < 3,
+    lateral = Math.max(Math.abs(low), Math.abs(high)) + 0.2;
   for (const o of cars) {
-    if (o === c || crossing(o, path.a) || (!passing && oncoming(o, path.a)) || yieldsTo(c, o)) continue;
+    if (o === c) continue;
+    if (pure) {
+      const body = (o.halfLength ?? sedanHalfLength) + (o.halfWidth ?? sedanHalfWidth),
+        bound = reach + 30 + bodyExtra(c) + Math.max(0, body - sedanHalfLength) + lateral + body;
+      if (Math.abs(o.x - path.x) > bound || Math.abs(o.y - path.y) > bound) continue;
+    }
+    if (crossing(o, path.a) || (!passing && oncoming(o, path.a)) || yieldsTo(c, o)) continue;
     const rel = o.a - path.a,
       hl = o.halfLength ?? sedanHalfLength,
       hw = o.halfWidth ?? sedanHalfWidth;
@@ -368,11 +402,15 @@ const tailBrush = (c, other, hit) =>
 
 function vehicleOnPath(c, route, lane, from, reach) {
   const turning = route.segments[route.segIndex].type === "arc";
+  const samples = [];
   for (let d = Math.max(4, from); d <= reach; d += 4) {
     const p0 = pathAt(route, d, lane);
-    const pose = placed(p0, lane);
+    samples.push({ d, p0, pose: placed(p0, lane) });
+  }
+  const near = carsAround(c, samples.map((sample) => sample.pose), 26 + bodyExtra(c));
+  for (const { d, p0, pose } of samples) {
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
-    for (const o of cars) {
+    for (const o of near) {
       if (o === c || yieldsTo(c, o)) continue;
       if (!p0.inRoundabout && (crossing(o, pose.a) || oncoming(o, pose.a))) continue;
       const near = 26 + bodyExtra(c) + bodyExtra(o);
@@ -392,10 +430,27 @@ function walkerRoom(route) {
   return route.squeezing ? 0.8 : 2.6;
 }
 function walkerOnPath(c, route, lane, reach) {
-  const walkers = game.ride || game.transit ? people : [...people, p],
-    room = walkerRoom(route);
-  for (let d = 4; d <= reach; d += 4) {
-    const pose = placed(pathAt(route, d, lane), lane);
+  const room = walkerRoom(route),
+    poses = [];
+  for (let d = 4; d <= reach; d += 4) poses.push(placed(pathAt(route, d, lane), lane));
+  // A walker counts only within 16 (plus the car's extra length) of a sampled pose.
+  const span = 16 + bodyExtra(c);
+  let left = Infinity,
+    right = -Infinity,
+    top = Infinity,
+    bottom = -Infinity;
+  for (const { x, y } of poses) {
+    left = Math.min(left, x);
+    right = Math.max(right, x);
+    top = Math.min(top, y);
+    bottom = Math.max(bottom, y);
+  }
+  const walkers = (game.ride || game.transit ? people : [...people, p]).filter(
+    (n) => n.x > left - span && n.x < right + span && n.y > top - span && n.y < bottom + span,
+  );
+  if (!walkers.length) return { gap: Infinity, what: null };
+  for (const [k, pose] of poses.entries()) {
+    const d = 4 + 4 * k;
     const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
     for (const n of walkers)
       if (Math.abs(n.x - pose.x) < 16 + bodyExtra(c) && Math.abs(n.y - pose.y) < 16 + bodyExtra(c) && distanceToBody(body, n.x, n.y) < room)
@@ -504,7 +559,7 @@ function advanceTraffic(c, dt) {
     for (let d = Math.max(0, probe.remaining); d < probe.remaining + 46 + 2 * long; d += 6) {
       const pose = placed(pathAt(route, d), route.lane);
       const body = { ...pose, halfLength: c.halfLength, halfWidth: c.halfWidth };
-      const stuck = cars.find((o) => o !== c && !o.route && o !== game.ride && isStalled(o) && carContact(body, o));
+      const stuck = cars.find((o) => o !== c && !o.route && o !== game.ride && carContact(body, o) && isStalled(o));
       if (stuck) return stuck;
     }
     return null;
