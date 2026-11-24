@@ -18,6 +18,7 @@ import { CELL_H, CELL_W, TAU, X, Y } from "./world/town.js";
 import { draw } from "./ui/renderer.js";
 import { selectTrip } from "./ui/travel.js";
 import { imageData } from "./art/assets.js";
+import { holdArtwork } from "./art/residency.js";
 
 let konamiProgress = 0;
 const signalButtons = document.querySelectorAll("[data-key=horn]");
@@ -285,6 +286,7 @@ Promise.all(
     artwork[key] = img;
   }),
 ).then(() => {
+  holdArtwork({ ...artwork }, imageData, { compact: innerWidth <= 650 || matchMedia("(pointer:coarse)").matches });
   artwork.hero = prepareHero();
   artwork.konamiHero = prepareHero(true);
   prepareTown();

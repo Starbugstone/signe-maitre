@@ -1,4 +1,5 @@
 import { taunt, tauntLine } from "../game/taunts.js";
+import { prefetchArt } from "../art/prefetch.js";
 import { bodyExtra } from "../world/collision.js";
 import { viewport } from "../world/viewport.js";
 import { interior, drawInterior } from "../scenes/interiors.js";
@@ -275,6 +276,7 @@ function draw() {
     label(g, t("loading"), 8, game.vh / 2, "#ffc56b", 8);
     return;
   }
+  prefetchArt(ox, oy);
   streetLayer(ox, oy);
   g.save();
   g.translate(-ox, -oy);

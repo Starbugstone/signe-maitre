@@ -6,6 +6,7 @@ import { paintings, partyWall, riverPlate } from "./paintings.js";
 
 const plateScale = 5;
 const plates = {},
+  baked = new Set(),
   joins = new Map();
 let roadPaint;
 
@@ -155,7 +156,13 @@ function prepareTown() {
     clearMarkings(plate, false, CELL_W / 2, 2.45, 35);
     plates[key] = plate;
   }
-  for (const key of [...Object.keys(paintings), "towerIron"]) if (!plates[key] && artwork[key]) plates[key] = artwork[key];
+  // A baked painting is drawn as the artwork holds it: its <img>, or the decoded bitmap that
+  // src/art/residency.js swaps in while it is near the camera.
+  for (const key of [...Object.keys(paintings), "towerIron"])
+    if (!plates[key] && artwork[key]) {
+      Object.defineProperty(plates, key, { get: () => artwork[key], enumerable: true });
+      baked.add(key);
+    }
   // The first four paintings get their party walls here; the bake gives the others theirs.
   const pier = plates[partyWall.source];
   for (const [key, { legacy, walls }] of Object.entries(paintings)) {
@@ -335,6 +342,26 @@ function drawTown(ox, oy, ctx, width, height) {
   drawRoadJoins(ctx, firstCol, lastCol, firstRow, lastRow, visible);
   if (lastRow >= canalRow && firstRow <= town.riverSouthRow) drawRiver(ctx, firstCol, lastCol, visible);
   drawLaneMarks(ctx, visible);
+}
+
+// The baked paintings the street needs between (x, y) and (x + width, y + height): cell plates,
+// the river plates with what stands in front of their water, and the ironwork over the tower.
+export function paintingsIn(x, y, width, height) {
+  const keys = new Set(),
+    { firstCol, lastCol, firstRow, lastRow } = town.visibleCells(x, y, width, height);
+  // A river plate reaches over the quay halves of the rows either side.
+  const river = town.riverRow;
+  const rows = [];
+  for (let row = Math.max(0, firstRow); row <= Math.min(town.rows - 1, lastRow); row++) rows.push(row);
+  if (river != null && !rows.includes(river) && firstRow - 1 <= river && river <= lastRow + 1) rows.push(river);
+  for (const row of rows)
+    for (let col = Math.max(0, firstCol); col <= Math.min(town.cols - 1, lastCol); col++) {
+      const key = cellPlateKey(col, row);
+      if (baked.has(key)) keys.add(key);
+      if (row === river && artwork[key + "Over"]) keys.add(key + "Over");
+      if (key === "towerBase") keys.add("towerIron");
+    }
+  return keys;
 }
 
 // Ironwork that passes over the street is drawn after everyone beneath it.

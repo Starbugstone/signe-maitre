@@ -64,6 +64,16 @@ function sheetFor(v, spec) {
   }
   return [artwork[v.condition < 65 ? atlas.dented : atlas.intact] || artwork[atlas.intact], headings];
 }
+// The sheets a vehicle may show soon: the one for its state and the next state of damage, and
+// every rider sheet of a two-wheeler. The ride the player is in may be wrecked at any moment.
+export function vehicleSheets(v) {
+  const spec = fleetOf(v);
+  if (!spec.atlas) return ["motor"];
+  const atlas = { ...spec.atlas, ...spec.tints?.[v.tint] };
+  const states = v === game.ride ? [atlas.intact, atlas.dented, atlas.wreck] : v.condition === 0 ? [atlas.wreck] : v.condition < 65 ? [atlas.dented, atlas.wreck] : [atlas.intact, atlas.dented];
+  if (atlas.ridden) states.push(atlas.ridden, atlas.courier);
+  return states.filter(Boolean);
+}
 function drawVehicle(v) {
   const spec = fleetOf(v);
   if (!spec.atlas) return drawCar(v);
