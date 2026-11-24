@@ -291,9 +291,12 @@ Promise.all(
   game.artReady = true;
   say("start", 12, "clerk");
 });
+// A frame advances the street by at most three 60 Hz steps. A slower frame slows the game
+// down instead of running more steps, which would make the next frame slower still.
+const longestFrame = 3 / 60;
 let prev = 0;
 function loop(ms) {
-  const dt = prev ? clamp((ms - prev) / 1000, 0, 0.1) : 0;
+  const dt = prev ? clamp((ms - prev) / 1000, 0, longestFrame) : 0;
   prev = ms;
   updateGamepad(dt);
   if (game.artReady && !panel.open && !game.viewMap) {
