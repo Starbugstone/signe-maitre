@@ -407,17 +407,52 @@ export function visibleStreetProps(ox, oy) {
   return result;
 }
 
-const streets = document.createElement("canvas");
-const streetContext = streets.getContext("2d", { alpha: false });
+// Two caches take turns: a scroll copies the current one into the other, moved, and swaps them.
+let streets = document.createElement("canvas"),
+  streetContext = streets.getContext("2d", { alpha: false }),
+  spare = document.createElement("canvas"),
+  spareContext = spare.getContext("2d", { alpha: false });
+const strip = document.createElement("canvas"),
+  stripContext = strip.getContext("2d", { alpha: false });
+// The cache's top-left corner in world units, and in whole canvas pixels at groundScale.
 let cachedX = Infinity,
   cachedY = Infinity,
+  cachedLeft = 0,
+  cachedTop = 0,
   groundScale = 0;
 
+// Paint the cache pixels from (x, y), w by h, as a full repaint would. They are painted on a
+// scratch canvas with a border, so that the edge of the scratch canvas, where a painting is
+// filtered differently, falls outside them; only the inside of the border is copied in. A plate
+// cut by that edge can still shade its own far edge by a few levels: the scenery fixture
+// street-cache-scroll allows for that, and for nothing larger.
+const border = 3;
+function paintStreets(x, y, w, h) {
+  if (w <= 0 || h <= 0) return;
+  const scale = groundScale;
+  if (strip.width < w + 2 * border || strip.height < h + 2 * border) {
+    strip.width = Math.max(strip.width, w + 2 * border);
+    strip.height = Math.max(strip.height, h + 2 * border);
+  }
+  const shiftX = cachedLeft + x - border,
+    shiftY = cachedTop + y - border;
+  const originX = shiftX / scale,
+    originY = shiftY / scale,
+    width = (w + 2 * border) / scale,
+    height = (h + 2 * border) / scale;
+  // Whole-pixel offsets keep the lane paint pattern in the same phase in every strip.
+  stripContext.setTransform(scale, 0, 0, scale, -shiftX, -shiftY);
+  rect(stripContext, originX, originY, width, height, "#201c29");
+  drawTown(originX, originY, stripContext, width, height);
+  streetContext.setTransform(1, 0, 0, 1, 0, 0);
+  streetContext.drawImage(strip, border, border, w, h, x, y, w, h);
+}
+
+// The street under the actors is cached with a margin around the view. When the camera leaves
+// it, the cache moves by whole pixels and only the strips that come into view are painted.
 function streetLayer(ox, oy) {
   const scale = canvas.width / game.vw,
-    margin = 30,
-    width = game.vw + 2 * margin,
-    height = game.vh + 2 * margin;
+    margin = 30;
   if (
     groundScale !== scale ||
     ox < cachedX ||
@@ -425,18 +460,44 @@ function streetLayer(ox, oy) {
     ox + game.vw > cachedX + streets.width / scale ||
     oy + game.vh > cachedY + streets.height / scale
   ) {
+    const w = Math.ceil((game.vw + 2 * margin) * scale),
+      h = Math.ceil((game.vh + 2 * margin) * scale);
+    // On the pixel grid, so that a moved cache and its new strips line up exactly.
+    const left = Math.floor((ox - margin) * scale),
+      top = Math.floor((oy - margin) * scale);
+    const dx = cachedLeft - left,
+      dy = cachedTop - top;
+    const reuse = groundScale === scale && streets.width === w && streets.height === h && Math.abs(dx) < w && Math.abs(dy) < h;
     groundScale = scale;
-    cachedX = ox - margin;
-    cachedY = oy - margin;
-    const w = Math.ceil(width * scale),
-      h = Math.ceil(height * scale);
-    if (streets.width !== w || streets.height !== h) {
+    cachedLeft = left;
+    cachedTop = top;
+    cachedX = left / scale;
+    cachedY = top / scale;
+    if (reuse) {
+      if (spare.width !== w || spare.height !== h) {
+        spare.width = w;
+        spare.height = h;
+      }
+      spareContext.setTransform(1, 0, 0, 1, 0, 0);
+      spareContext.drawImage(streets, dx, dy);
+      [streets, spare] = [spare, streets];
+      [streetContext, spareContext] = [spareContext, streetContext];
+    } else if (streets.width !== w || streets.height !== h) {
       streets.width = w;
       streets.height = h;
     }
-    streetContext.setTransform(scale, 0, 0, scale, -cachedX * scale, -cachedY * scale);
-    rect(streetContext, cachedX, cachedY, width, height, "#201c29");
-    drawTown(cachedX, cachedY, streetContext, width, height);
+    if (!reuse) paintStreets(0, 0, w, h);
+    else {
+      // The columns that came in on the left or right, then the rows above or below.
+      const keptLeft = Math.max(0, dx),
+        keptRight = Math.min(w, w + dx),
+        keptTop = Math.max(0, dy),
+        keptBottom = Math.min(h, h + dy);
+      paintStreets(0, 0, keptLeft, h);
+      paintStreets(keptRight, 0, w - keptRight, h);
+      paintStreets(keptLeft, 0, keptRight - keptLeft, keptTop);
+      paintStreets(keptLeft, keptBottom, keptRight - keptLeft, h - keptBottom);
+    }
     overFresh = false;
   }
   g.save();
@@ -444,6 +505,13 @@ function streetLayer(ox, oy) {
   g.drawImage(streets, Math.round((cachedX - ox) * scale), Math.round((cachedY - oy) * scale));
   g.restore();
 }
+
+// For checks: repaint the whole cache in place, as a camera jump would.
+export function repaintStreets() {
+  paintStreets(0, 0, streets.width, streets.height);
+  overFresh = false;
+}
+export const streetCache = () => streets;
 
 // What stands in front of the river traffic: bridge decks, parapets, bastions, ironwork, the
 // island with its skyline and the quay lanterns. tools/art/bake-scenery.mjs bakes a mask of

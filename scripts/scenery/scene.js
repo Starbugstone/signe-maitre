@@ -8,7 +8,7 @@ import { canvas, g } from "../../src/platform/canvas.js";
 import { blocked, move, vehicleBlocked } from "../../src/world/collision.js";
 import { town, X, Y } from "../../src/world/town.js";
 import { fromRiver, paintings, riverMarks } from "../../src/world/paintings.js";
-import { streetLayer } from "../../src/world/streets.js";
+import { repaintStreets, streetCache, streetLayer } from "../../src/world/streets.js";
 import { streetProps } from "../../src/world/street-props.js";
 import { viewport } from "../../src/world/viewport.js";
 import { draw } from "../../src/ui/renderer.js";
@@ -758,6 +758,7 @@ const checks = {
   "bridge-parapets-and-piers": checkBridgeParapets,
   "painted-lanterns": checkPaintedLanterns,
   "stations": checkStationsAndGardens,
+  "street-cache-scroll": checkStreetCacheScroll,
   // A walker behind the station's painted canopy is partly hidden while a train stands at the
   // platform; one at the hall door on the street in front of it stays fully visible.
   "ring-train-depth": () => {
@@ -777,6 +778,47 @@ const checks = {
     }
   },
 };
+
+// The street cache scrolls by whole pixels and paints only what comes into view. After a run of
+// such scrolls it must match a full repaint along streets, across the river, on the diagonal and
+// through the joins between paintings. A plate cut by the edge of a painted strip may shade its
+// own far edge by a few levels; any missing or misplaced painting differs by far more.
+function checkStreetCacheScroll() {
+  const at = (col, row) => [X(col), Y(row)];
+  const path = [at(1, 2), at(6, 2), at(6, 5), at(9, 8), at(3, 9), at(3, 6), at(8, 4)];
+  const read = () => {
+    const cache = streetCache();
+    return cache.getContext("2d").getImageData(0, 0, cache.width, cache.height).data;
+  };
+  let compared = 0,
+    worst = 0;
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1],
+      [bx, by] = path[i];
+    const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / 3);
+    for (let k = 0; k < steps; k++) {
+      camera(ax + ((bx - ax) * k) / steps, ay + ((by - ay) * k) / steps);
+      draw();
+      if (k % 25 !== 24) continue;
+      const scrolled = read();
+      repaintStreets();
+      const repainted = read();
+      let shaded = 0;
+      for (let j = 0; j < scrolled.length; j++) {
+        const d = Math.abs(scrolled[j] - repainted[j]);
+        worst = Math.max(worst, d);
+        if (d) shaded++;
+      }
+      requireCheck(
+        worst <= 12 && shaded < scrolled.length / 200,
+        "The scrolled street differs from a full repaint near " + Math.round(game.camX) + "," + Math.round(game.camY) +
+          " (" + shaded + " channel values, up to " + worst + " levels)",
+      );
+      compared++;
+    }
+  }
+  requireCheck(compared > 20, "Only " + compared + " street caches compared");
+}
 
 window.scenery = {
   ready: () => game.artReady,
