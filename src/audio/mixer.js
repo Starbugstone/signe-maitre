@@ -204,9 +204,7 @@ function motorSound() {
 }
 // The initial shell impact, the crumpling panels and the loose metal decay at
 // different rates. A hard crash extends the crumple and adds scattered debris.
-function crashClip(kind, heavy) {
-  const key = kind + (heavy ? "!" : "");
-  if (crashClips.has(key)) return crashClips.get(key);
+function* synthesiseCrash(kind, heavy) {
   const body = kind === "body",
     rate = game.audio.sampleRate,
     length = heavy ? 0.65 : 0.3;
@@ -244,9 +242,22 @@ function crashClip(kind, heavy) {
       0.91 * bass + 0.47 * knock + (body ? 0.99 : 0.81) * crush + (body ? 0.19 : 0.1) * metal + grit;
     samples[i] = attack * Math.min(1, (length - t) / 0.014) * Math.tanh(wave * 1.4);
     burst *= pulseDecay;
+    if (i % 2048 === 2047) yield;
   }
-  crashClips.set(key, buffer);
   return buffer;
+}
+// A clip still being built in idle time is finished on the spot when a crash needs it.
+const building = new Map();
+function crashClip(kind, heavy) {
+  const key = kind + (heavy ? "!" : "");
+  if (crashClips.has(key)) return crashClips.get(key);
+  const steps = building.get(key) ?? synthesiseCrash(kind, heavy);
+  building.delete(key);
+  let step;
+  do step = steps.next();
+  while (!step.done);
+  crashClips.set(key, step.value);
+  return step.value;
 }
 function crashSound(force, kind) {
   if (!game.sound || !game.audio || !gameMix) return;
@@ -305,12 +316,40 @@ function crashSound(force, kind) {
   tone.start(now);
   tone.stop(now + duration);
 }
+// The four crash clips take a while to synthesise. Build them a slice at a time between frames,
+// rather than all in the frame of the first collision, even when the browser is never idle.
+function warmCrashClips() {
+  const pending = [["body", false], ["wall", false], ["body", true], ["wall", true]];
+  const slice = () => {
+    const started = performance.now();
+    while (pending.length && performance.now() - started < 3) {
+      const [kind, heavy] = pending[0],
+        key = kind + (heavy ? "!" : "");
+      if (crashClips.has(key)) {
+        pending.shift();
+        continue;
+      }
+      if (!building.has(key)) building.set(key, synthesiseCrash(kind, heavy));
+      const step = building.get(key).next();
+      if (step.done) {
+        building.delete(key);
+        crashClips.set(key, step.value);
+        pending.shift();
+      }
+    }
+    if (pending.length) setTimeout(slice, 30);
+  };
+  setTimeout(slice, 30);
+}
+
 async function enableAudio() {
   if (!game.sound || (gameMix && game.audio?.state !== "suspended")) return;
   try {
+    const fresh = !game.audio;
     game.audio ??= new AudioContext();
     prepareAudio();
     await game.audio.resume();
+    if (fresh) warmCrashClips();
   } catch {}
 }
 

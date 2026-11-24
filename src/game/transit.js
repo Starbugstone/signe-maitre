@@ -1,11 +1,11 @@
 // Riding La Petite Ceinture: enter at a station's stair foot, board the next
 // train, ride, and step off at a later stop. The trains themselves come from
 // the timetable in ring-route.js; this module only moves the player.
+import { cue, cueAfter, say } from "../core/events.js";
 import { dist, game, held, p, people } from "../core/state.js";
 import { town } from "../world/town.js";
 import { footBlocked, freeSpot } from "../world/collision.js";
-import { lang, say } from "../ui/dialogs.js";
-import { beep } from "../audio/mixer.js";
+import { lang } from "../core/locale.js";
 import {
   carriagesOf,
   doorsOpenAt,
@@ -51,7 +51,7 @@ export function enterStation(station) {
   game.transit = { phase: "platform", station: index };
   held.clear();
   Object.assign(p, platformSpot(ring, station), { moving: false, stuck: 0 });
-  beep(520, 0.08, "sine");
+  cue("beep", 520, 0.08, "sine");
   say("platformWait", 5, "", " " + stationName(station) + ".");
 }
 
@@ -67,11 +67,11 @@ function apply(result) {
   const station = ring.stations[result.station];
   switch (result.event) {
     case "boarded":
-      beep(330, 0.12, "sine");
+      cue("beep", 330, 0.12, "sine");
       say("boarded", 4);
       break;
     case "alightRequested":
-      beep(880, 0.05, "sine");
+      cue("beep", 880, 0.05, "sine");
       say("alightRequest", 4, "", " " + stationName(station) + ".");
       break;
     case "leftPlatform":
@@ -99,8 +99,8 @@ export function transitControl() {
 }
 
 function chime() {
-  beep(659, 0.22, "sine");
-  setTimeout(() => beep(523, 0.3, "sine"), 230);
+  cue("beep", 659, 0.22, "sine");
+  cueAfter(0.23, "beep", 523, 0.3, "sine");
 }
 
 let lastStops = [];

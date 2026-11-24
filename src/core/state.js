@@ -27,7 +27,10 @@ export const game = {
   wallet: 0,
   hitCooldown: 0,
   flash: 0,
+  // The ticker line (see core/events.js) and whether a dialog is open over the street.
+  message: null,
   msgLife: 0,
+  dialogOpen: false,
   active: "",
   stage: "",
   viewMap: false,

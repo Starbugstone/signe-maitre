@@ -1,16 +1,18 @@
-import { interior, updateInterior } from "./scenes/interiors.js";
+import { interior, updateInterior } from "./game/interior.js";
 import { $, panel } from "./platform/canvas.js";
 import { control, released, trackKonami } from "./platform/keys.js";
 import { findGamepad, readGamepad } from "./platform/gamepad.js";
 import { artwork, clamp, game, held, p } from "./core/state.js";
 import { analog, clearAnalog } from "./core/controls.js";
-import { box, refreshLanguage, say, setGamepadMode, setLanguage, speak, t } from "./ui/dialogs.js";
+import { box, closeDialog, refreshLanguage, setGamepadMode, setLanguage, t } from "./ui/dialogs.js";
+import { say } from "./core/events.js";
+import { connectFeedback } from "./ui/feedback.js";
 import { reportIncident } from "./game/rescue.js";
 import { beep, enableAudio, gameMix, motorSound, vehicleSignalSound } from "./audio/mixer.js";
 import { board } from "./game/boarding.js";
 import { transitControl, transitFocus } from "./game/transit.js";
 import { interact } from "./game/cases.js";
-import { slap } from "./game/slap.js";
+import { slap, speak } from "./game/slap.js";
 import { prepareHero } from "./art/hero.js";
 import { prepareTown } from "./world/streets.js";
 import { update } from "./game/simulation.js";
@@ -18,6 +20,7 @@ import { CELL_H, CELL_W, TAU, X, Y } from "./world/town.js";
 import { draw } from "./ui/renderer.js";
 import { selectTrip } from "./ui/travel.js";
 import { imageData } from "./art/assets.js";
+import { holdArtwork } from "./art/residency.js";
 
 let konamiProgress = 0;
 const signalButtons = document.querySelectorAll("[data-key=horn]");
@@ -206,7 +209,7 @@ function inputScene() {
 
 function controllerDialog(pressed, step) {
   if (pressed.has("back")) {
-    panel.close();
+    closeDialog();
     return;
   }
   if (!step && !pressed.has("job")) return;
@@ -276,6 +279,7 @@ function updateGamepad(dt) {
   scene = after;
 }
 
+connectFeedback();
 refreshLanguage();
 Promise.all(
   Object.entries(imageData).map(async ([key, src]) => {
@@ -285,15 +289,19 @@ Promise.all(
     artwork[key] = img;
   }),
 ).then(() => {
+  holdArtwork({ ...artwork }, imageData, { compact: innerWidth <= 650 || matchMedia("(pointer:coarse)").matches });
   artwork.hero = prepareHero();
   artwork.konamiHero = prepareHero(true);
   prepareTown();
   game.artReady = true;
   say("start", 12, "clerk");
 });
+// A frame advances the street by at most three 60 Hz steps. A slower frame slows the game
+// down instead of running more steps, which would make the next frame slower still.
+const longestFrame = 3 / 60;
 let prev = 0;
 function loop(ms) {
-  const dt = prev ? clamp((ms - prev) / 1000, 0, 0.1) : 0;
+  const dt = prev ? clamp((ms - prev) / 1000, 0, longestFrame) : 0;
   prev = ms;
   updateGamepad(dt);
   if (game.artReady && !panel.open && !game.viewMap) {

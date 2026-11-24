@@ -1,10 +1,9 @@
+import { cue, say } from "../core/events.js";
 import { callOut } from "./taunts.js";
 import { cars, dist, fx, game, held, p, people } from "../core/state.js";
-import { say } from "../ui/dialogs.js";
 import { quarterTurn } from "./driving.js";
 import { isFighter } from "../world/population.js";
 import { footBlocked, freeSpot, move, strikeClear } from "../world/collision.js";
-import { crashSound } from "../audio/mixer.js";
 import { office } from "../world/town.js";
 import { knockDown } from "./rescue.js";
 
@@ -70,7 +69,7 @@ function shout(n, key) {
 function hurtPlayer(n) {
   if (game.time < (p.hurtUntil || 0)) return;
   p.hurtUntil = game.time + hurtWindow;
-  crashSound(90, "slap");
+  cue("crash", 90, "slap");
   p.hp--;
   fx.push({ x: p.x, y: p.y - 13, t: 0.8, s: "ouch" });
   if (p.hp > 0) return;
@@ -179,7 +178,7 @@ export function updatePerson(n, dt) {
     // Nobody follows the player up to a ring platform or onto a train.
     chase = !game.transit && (n.anger > 0 || (n.kind === "inspector" && game.heat > 0.25)) && d < 190;
   if (game.ride && game.ride.domain !== "water" && d < 10 && Math.abs(game.ride.speed) > 40) {
-    crashSound(Math.abs(game.ride.speed), "thud");
+    cue("crash", Math.abs(game.ride.speed), "thud");
     knockDown(n, "traffic");
     game.heat = Math.min(3, game.heat + 0.42);
     return;

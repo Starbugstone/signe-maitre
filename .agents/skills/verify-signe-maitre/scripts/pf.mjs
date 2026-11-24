@@ -104,7 +104,7 @@ import "./src/main.js";
 import { game, p, done, held, people, cars } from "./src/core/state.js";
 import { boatFleet, river } from "./src/game/boats.js";
 import { berthInReach } from "./src/game/boarding.js";
-import { interior } from "./src/scenes/interiors.js";
+import { interior } from "./src/game/interior.js";
 import { goal } from "./src/game/cases.js";
 import { directions } from "./src/world/navigation.js";
 import { ambulance } from "./src/game/rescue.js";

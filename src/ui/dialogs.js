@@ -1,8 +1,8 @@
 import { words } from "./strings.js";
 import { game, held } from "../core/state.js";
+import { lang, setLang } from "../core/locale.js";
 import { $, canvas, panel } from "../platform/canvas.js";
 
-let lang = navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en";
 let usingGamepad = false;
 const bindings = {
   car: ["F", "F", "Y"],
@@ -11,10 +11,6 @@ const bindings = {
   map: ["M", "M", "View"],
   action: ["Space", "Espace", "X"],
 };
-try {
-  const saved = localStorage.getItem("port-fer-language");
-  if (["en", "fr"].includes(saved)) lang = saved;
-} catch {}
 function t(key) {
   const pair = words[key];
   if (!pair) return key;
@@ -24,22 +20,14 @@ function t(key) {
     ? text.replace(/\{(\w+)\}/g, (_, control) => bindings[control][usingGamepad ? 2 : language])
     : text;
 }
-let message = null;
-function say(id, seconds = 4, prefix = "", suffix = "") {
-  message = { id, prefix, suffix };
-  game.msgLife = seconds;
-  renderMessage();
-}
+// The ticker shows the simulation's current line (see src/core/events.js).
 function renderMessage() {
-  const m = message;
+  const m = game.message;
   $("#ticker").textContent =
     m && game.msgLife > 0 ? (m.prefix ? t(m.prefix) + " · " : "") + t(m.id) + m.suffix : "";
 }
 function setLanguage() {
-  lang = lang === "fr" ? "en" : "fr";
-  try {
-    localStorage.setItem("port-fer-language", lang);
-  } catch {}
+  setLang(lang === "fr" ? "en" : "fr");
   refreshLanguage();
 }
 function refreshInputHints() {
@@ -97,7 +85,7 @@ function renderDialog() {
     const b = document.createElement("button");
     b.textContent = t(name);
     b.onclick = () => {
-      panel.close();
+      closeDialog();
       if (fn) fn();
     };
     root.append(b);
@@ -115,12 +103,17 @@ function box(title, copy, choices) {
   dialogState = { title, copy, choices };
   renderDialog();
   if (!panel.open) panel.showModal();
+  game.dialogOpen = true;
   if (title === "help" && usingGamepad) $("#choices button").focus({ preventScroll: true });
 }
-function speak() {
-  if (panel.open || game.viewMap || game.quipCooldown > 0) return;
-  game.quipTime = 2.5;
-  game.quipCooldown = 1.2;
+// The simulation reads game.dialogOpen, never the panel. Escape closes the panel by itself; its
+// close event arrives later, so it reads whether a dialog is open by then.
+function closeDialog() {
+  panel.close();
+  game.dialogOpen = false;
 }
+panel.addEventListener?.("close", () => {
+  game.dialogOpen = panel.open;
+});
 
-export { box, lang, refreshLanguage, renderMessage, say, setGamepadMode, setLanguage, speak, t };
+export { box, closeDialog, lang, refreshLanguage, renderMessage, setGamepadMode, setLanguage, t };

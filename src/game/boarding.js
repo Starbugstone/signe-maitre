@@ -1,13 +1,11 @@
+import { cue, say } from "../core/events.js";
 import { boatFleet, boardableBoat, dockBoat, dockingMooring, river, takeBoat } from "./boats.js";
 import { ambulance, inService, interruptRescue } from "./rescue.js";
 import { cars, dist, game, held, p } from "../core/state.js";
 import { blocked, distanceToBody, footBlocked } from "../world/collision.js";
 import { sedanHalfLength, sedanHalfWidth } from "../world/vehicle-shape.js";
 import { fleetOf } from "./fleet.js";
-import { say } from "../ui/dialogs.js";
 import { sedan, target } from "../world/population.js";
-import { panel } from "../platform/canvas.js";
-import { beep } from "../audio/mixer.js";
 import { enterStation, nearStation } from "./transit.js";
 
 // An exit spot must leave room for the next step, not just for standing still.
@@ -108,7 +106,7 @@ function leaveBoat() {
 }
 
 function board() {
-  if (game.viewMap || panel.open) return;
+  if (game.viewMap || game.dialogOpen) return;
   if (game.ride) {
     if (game.ride.domain === "water") leaveBoat();
     else exitCar();
@@ -123,7 +121,7 @@ function board() {
     p.x = boat.x;
     p.y = boat.y;
     p.a = boat.a;
-    beep(170);
+    cue("beep", 170);
     say(theft ? "boatTaken" : "boatBoarded", 4, boat.model);
     return;
   }
@@ -151,7 +149,7 @@ function board() {
   c.speed = c.slideX = c.slideY = 0;
   p.x = c.x;
   p.y = c.y;
-  beep(180);
+  cue("beep", 180);
   if (game.active === "repo" && game.ride === target) {
     game.stage = "deliver";
     say("seized");

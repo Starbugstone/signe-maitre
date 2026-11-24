@@ -1,3 +1,4 @@
+import { ask, cue, say } from "../core/events.js";
 import { viewport, outsideView } from "../world/viewport.js";
 import { planApproach, walkableBetween } from "../world/ambulance-route.js";
 import { person } from "../world/population.js";
@@ -5,10 +6,7 @@ import { carContact, closingSpeed } from "./driving.js";
 import { recordImpact } from "./damage.js";
 import { nextPatient, dispatchDelay } from "./triage.js";
 import { cars, clamp, dist, game, p, people } from "../core/state.js";
-import { panel } from "../platform/canvas.js";
 import { combo } from "./slap.js";
-import { box, say } from "../ui/dialogs.js";
-import { beep } from "../audio/mixer.js";
 import { town, H, W, X, Y } from "../world/town.js";
 import { blocked, vehicleBlocked } from "../world/collision.js";
 import { fleet } from "./fleet.js";
@@ -29,7 +27,7 @@ function knockDown(n, cause) {
   n.moving = false;
 }
 function nearbyPatient() {
-  if (game.ride || game.viewMap || panel.open) return null;
+  if (game.ride || game.viewMap || game.dialogOpen) return null;
   let patient = null,
     range = 21;
   for (const n of people) {
@@ -54,7 +52,7 @@ function reportIncident() {
   const outrage = !!n.insultCase && n.cause === "slaps";
   const title = outrage ? "outrageTitle" : "incidentTitle";
   const copy = outrage ? "outrageCopy" : n.cause === "traffic" ? "collisionCopy" : "scuffleCopy";
-  box(title, copy, [
+  ask(title, copy, [
     [
       "serveCopy",
       () => {
@@ -66,7 +64,7 @@ function reportIncident() {
           else nextPickup(ambulance);
         }
         say("copyServed", 4, "clerk", " · № " + incidents.length);
-        beep(440, 0.12, "triangle");
+        cue("beep", 440, 0.12, "triangle");
       },
     ],
     ["awaitMedics"],

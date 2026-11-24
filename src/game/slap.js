@@ -1,10 +1,8 @@
+import { cue, say } from "../core/events.js";
 import { dist, fx, game, p, people } from "../core/state.js";
-import { panel } from "../platform/canvas.js";
-import { crashSound } from "../audio/mixer.js";
 import { isFighter } from "../world/population.js";
 import { move, strikeClear } from "../world/collision.js";
 import { inService, crewInReach, interruptRescue, knockDown } from "./rescue.js";
-import { say } from "../ui/dialogs.js";
 
 const combo = {};
 const slapDuration = 0.38;
@@ -13,7 +11,7 @@ combo.lastSlapped = null;
 let comboUntil = 0;
 combo.slapLanded = false;
 function slap() {
-  if (game.ride || game.hitCooldown > 0 || game.viewMap || panel.open) return;
+  if (game.ride || game.hitCooldown > 0 || game.viewMap || game.dialogOpen) return;
   p.hasWalked = true;
   game.hitCooldown = 0.46;
   game.flash = slapDuration;
@@ -42,7 +40,7 @@ function landSlap() {
   // Bystanders scatter from a slap that lands, not from a swing at thin air.
   game.scuffle = { x: n.x, y: n.y, until: game.time + 0.3, victim: n };
   comboUntil = game.time + 0.85;
-  crashSound(105, "slap");
+  cue("crash", 105, "slap");
   n.hits = (n.hits || 0) + 1;
   n.anger = isFighter(n.kind) ? 14 : 0;
   n.stagger = 0.33;
@@ -62,3 +60,10 @@ function landSlap() {
 }
 
 export { combo, landSlap, slap, slapDuration };
+
+// The bailiff's quip: a line over his head, at most every 1.2 seconds.
+export function speak() {
+  if (game.dialogOpen || game.viewMap || game.quipCooldown > 0) return;
+  game.quipTime = 2.5;
+  game.quipCooldown = 1.2;
+}

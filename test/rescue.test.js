@@ -1,15 +1,6 @@
-// The simulation uses the browser viewport at startup. The renderer and audio
-// graph stay idle here; these tests exercise the same street simulation as play.
+// These tests exercise the same street simulation as play, with no page: no renderer, no audio.
 import test from "node:test";
 import assert from "node:assert/strict";
-const elements = new Map();
-globalThis.document = {
-  querySelector(key) {
-    if (!elements.has(key)) elements.set(key, { open: false, getContext: () => ({ setTransform() {} }) });
-    return elements.get(key);
-  },
-};
-Object.assign(globalThis, { innerWidth: 1024, innerHeight: 700, devicePixelRatio: 1, addEventListener() {} });
 const { game, p, cars, people } = await import("../src/core/state.js");
 const rescue = await import("../src/game/rescue.js");
 const { person } = await import("../src/world/population.js");
@@ -18,6 +9,9 @@ const { board, exitCar } = await import("../src/game/boarding.js");
 const { drive, carContact } = await import("../src/game/driving.js");
 const { viewport, outsideView } = await import("../src/world/viewport.js");
 const { W, H } = await import("../src/world/town.js");
+// The view a 1024 × 700 window gives (src/platform/canvas.js): what counts as on screen.
+game.vw = 280;
+game.vh = (700 * 280) / 1024;
 game.sound = false;
 
 function rescueTick() {

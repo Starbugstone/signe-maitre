@@ -1,12 +1,11 @@
+import { clearMessage, cue, say } from "../core/events.js";
 import { cars, fx, game, held, p, people, trails } from "../core/state.js";
 import { steeringInput, throttleInput, walkVector } from "../core/controls.js";
-import { renderMessage, say } from "../ui/dialogs.js";
 import { combo, landSlap, slap } from "./slap.js";
 import { advanceTraffic, drive } from "./driving.js";
 import { sedan, streamPopulation, person, target } from "../world/population.js";
 import { blocked, distanceToBody, footBlocked, freeSpot, move, shutIn, vehicleBlocked } from "../world/collision.js";
 import { carContact } from "../world/vehicle-shape.js";
-import { footfall, shipHornSound } from "../audio/mixer.js";
 import { boatFleet, river, updateBoats } from "./boats.js";
 import { strides } from "../art/gait.js";
 import { updateAmbulance } from "./rescue.js";
@@ -37,13 +36,13 @@ function update(dt) {
   game.heat = Math.max(0, game.heat - dt * 0.055);
   if (game.msgLife > 0 && (game.msgLife -= dt) <= 0) {
     game.msgLife = 0;
-    renderMessage();
+    clearMessage();
   }
   p.moving = false;
   updateTransit(dt);
   updateBoats(river, boatFleet, dt, game.ride, throttleInput(), steeringInput(), (boat) => {
     const volume = Math.max(0, 1 - Math.hypot(boat.x - p.x, boat.y - p.y) / 240);
-    if (volume) shipHornSound(volume);
+    if (volume) cue("shipHorn", volume);
   });
   if (game.transit) {
     // On the platform or aboard: the train carries the player.
@@ -98,6 +97,13 @@ function update(dt) {
       list[i].t -= dt;
       if (list[i].t <= 0) list.splice(i, 1);
     }
+  if (!game.ride && !game.transit) faceWhileWalking();
+}
+
+// The side the bailiff last faced, kept while he walks up or down the screen; a slap facing up
+// or down is drawn towards it.
+function faceWhileWalking() {
+  if (Math.abs(Math.sin(p.a)) <= 0.78) game.lastDir = Math.cos(p.a) < 0 ? -1 : 1;
 }
 
 // A car left across the traffic for ten seconds, with the player away from it, is towed:
@@ -130,7 +136,7 @@ function stepSound(travel) {
   const before = Math.floor(p.stepPhase || 0);
   p.stepPhase = (p.stepPhase || 0) + travel / strides[held.has("run") ? "run" : "walk"];
   const beat = Math.floor(p.stepPhase);
-  if (beat !== before) footfall(beat);
+  if (beat !== before) cue("footfall", beat);
 }
 
-export { stepSound, update };
+export { faceWhileWalking, stepSound, update };
