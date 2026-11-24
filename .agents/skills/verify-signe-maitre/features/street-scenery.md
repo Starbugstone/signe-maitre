@@ -30,7 +30,7 @@ Preconditions: fresh probe game, starting beside the étude with the company sed
 
 Run `npm run test:scenery` after every scenery edit. Its `street-scenery` journey visits the two reported locations through real controls using the read-only probe. Review the screenshots under `.verify/evidence/`. Run `pf run street-scenery --build probe --device phone --lang fr` for the touch route.
 
-The same npm command also compares rendered pixels for the player, an NPC and vehicles in controlled poses, and checks the artwork and ground collision on every market join. Add the changed placement to `scripts/scenery/scene.js` when extending the town.
+The same npm command also compares rendered pixels for the player, an NPC and vehicles in controlled poses, and checks the artwork and ground collision on every market join. Add the changed placement to `scripts/scenery/scene.js` when extending the town. Two fixtures guard the renderer itself: `street-cache-scroll` moves the camera across streets, the river and a diagonal and compares the scrolled street cache with a full repaint, and `renderer-reads-only` checks that drawing a frame on foot, with the map open, at the wheel and indoors leaves the simulation unchanged.
 
 ## Gotchas
 

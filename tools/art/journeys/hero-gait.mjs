@@ -53,7 +53,7 @@ export function onScreen(d, p, velocity) {
     scale: zoom,
   };
 }
-// Indoors the room is fitted to the screen and does not scroll (src/scenes/interiors.js).
+// Indoors the room is fitted to the screen and does not scroll (src/ui/interior-view.js).
 export function inRoom(d, p) {
   const { width, height } = d.page.viewportSize(),
     scale = Math.min(width / room.width, height / room.height);
